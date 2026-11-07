@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Maple Grove Off Leash</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="titled">
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <div id="tr">
+        <div id="clock">16:30</div>
+        <div id="cash">$00000000</div>
+        <div id="hp"><div id="hpfill"></div></div>
+        <div id="carhp"><div id="carhpfill"></div></div>
+        <div id="fuel"><b>E</b><div id="fuelbar"><div id="fuelfill"></div></div><b>F</b><span>&#9981;</span></div>
+        <div id="stars"></div>
+      </div>
+      <canvas id="minimap" width="150" height="150"></canvas>
+      <div id="timer"></div>
+      <div id="objective"></div>
+      <div id="waypoint"><i></i><span></span></div>
+      <div id="prompt"></div>
+      <div id="carname"></div>
+      <div id="toast"></div>
+      <div id="banner"></div>
+      <div id="dialog"></div>
+    </div>
+    <div id="touchui">
+      <div id="pad"><div id="knob"></div></div>
+      <div id="tbtns">
+        <button id="jumpbtn" data-k=" ">JUMP</button>
+        <button id="actbtn" data-k="punch">PAW</button>
+        <button id="usebtn" data-k="e">USE</button>
+      </div>
+      <div id="menubtns"><button id="pausebtn">PAUSE</button><button id="mapbtn">MAP</button></div>
+    </div>
+    <div id="title">
+      <div class="card">
+        <h1>MAPLE GROVE<span>OFF LEASH</span></h1>
+        <p>An open-world suburb. One cat. Zero respect for the HOA.</p>
+        <table>
+          <tr><td>WASD / arrows</td><td>move, or drive</td></tr>
+          <tr><td>Mouse</td><td>look (click to lock)</td></tr>
+          <tr><td>Shift</td><td>sprint</td></tr>
+          <tr><td>Space</td><td>jump (tap again in the air: double, triple) / handbrake</td></tr>
+          <tr><td>E</td><td>talk, get in or out</td></tr>
+          <tr><td>Click / J</td><td>paw swipe</td></tr>
+          <tr><td>H / M / P</td><td>horn / sound / resolution</td></tr>
+        </table>
+        <button id="start">START</button>
+        <button id="reset">NEW GAME</button>
+      </div>
+    </div>
+    <script src="js/game.js"></script>
+  </body>
+</html>

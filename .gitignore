@@ -1,0 +1,10 @@
+node_modules/
+*.zip
+*.bak.js
+videos/
+dist/share.html
+.DS_Store
+node_modules
+smoke.png
+.claude/
+marker-*.png
