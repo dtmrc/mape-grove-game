@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.1 (2026-11-07): road clutter fixes
+
+- A Pine Hollow oak grew in the middle of the north-south road east of Pine Ct; moved it onto the verge.
+- Signs and props that sat on asphalt after the roads were widened now get nudged off the road: the Fresh Eggs sign, the Welcome to Maple Grove sign, the Estates guard booth and the fire hydrants. Utility poles that landed on a crossing road and hedge pieces that poked onto the asphalt are skipped.
+- `tree()` and `deadTree()` refuse to spawn on any graph road, and a new `offRoad()` helper in world.js nudges hand-placed props clear, so future placements can't regress.
+
 ## v1.1.0 (2026-11-07): gap-analysis improvement pass
 
 Built from `docs/improvement-plan.md`. Baseline `v1.0.0` = artifact v42.

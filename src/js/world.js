@@ -225,7 +225,36 @@ export function districtAt(x, z) { for (const [n, f] of DISTRICTS) if (f(x, z)) 
 function shadow(x, z, w, d, ry = 0, rect = false) {
   addS(plane(w, d), rect ? 'shadowR' : 'shadow', 0xffffff, x, 0.085 + Math.random() * 0.004, z, ry);
 }
+/** true when a circle of radius r at (x,z) overlaps any graph road (edge width / 2 + 0.5 m shoulder) */
+function onRoad(x, z, r) {
+  for (const e of EDGES) {
+    const A = NODES[e.a], B = NODES[e.b]; if (!A || !B) continue;
+    const ex = B.x - A.x, ez = B.z - A.z, L2 = ex * ex + ez * ez || 1;
+    const t = Math.max(0, Math.min(1, ((x - A.x) * ex + (z - A.z) * ez) / L2));
+    if (Math.hypot(x - A.x - ex * t, z - A.z - ez * t) < (e.w || 10) / 2 + 0.5 + r) return true;
+  }
+  return false;
+}
+/** (x,z) nudged sideways off any graph road so a circle of radius r clears the asphalt (+0.5 m). Used for hand-placed
+ *  props that were laid out before the roads were widened (signs, booths, hydrants). */
+function offRoad(x, z, r) {
+  for (let it = 0; it < 6; it++) {
+    let moved = false;
+    for (const e of EDGES) {
+      const A = NODES[e.a], B = NODES[e.b]; if (!A || !B) continue;
+      const ex = B.x - A.x, ez = B.z - A.z, L2 = ex * ex + ez * ez || 1;
+      const t = Math.max(0, Math.min(1, ((x - A.x) * ex + (z - A.z) * ez) / L2)), px = A.x + ex * t, pz = A.z + ez * t;
+      const d = Math.hypot(x - px, z - pz), need = (e.w || 10) / 2 + 0.5 + r;
+      if (d >= need) continue;
+      const L = Math.sqrt(L2), nx = d > 1e-3 ? (x - px) / d : -ez / L, nz = d > 1e-3 ? (z - pz) / d : ex / L;
+      x = px + nx * need; z = pz + nz * need; moved = true;
+    }
+    if (!moved) break;
+  }
+  return [x, z];
+}
 function tree(x, z, s = 1, o = {}) {
+  if (onRoad(x, z, 0.6 * s)) return;   // never grow a tree on a road (graph roads from world.js)
   shadow(x + 0.6, z + 0.4, 5.2 * s, 5.2 * s);
   addS(new THREE.CylinderGeometry(0.16 * s, 0.26 * s, 2.2 * s, 7), 'bark', 0xffffff, x, 1.1 * s, z);
   const kind = o.kind ?? (rnd() < 0.5 ? 'round' : 'pine');
@@ -242,6 +271,7 @@ function tree(x, z, s = 1, o = {}) {
   colliders.push({ cx: x, cz: z, r: 0.4 * s, h: 6, tree: true });
 }
 function deadTree(x, z, s = 1) {
+  if (onRoad(x, z, 0.5 * s)) return;
   // bare, twisted, grey: the haunted kind
   shadow(x + 0.4, z + 0.3, 3 * s, 3 * s);
   addS(new THREE.CylinderGeometry(0.12 * s, 0.3 * s, 4.2 * s, 6), 'bark', 0x9a9690, x, 2.1 * s, z);
@@ -280,6 +310,7 @@ function lampAlong(a, b, t, s = 1) {
   streetLamp(x, z, Math.atan2(-nx, -nz));
 }
 function hydrant(x, z) {
+  [x, z] = offRoad(x, z, 0.3);
   addS(new THREE.CylinderGeometry(0.16, 0.2, 0.65, 8), 'plain', 0xd8302a, x, 0.33, z);
   addS(new THREE.SphereGeometry(0.17, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), 'plain', 0xd8302a, x, 0.65, z);
   addS(new THREE.CylinderGeometry(0.07, 0.07, 0.48, 6).rotateZ(Math.PI / 2), 'metal', 0xd8d8d8, x, 0.45, z);
@@ -502,7 +533,7 @@ function extras(F, w, d, h, list, o) {
       const [a0, a1] = [F.at(-w / 2 - 1, d / 2 + 3.6), F.at(w / 2 - 3.8, d / 2 + 3.6)];
       fence(a0[0], a0[1], a1[0], a1[1], 0.9, 0xffffff);
     } else if (e === 'hedges') {
-      for (let x = -w / 2 - 1; x <= w / 2 + 1; x += 1.6) if (Math.abs(x - (w / 2 - 1.9)) > 2.2 && Math.abs(x) > 1) F.box(x, 0.45, d / 2 + 4.2, 1.5, 0.9, 0.9, 'leaves', 0xa0d090);
+      for (let x = -w / 2 - 1; x <= w / 2 + 1; x += 1.6) if (Math.abs(x - (w / 2 - 1.9)) > 2.2 && Math.abs(x) > 1 && !onRoad(...F.at(x, d / 2 + 4.2), 0.45)) F.box(x, 0.45, d / 2 + 4.2, 1.5, 0.9, 0.9, 'leaves', 0xa0d090);
     } else if (e === 'xmas') {
       for (let k = 0; k < 9; k++) F.halo(-w / 2 + (k + 0.5) * w / 9, h - 0.1, d / 2 + 0.6, 0.55, [0xff4040, 0x40ff60, 0x4080ff, 0xffd040][k % 4]);
     } else if (e === 'woodpile') {
@@ -687,7 +718,7 @@ function buildEdges(scene) {
   for (let t = NORTH + 6; t <= LIMIT; t += 6) if (Math.abs(t) > 12) tree(LIMIT + 2 + rnd() * 4, t, 1.2 + rnd() * 0.5, { kind: 'pine' });
   for (let t = -LIMIT; t <= LIMIT; t += 6) tree(t, LIMIT + 2 + rnd() * 4, 1.2 + rnd() * 0.5, { kind: 'pine', tint: 0x9ab09a });
   // town welcome sign on Old Mill coming in from the highway
-  const Fw = frame(-36, -86, -0.4);
+  const Fw = frame(...offRoad(-36, -86, 2.6), -0.4);
   Fw.box(-2.2, 0.9, 0, 0.2, 1.8, 0.2, 'wood', 0xffffff); Fw.box(2.2, 0.9, 0, 0.2, 1.8, 0.2, 'wood', 0xffffff);
   Fw.sign('WELCOME TO MAPLE GROVE', '#2f5d2f', '#f4f0d8', 5, 1, 1.8, 0.12, { tw: 512, th: 64 });
   Fw.sign('POP. 1,204  -  NO RVs', '#f4f0d8', '#2f5d2f', 4, 0.5, 1.1, 0.12, { tw: 256, th: 32 });
@@ -1131,7 +1162,7 @@ function buildEstates() {
   }
   {
     // guard booth with a striped arm (always up; Gary wants it down)
-    const F = frame(-36, -69, 0);
+    const F = frame(...offRoad(-36, -69, 1.8), 0);
     F.box(0, 1.3, 0, 2.4, 2.6, 2.4, 'siding', 0xf4f4f0); F.bld(0, 0, 2.4, 2.4, 2.8);
     F.box(0, 2.75, 0, 2.9, 0.3, 2.9, 'plain', 0x1e2a44);
     F.face(0, 1.6, 1.22, 1.6, 1, 'storeWin', 0xfff0d8);
@@ -1347,8 +1378,8 @@ function buildPineHollow() {
     home(x, z, ry, s);
   }
   // country details: mailboxes on posts, a few big oaks, a hand-painted sign
-  for (const [x, z] of [[96, 20], [130, 70], [66, 75], [100, 88], [120, 28]]) tree(x, z, 1.4 + rnd() * 0.4, { kind: 'round' });
-  const F = frame(64, 40, Math.PI / 4);
+  for (const [x, z] of [[96, 20], [138, 70], [66, 75], [100, 88], [120, 28]]) tree(x, z, 1.4 + rnd() * 0.4, { kind: 'round' });
+  const F = frame(...offRoad(64, 40, 0.9), Math.PI / 4);
   F.box(0, 0.7, 0, 0.12, 1.4, 0.12, 'wood', 0xffffff);
   F.sign('FRESH EGGS $3', '#f4f0e0', '#8a3a2a', 1.6, 0.5, 1.3, 0.08);
   hydrant(66, 50); hydrant(122, 90);
@@ -1365,6 +1396,7 @@ function buildPoles(scene) {
       const w = ADJ[N[names[i]]].find((e) => e.n === N[names[i + 1]]).w;
       for (let t = 8; t < L - 6; t += step) poles.push([A.x + dx * t - dz * side * (w / 2 + 2.4), A.z + dz * t + dx * side * (w / 2 + 2.4), Math.atan2(dx, dz)]);
     }
+    for (let k = poles.length - 1; k >= 0; k--) if (onRoad(poles[k][0], poles[k][1], 0.3)) poles.splice(k, 1);   // not on a crossing road
     poles.forEach(([x, z, ry], k) => {
       addS(new THREE.CylinderGeometry(0.13, 0.17, 8.5, 7), 'bark', 0xc8b8a0, x, 4.25, z);
       addS(new THREE.BoxGeometry(1.8, 0.12, 0.12), 'wood', 0xffffff, x, 7.8, z, ry);
