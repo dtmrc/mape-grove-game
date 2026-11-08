@@ -9,7 +9,7 @@ multicam plate carrier). Walk, sprint, jump, paw-swipe, steal any car, do jobs f
 
 ## Code map (src/js)
 
-- `goobles.js`: the playable cat, Tracebench Goobles from `src/models/goobles.glb` (GLTFLoader + AnimationMixer). Keeps the old rig contract; `?goobles=old` brings back the procedural cat from models.js. To update him: export a new GLB from Tracebench (`/mnt/project-files/tools/tracebench`, see its MAPLE-GROVE.md), overwrite `src/models/goobles.glb`, rebuild.
+- `goobles.js`: the playable cat, Tracebench Goobles base (models/goobles-base) from `src/models/goobles.glb` (GLTFLoader + AnimationMixer). Keeps the old rig contract; `?goobles=old` brings back the procedural cat from models.js. To update him: export a new GLB from Tracebench (`/mnt/project-files/tools/tracebench`, see its MAPLE-GROVE.md), overwrite `src/models/goobles.glb`, rebuild.
 - `gfx.js`: PS2-era look. Detailed tileable procedural textures (fbm noise: grime, cracks, bricks, siding, multicam,
   posters, graffiti), painted face textures for people (`faceTex`), shader sky dome (stars, moon, clouds),
   and the post pipeline (`makePost`): HDR target, bloom, tone/grade, vignette, faint interlace + grain, soft upscale.

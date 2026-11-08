@@ -1,4 +1,4 @@
-// Goobles, the playable cat, from Tracebench (tools/tracebench/models/goobles/Goobles.glb, embedded at build time).
+// Goobles, the playable cat, from Tracebench (tools/tracebench/models/goobles-base/Goobles-base.glb, the unclothed base, embedded at build time).
 //
 // The rest of the game drives the player through the old procedural rig: cat.userData.{body, torso, head, arms[2], legs[2]}
 // gets rotations written to it (punch, cuffs, fishing, gun aim, knocked down, flips) and props get .add()-ed to arms[1],
@@ -114,7 +114,7 @@ export function makeGoobles(o = {}) {
     const hand = (sk, bn, s) => { bones[bn].add(sk); sk.position.set(s * (0.06 - 0.17 / S), 0, 0); sk.rotation.set(0, 0, s * Math.PI / 2); };
     hand(sock.arm0, 'hand_R', -1); hand(sock.arm1, 'hand_L', 1);
     bones.head.add(sock.head); sock.head.position.set(0, -0.04, 0);           // old head pivot sat lower on the skull; this seats hats and riders on the flat crown
-    bones.hips.add(sock.torso); sock.torso.position.set(0, (0.13 - 0.46 * S) / S, -0.06 / S); // old torso pivot = ground; cuffs at the new wrists
+    bones.hips.add(sock.torso); sock.torso.position.set(0, (0.13 - 0.46 * S) / S, 0); // old torso pivot = ground; cuffs at the new wrists
     mixer = new THREE.AnimationMixer(model);
     for (const c of gltf.animations) clips[c.name] = mixer.clipAction(c);
     model.traverse((n) => { n.layers.mask = root.layers.mask; });

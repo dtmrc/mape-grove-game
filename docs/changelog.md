@@ -2,7 +2,7 @@
 
 ## v1.2.0 (2026-11-08): Tracebench Goobles
 
-- The playable cat is now diet's Tracebench Goobles (white cat, brown tunic, everyday face), loaded from `src/models/goobles.glb` (copy of `tools/tracebench/models/goobles/Goobles.glb`, embedded by esbuild's binary loader). Skinned, 28 bones, unlit baked-light textures with crisp pixels, scaled to 0.88 (about 0.98 m) to fit the cars and doors.
+- The playable cat is now diet's Tracebench Goobles base (all-white unclothed cat, yellow eyes), loaded from `src/models/goobles.glb` (copy of `tools/tracebench/models/goobles-base/Goobles-base.glb`, embedded by esbuild's binary loader). Skinned, 28 bones, unlit baked-light textures with crisp pixels, scaled to 0.88 (about 0.98 m) to fit the cars and doors.
 - Clips: Idle when standing, Walk when slow, Run at normal and sprint speed (sped up to match), Jump held mid-air, Walk while swimming, Wave when he talks to someone.
 - `src/js/goobles.js` keeps the old rig contract (userData body/torso/head/arms/legs): poses other systems write (punch, cuffs, gun aim, fishing, eating, flips, knocked down) override the clip on the matching bone, and props go to sockets on the hand, head and hips, so the coonskin cap, paw gun, cuffs, fishing rod and Bart line up.
 - Textures dim with the sky light at night. The old procedural cat is still in models.js: open the game with `?goobles=old` (or localStorage `mg.goobles` = `old`) to use it. Git tag `goobles-procedural` is the last commit before the swap.
