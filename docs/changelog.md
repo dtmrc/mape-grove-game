@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased (2026-11-08): house fires
+
+- diet asked to start a fire inside a house after gathering materials and tools. New `src/js/firestarter.js` (+ `tools/firestarter-hooks.mjs`).
+- Fire kit = something to light it + tinder + accelerant. Lighter (Earl, $8, reusable) or Book of Matches (Rosie's menu, $1, 3 strikes);
+  Old Newspapers (by the Donut Hole), Dry Kindling (the ruined cabin in Hollow Woods), Oily Rags (Feed & Seed); Lighter Fluid
+  (Quik Stop menu, $5) or a Gas Can (by the farm water tower, spreads faster). Outdoor pickups glow with a little flame and come
+  back 2 minutes after you use them. A FIRE KIT line under the belly meter shows what you have.
+- Inside the Quik Stop, Rosie's Diner, Chapel Hill Church or Nana's house: E "Start a fire" -> pile, splash, light (FWOOSH). Not
+  in the RV or the jail. Flames spread across the room over ~30 s, smoke fills it (screen haze, fog, orange light), standing in
+  it or in the flames costs HP.
+- After 14 s it breaks out: windows blow, flames out of every opening and the roof, smoke column, orange light over the block,
+  bystanders run. If anyone sees the cat near it: ARSON!, 3+ stars (PD). The Maple Grove VFD truck rolls up the nearest road,
+  the crew and the deck gun hose it down, then it smoulders and stays CONDEMNED (doors shut) for a few minutes and gets rebuilt
+  once you are away.
+- interiors.js gained small extension points: `addUse`, `addPrompt`, `close` / `isClosed`, an 'env' event after the indoor
+  lights are set, and `INT.room`.
+- New test `tools/test-fire.cjs` (18 checks).
+
 ## Unreleased (2026-11-08): your own map marker
 
 - Click or tap the Tab town map (or tap the minimap to open it) to drop a violet marker; click it again or press C / Delete to remove it, click elsewhere to move it. The map draws a dashed line from you to it.

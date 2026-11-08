@@ -17,6 +17,7 @@ const MENUS = {
       { id: 'slurpee', label: 'Blue Slurpee', price: 3, blurb: 'Flavour: blue. +15 belly and ten seconds of zoomies.' },
       { id: 'jerky', label: 'Gas station jerky', price: 4, blurb: 'Best before: a date that has been scratched off. +25 belly.' },
       { id: 'lotto', label: 'Lotto scratcher', price: 2, blurb: '"Maple Grove Millionaire". Scratch it with a claw. Could be $20. Could be $500.' },
+      { id: 'fluid', label: 'Lighter fluid', price: 5, blurb: 'For grilling. Definitely for grilling. (Fire kit: accelerant.)' },
     ],
   },
   diner: {
@@ -25,6 +26,7 @@ const MENUS = {
       { id: 'melt', label: 'Tuna melt', price: 8, blurb: 'The usual. Rosie adds extra tuna when nobody is looking. +45 belly, +20 health.' },
       { id: 'pie', label: 'Slice of pie', price: 4, blurb: "Today's pie is whatever was in the fridge. +20 belly." },
       { id: 'coffee', label: 'Coffee', price: 2, blurb: 'Bottomless. You sit and watch the road for an hour. +5 belly, time passes.' },
+      { id: 'matches', label: 'Book of matches', price: 1, blurb: 'Diner matches from the jar by the register. Three strikes. (Fire kit: something to light it.)' },
     ],
   },
 };
@@ -59,6 +61,7 @@ export function makeShops(A) {
     }
     else if (id === 'melt') { fishing.feed(45); hpUp(20); toast('Tuna melt. Rosie: "Eat slow, hon." +45 belly, +20 health', 3.5); }
     else if (id === 'pie') { fishing.feed(20); toast('Pie. It was apple. Probably. +20 belly'); }
+    else if ((id === 'fluid' || id === 'matches') && window.__FIRE) window.__FIRE.bought(id);   // firestarter.js fire kit
     else if (id === 'coffee') { fishing.feed(5); G.clock = (G.clock + 1) % 24; toast('Coffee. You watch the road for an hour. The road does nothing. +5 belly', 3.5); }
     return true;
   }

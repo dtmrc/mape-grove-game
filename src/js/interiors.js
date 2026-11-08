@@ -16,6 +16,9 @@
 //   lock(id) / unlock(id)          a locked room's exit circle (and E at the exit) does nothing
 //   current() -> id | null         on(event, fn) -> unsubscribe; events 'enter' (id), 'exit' (id), 'interact' (id, spotId)
 //                                  (an 'interact' listener that returns true handles the hotspot: no default nap/flavour toast)
+//   addUse(fn) / addPrompt(fn)     extra E action / prompt inside a room (after windows, hotspots, exit); fn(roomId)
+//   close(id, on) / isClosed(id)   shut a room's outdoor doors + windows (burned out); 'env' event (id, room) after indoor lights
+//   room                           the current room record (origin, size, cols, group, exit, cam) or null
 //   state                          snapshot for tests
 //   Rooms may also return `floors` (optional): walkable raised surfaces in room-local coords, the same shapes terrain.js
 //   floorAt takes: decks { top, x0, x1, z0, z1 }, turned boxes { top, cx, cz, hw, hd, c, s } (or `rot` instead of c/s),
@@ -30,7 +33,9 @@ import { setText, setStyle } from './dom.js';
 // ---------------- module-level registry (usable before the game creates the instance) ----------------
 const registry = new Map();   // id -> { room, entries: [{x,z,yaw,kind,inside}], builtin }
 const locks = new Set();
-const listeners = { enter: [], exit: [], interact: [] };
+const listeners = { enter: [], exit: [], interact: [], env: [] };
+const exts = { use: [], prompt: [] };   // extra E actions inside a room (firestarter.js): fn(roomId) -> true / { text, btn }
+const closed = new Set();               // rooms whose outdoor doors and windows are shut (burned out, condemned)
 let inst = null;
 
 export function registerRoom(id, room, door) {
@@ -50,6 +55,13 @@ export function enter(id, opts) { return inst ? inst.enter(id, opts) : false; }
 export function exit(opts) { return inst ? inst.exit(opts) : false; }
 export function lock(id) { locks.add(id); }
 export function unlock(id) { locks.delete(id); }
+/** Extra E action inside a room, tried after windows, hotspots and the exit: fn(roomId) -> true when it handled E. */
+export function addUse(fn) { if (typeof fn === 'function') exts.use.push(fn); }
+/** Extra prompt inside a room, shown when no window, hotspot or exit prompt is: fn(roomId) -> null | { text, btn }. */
+export function addPrompt(fn) { if (typeof fn === 'function') exts.prompt.push(fn); }
+/** Shut (true) or reopen (false) a room's outdoor entry points. */
+export function close(id, on = true) { if (on) closed.add(id); else closed.delete(id); if (inst) inst._place(); }
+export function isClosed(id) { return closed.has(id); }
 export function current() { return inst ? inst.current() : null; }
 export function on(ev, fn) {
   const l = listeners[ev]; if (!l || typeof fn !== 'function') return () => {};
@@ -176,7 +188,7 @@ export function makeInteriors(ctx) {
       x = Gp.anchor.x + rx * cs + rz * sn + Gp.dx; z = Gp.anchor.z - rx * sn + rz * cs + Gp.dz; yaw = b.yaw + Gp.r;
       if (Gp.hide) ok = false;
     }
-    if (rooms[e.id] && rooms[e.id].broken) ok = false;
+    if ((rooms[e.id] && rooms[e.id].broken) || closed.has(e.id)) ok = false;
     const off = e.kind === 'window' ? 0.7 : 0.9;
     c.x = x; c.z = z; c.yaw = yaw; c.ok = ok;
     c.tx = x + Math.sin(yaw) * off; c.tz = z + Math.cos(yaw) * off;
@@ -520,6 +532,7 @@ export function makeInteriors(ctx) {
         if (locks.has(S.id)) { ctx.toast("It's locked.", 2); return true; }
         apiExit(); return true;
       }
+      for (const f of exts.use) { try { if (f(S.id)) return true; } catch (e) { console.error('[interiors] use ext', e); } }
       return true;  // no cars to steal in here
     }
     const e = activeDoor();
@@ -565,6 +578,7 @@ export function makeInteriors(ctx) {
     if (ctx.moon) ctx.moon.intensity = 0;
     if (scene.fog) { scene.fog.near = 80; scene.fog.far = 300; }
     if (ctx.post && ctx.post.comp) ctx.post.comp.uniforms.night.value = 0.25;
+    emit('env', S.id, R);   // listeners may override the indoor light pool / fog after this (firestarter.js smoke + flames)
   }
   function camDist(d) { return S.room ? Math.min(d, S.room.cam.maxDist) : d; }
   function clampCam(v) {
@@ -612,6 +626,7 @@ export function makeInteriors(ctx) {
         if (w) { txt = `${key}: Climb out`; btn = 'CLIMB'; }
         else if (h) { txt = `${key}: ${h.label}`; btn = 'USE'; }
         else if (S.atExit) { txt = locks.has(S.id) ? 'Locked' : `${key}: Exit`; btn = 'EXIT'; }
+        else for (const f of exts.prompt) { let p = null; try { p = f(S.id); } catch (e) { p = null; } if (p && p.text) { txt = `${key}: ${p.text}`; btn = p.btn || 'USE'; break; } }
       } else {
         const e = activeDoor();
         S.near = e ? e.id + (e.kind === 'window' ? ':window' : '') : null;
@@ -663,6 +678,9 @@ export function makeInteriors(ctx) {
     /** Where a save should put the player: just outside the current room's door (or the player's spot outdoors). */
     savePos() { if (!S.inside) return { x: P.x, z: P.z, yaw: P.yaw }; return S.ret || doorExitPoint(S.id) || S.outPos || { x: ctx.places.spawn.x, z: ctx.places.spawn.z, yaw: 0 }; },
     get inside() { return S.inside; },
+    /** The current room record ({ id, origin, size, cols, group, exit, cam, ... }) or null outdoors. */
+    get room() { return S.inside ? S.room : null; },
+    addUse, addPrompt, close, isClosed,
     get name() { return S.inside ? S.room.name : ''; },
     get state() {
       return {
@@ -677,6 +695,7 @@ export function makeInteriors(ctx) {
     },
     ready: roomsReady,
     _addDoor: addDoor,
+    _place: () => { for (const e of entries) placeEntry(e); },
   };
   for (const id of registry.keys()) addDoor(id);   // rooms registered before the game started
   inst = api;

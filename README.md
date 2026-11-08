@@ -36,6 +36,12 @@ multicam plate carrier). Walk, sprint, jump, paw-swipe, steal any car, do jobs f
 - `jobs.js`: story missions replayable for half pay (`G.best.kids` race time), side jobs (Fish Order, Repo Man, Sign Language)
   and the post-game beat after Final Notice (THE RV STAYS, 24 h HOA truce `G.hoaTruce`, FOR SALE sign). `tools/test-content.cjs` checks both.
 
+- `firestarter.js`: house fires (`docs/house-fires.md`). Fire kit pickups around town (newspapers, kindling, oily rags, gas can),
+  matches and lighter fluid on the diner / Quik Stop menus, Earl's lighter; E inside the Quik Stop, the diner, the church or
+  Nana's house lights it; flames + smoke indoors (hurts), breakout, witnesses -> PD heat, the VFD truck hoses it down, condemned,
+  rebuilt. Hooked by `tools/firestarter-hooks.mjs`; indoor E / prompt / lights go through interiors.js `addUse`, `addPrompt`,
+  `close` and the 'env' event. Debug `window.__FIRE`.
+
 - `ui.js`: pause menu (Esc, PAUSE button, gamepad Start): resume, controls help, settings (sound, render height, weather,
   invert look, dev tools shown/hidden; saved in `maple-grove-offleash-settings`), return to title; full town map on Tab / MAP.
 - `gamepad.js`: standard gamepad -> the same `keys`/`pressed`/`touch` inputs (left stick move, right stick look, A jump,
@@ -51,6 +57,8 @@ every minute and on leaving a car). NEW GAME clears every key in `SAVE_KEYS`. De
 - `node tools/smoke.cjs dist/index.html 12`: headless boot, page errors, scene stats (drawables, geometries, materials).
 - `node tools/test-core.cjs dist/index.html` (pursuit, fines, save/load, respawn) and `node tools/test-content.cjs dist/index.html`
   (shops, jobs, post-game). Both need Playwright + Chromium.
+- `node tools/test-fire.cjs dist/index.html [shots-dir]`: house fires end to end (kit, ignition, smoke damage, breakout, PD heat,
+  VFD truck, condemned door, rebuild).
 - Git tags mark shipped builds: `v1.0.0` = artifact v42 before the gap-analysis pass, `v1.1.0` = after it. See `docs/changelog.md`
   and `docs/improvement-plan.md`.
 
