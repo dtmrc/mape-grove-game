@@ -17,6 +17,12 @@
 //   current() -> id | null         on(event, fn) -> unsubscribe; events 'enter' (id), 'exit' (id), 'interact' (id, spotId)
 //                                  (an 'interact' listener that returns true handles the hotspot: no default nap/flavour toast)
 //   state                          snapshot for tests
+//   Rooms may also return `floors` (optional): walkable raised surfaces in room-local coords, the same shapes terrain.js
+//   floorAt takes: decks { top, x0, x1, z0, z1 }, turned boxes { top, cx, cz, hw, hd, c, s } (or `rot` instead of c/s),
+//   ramps { t0, t1, cx, cz, hw, hd, c, s } (t0 at local -z, t1 at local +z) and discs { top, cx, cz, r }. While inside,
+//   they are pushed into TER.floors (offset by the room origin) together with the tops of the room's solid cols, so the
+//   player stands on platforms, steps, counters and beds (step-up 0.5 m like outdoors); a col may carry `top` when its
+//   standable top differs from its blocking height `h`.
 import * as THREE from 'three';
 import * as TER from './terrain.js';
 import { setText, setStyle } from './dom.js';
@@ -63,6 +69,7 @@ function emit(ev, ...a) { let used = false; for (const f of listeners[ev].slice(
 //           places.nana = door + 1.6 out. Upper-floor windows (y 4.2) are not entries.
 //   rv:     makeRV at (lx-1, lz+1) rotated PI/2+0.1: side door at RV-local (1.27,-1.8), side window at (1.26, 1.5);
 //           places.rv = (lx+1.8, lz+1.5)
+//   donut:  frame(-44,18,PI) 10x7 shop: door face local (0,3.53) = world (-44,14.47); store windows local x +-3 = world -47/-41
 // `inside` = room-local landing spot by the matching wall in rooms.js (nudged off furniture at runtime).
 function builtinEntries(places) {
   const P = places || {};
@@ -80,6 +87,9 @@ function builtinEntries(places) {
   E.nana = [D(nd.x, nd.z, ny), Wn(lat(-2.6).x, lat(-2.6).z, ny, -2.6, 3.2), Wn(lat(2.6).x, lat(2.6).z, ny, 2.6, 3.2)];
   const r = P.rv || { x: -102.2, z: 41.5 };
   E.rv = [D(r.x - 4.72, r.z - 1.58, -Math.PI + 0.1), Wn(r.x - 1.43, r.z - 1.9, -Math.PI + 0.1, 0.45, 1.7)];
+  // donut: frame(-44,18,PI), 10x7 shop; door face local (0,3.53) -> world (-44,14.47) facing -z; store windows at local x -3/+3
+  //        -> world x -41/-47. Facing the shop you look +z, so world -x is your right = room +x (yaw PI mirrors x).
+  E.donut = [D(-44, 14.47, Math.PI), Wn(-47, 14.47, Math.PI, 3, 2.4), Wn(-41, 14.47, Math.PI, -3, 2.4)];
   return E;
 }
 const FLAVOR = {   // `${room}:${spot}` first, then `${spot}`
@@ -118,7 +128,7 @@ export function makeInteriors(ctx) {
   const roomsReady = import('./rooms.js').then((m) => {
     roomsMod = m;
     const R = m.ROOMS || {};
-    for (const id of ['rv', 'quik', 'diner', 'nana', 'church']) {
+    for (const id of ['rv', 'quik', 'diner', 'nana', 'church', 'donut']) {
       if (registry.has(id) && !registry.get(id).builtin) continue;   // a registered override wins
       if (!R[id] || typeof R[id].build !== 'function') { console.warn(`[interiors] rooms.js has no room "${id}"; door skipped`); continue; }
       registry.set(id, { room: R[id], entries: D0[id], builtin: true });
@@ -197,10 +207,17 @@ export function makeInteriors(ctx) {
       scene.add(group);
       const cols = (out.cols || []).filter((c) => c && (c.kind === 'box' || c.kind === undefined)).map((c) => {
         const r = c.rot || 0;
-        return { cx: origin.x + (+c.cx || 0), cz: origin.z + (+c.cz || 0), hw: Math.abs(+c.w || 0) / 2, hd: Math.abs(+c.d || 0) / 2, c: Math.cos(r), s: Math.sin(r), h: c.h ?? 5 };
+        const col = { cx: origin.x + (+c.cx || 0), cz: origin.z + (+c.cz || 0), hw: Math.abs(+c.w || 0) / 2, hd: Math.abs(+c.d || 0) / 2, c: Math.cos(r), s: Math.sin(r), h: c.h ?? 5 };
+        if (Number.isFinite(+c.top)) col.top = +c.top;
+        return col;
       });
+      const camH = out.cam?.height ?? 2.4;
+      // walkable surfaces: the room's own floors (room-local -> world) plus every solid col top the cat could reach
+      const floors = (out.floors || []).map((f) => roomFloor(f, origin)).filter(Boolean);
+      for (const c of cols) { const top = c.top ?? c.h; if (top > 0.05 && top <= camH) floors.push({ top, cx: c.cx, cz: c.cz, hw: c.hw, hd: c.hd, c: c.c, s: c.s, _col: true }); }
+      for (const f of floors) f._room = id;
       Object.assign(rec, {
-        built: true, out, group, origin, size, cols, exitM,
+        built: true, out, group, origin, size, cols, floors, exitM,
         spawn: out.spawn || { x: 0, z: size[1] / 2 - 1.2, yaw: 0 },
         exit: { x: +ex.x || 0, z: +ex.z || 0, r: ex.r || 0.6 },
         lights: (out.lights || []).slice(0, (ctx.pool || []).length || 10),
@@ -217,13 +234,47 @@ export function makeInteriors(ctx) {
     }
   }
 
+  // ---------------- walkable floors inside ----------------
+  function roomFloor(f, o) {
+    if (!f || typeof f !== 'object') return null;
+    const n = (v) => +v || 0;
+    if (f.r !== undefined) return { top: n(f.top), cx: o.x + n(f.cx), cz: o.z + n(f.cz), r: Math.abs(n(f.r)) };
+    if (f.hw !== undefined || f.hd !== undefined) {
+      const rot = f.rot !== undefined ? n(f.rot) : null;
+      const c = rot !== null ? Math.cos(rot) : (f.c === undefined ? 1 : n(f.c)), s = rot !== null ? Math.sin(rot) : n(f.s);
+      const b = { cx: o.x + n(f.cx), cz: o.z + n(f.cz), hw: Math.abs(n(f.hw)), hd: Math.abs(n(f.hd)), c, s };
+      if (f.t0 !== undefined) { b.t0 = n(f.t0); b.t1 = n(f.t1); } else b.top = n(f.top);
+      return b;
+    }
+    if (f.x0 !== undefined) return { top: n(f.top), x0: o.x + Math.min(n(f.x0), n(f.x1)), x1: o.x + Math.max(n(f.x0), n(f.x1)), z0: o.z + Math.min(n(f.z0), n(f.z1)), z1: o.z + Math.max(n(f.z0), n(f.z1)) };
+    return null;
+  }
+  // TER.floorAt (game.js: P.fl) reads TER.floors; the current room's floors live there only while we are inside
+  function setRoomFloors(R) {
+    for (let i = TER.floors.length - 1; i >= 0; i--) if (TER.floors[i]._room) TER.floors.splice(i, 1);
+    if (R) for (const f of R.floors || []) TER.floors.push(f);
+  }
+  function roomFloorAt(x, z, y = 0) {   // room-local helper for tests / tools (world coords in, height out)
+    const R = S.room; if (!R) return 0;
+    let best = 0;
+    for (const f of R.floors) {
+      if (f.t0 === undefined && (f.top <= best || f.top > y + 0.5)) continue;
+      let inside;
+      if (f.r !== undefined) inside = Math.hypot(x - f.cx, z - f.cz) < f.r;
+      else if (f.hw !== undefined) { const dx = x - f.cx, dz = z - f.cz, lz = dx * f.s + dz * f.c; inside = Math.abs(dx * f.c - dz * f.s) < f.hw && Math.abs(lz) < f.hd; if (inside && f.t0 !== undefined) { const t = f.t0 + (lz / f.hd + 1) / 2 * (f.t1 - f.t0); if (t > best && t <= y + 0.5) best = t; continue; } }
+      else inside = x > f.x0 && x < f.x1 && z > f.z0 && z < f.z1;
+      if (inside) best = f.top;
+    }
+    return best;
+  }
+
   // ---------------- collisions inside ----------------
   function roomCollide(x, z, r, y = 0) {
     const R = S.room; let hit = false, nx = 0, nz = 0;
     if (!R) return { x, z, hit, nx, nz };
     if (Math.abs(x - R.origin.x) > 60 || Math.abs(z - R.origin.z) > 60) return { x, z, hit, nx, nz };   // teleported out (update() drops indoor mode)
     for (let it = 0; it < 2; it++) for (const c of R.cols) {
-      if (y > c.h) continue;
+      if (y >= (c.top ?? c.h) - 0.02) continue;   // standing on top of it (world.js collide)
       const dx = x - c.cx, dz = z - c.cz;
       // local frame of the box (rot about y, three.js convention: local x -> (cos, -sin))
       let lx = dx * c.c - dz * c.s, lz = dx * c.s + dz * c.c;
@@ -252,7 +303,7 @@ export function makeInteriors(ctx) {
     if (Math.abs(x - R.origin.x) > R.size[0] / 2 - m || Math.abs(z - R.origin.z) > R.size[1] / 2 - m) return true;
     if (y > R.cam.height + 0.2) return true;
     for (const c of R.cols) {
-      if (y > c.h) continue;
+      if (y > (c.top ?? c.h)) continue;
       const dx = x - c.cx, dz = z - c.cz;
       if (Math.abs(dx * c.c - dz * c.s) < c.hw && Math.abs(dx * c.s + dz * c.c) < c.hd) return true;
     }
@@ -349,12 +400,14 @@ export function makeInteriors(ctx) {
     S.ret = opts.returnTo ? { x: +opts.returnTo.x, z: +opts.returnTo.z, yaw: +opts.returnTo.yaw || 0 } : null;
     if (opts.locked) locks.add(id);
     S.inside = true; S.id = id; S.room = R; R.group.visible = true;
+    setRoomFloors(R);
     S.entry = opts._entry || null;
     roomWindows(R, id);
     const win = S.entry && S.entry.kind === 'window' ? R.windows.find((w) => w.entry === S.entry) : null;
     const sp = opts.spawn || win || R.spawn;
     P.x = R.origin.x + (+sp.x || 0); P.z = R.origin.z + (+sp.z || 0); P.y = 0; P.vy = 0; P.vx = P.vz = 0; P.jumps = 0; P.lock = 0.5;
     const q = roomCollide(P.x, P.z, 0.22); P.x = q.x; P.z = q.z;
+    P.y = P.fl = roomFloorAt(P.x, P.z, 0.5);   // spawned on a platform: start on top of it
     const yaw = +sp.yaw || 0;          // rooms: yaw 0 faces -z; the cat: yaw 0 faces +z
     P.yaw = yaw + Math.PI;
     setIndoorRender(true);
@@ -369,6 +422,7 @@ export function makeInteriors(ctx) {
     const id = S.id, R = S.room;
     if (!S.inside) return;
     S.inside = false; S.id = null; S.room = null; if (R) R.group.visible = false;
+    setRoomFloors(null);
     setIndoorRender(false);
     if (to !== false) {
       const t = to || S.ret || doorExitPoint(id) || S.outPos || { x: ctx.places.spawn.x, z: ctx.places.spawn.z, yaw: 0 };
@@ -605,7 +659,7 @@ export function makeInteriors(ctx) {
 
   const api = {
     registerRoom, enter: apiEnter, exit: apiExit, lock, unlock, current: () => (S.inside ? S.id : null), on,
-    use, update, env, hud, collide: roomCollide, blocked: roomBlocked, camDist, clampCam,
+    use, update, env, hud, collide: roomCollide, blocked: roomBlocked, camDist, clampCam, floorAt: roomFloorAt,
     /** Where a save should put the player: just outside the current room's door (or the player's spot outdoors). */
     savePos() { if (!S.inside) return { x: P.x, z: P.z, yaw: P.yaw }; return S.ret || doorExitPoint(S.id) || S.outPos || { x: ctx.places.spawn.x, z: ctx.places.spawn.z, yaw: 0 }; },
     get inside() { return S.inside; },
@@ -618,7 +672,7 @@ export function makeInteriors(ctx) {
         entries: entries.map((d) => ({ id: d.id, kind: d.kind, x: +d.cur.x.toFixed(2), z: +d.cur.z.toFixed(2), yaw: +d.cur.yaw.toFixed(3), tx: +d.cur.tx.toFixed(2), tz: +d.cur.tz.toFixed(2), ok: d.cur.ok })),
         entry: S.entry ? { id: S.entry.id, kind: S.entry.kind, i: S.entry.i } : null,
         rooms: Object.fromEntries(Object.entries(rooms).map(([id, r]) => [id, { built: r.built, broken: r.broken, origin: r.origin, size: r.size }])),
-        room: S.room ? { id: S.id, origin: S.room.origin, size: S.room.size, exit: S.room.exit, spawn: S.room.spawn, cols: S.room.cols.length, lights: S.room.lights.length, spots: S.room.spots.map((h) => h.id), windows: (S.room.windows || []).map((w) => ({ x: +w.x.toFixed(2), z: +w.z.toFixed(2), yaw: +w.yaw.toFixed(2) })) } : null,
+        room: S.room ? { id: S.id, origin: S.room.origin, size: S.room.size, exit: S.room.exit, spawn: S.room.spawn, cols: S.room.cols.length, floors: S.room.floors.length, lights: S.room.lights.length, spots: S.room.spots.map((h) => h.id), windows: (S.room.windows || []).map((w) => ({ x: +w.x.toFixed(2), z: +w.z.toFixed(2), yaw: +w.yaw.toFixed(2) })) } : null,
       };
     },
     ready: roomsReady,

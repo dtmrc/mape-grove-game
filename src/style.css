@@ -99,14 +99,14 @@ body.touch #title table { display: none; }
 }
 
 /* waypoint pointer (casserole stops, checkpoints, etc.) */
-#waypoint { position: absolute; left: 0; top: 0; display: none; pointer-events: none; --wc: #ff3b6b; will-change: transform; }
-#waypoint i { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; background: var(--wc); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); filter: drop-shadow(2px 2px 0 #000); animation: wpbob 0.9s ease-in-out infinite; }
-#waypoint.off i { clip-path: polygon(100% 50%, 0 0, 25% 50%, 0 100%); animation: none; }
-#waypoint span { position: absolute; left: 0; top: 18px; transform: translateX(-50%); white-space: nowrap; font-size: 22px; color: #fff; background: rgba(10, 10, 20, 0.6); border: 2px solid var(--wc); padding: 0 6px; }
-#waypoint.warn span { color: var(--gold); animation: flash 0.4s steps(2) infinite; }
+#waypoint, #markpoint { position: absolute; left: 0; top: 0; display: none; pointer-events: none; --wc: #ff3b6b; will-change: transform; }
+#waypoint i, #markpoint i { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; background: var(--wc); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); filter: drop-shadow(2px 2px 0 #000); animation: wpbob 0.9s ease-in-out infinite; }
+#waypoint.off i, #markpoint.off i { clip-path: polygon(100% 50%, 0 0, 25% 50%, 0 100%); animation: none; }
+#waypoint span, #markpoint span { position: absolute; left: 0; top: 18px; transform: translateX(-50%); white-space: nowrap; font-size: 22px; color: #fff; background: rgba(10, 10, 20, 0.6); border: 2px solid var(--wc); padding: 0 6px; }
+#waypoint.warn span, #markpoint.warn span { color: var(--gold); animation: flash 0.4s steps(2) infinite; }
 @keyframes wpbob { 50% { margin-top: -6px; } }
-#waypoint.low span { top: -46px; }
-body.touch #waypoint span { font-size: 18px; }
+#waypoint.low span, #markpoint.low span { top: -46px; }
+body.touch #waypoint span, body.touch #markpoint span { font-size: 18px; }
 
 /* fuel gauge (shown while driving) */
 #fuel { display: none; align-items: center; gap: 4px; font-size: 18px; line-height: 1; }
@@ -146,7 +146,7 @@ body.touch #waypoint span { font-size: 18px; }
 #bigmap .legend i { display: inline-block; width: 12px; height: 12px; border: 2px solid #000; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
 #bigmap .card { max-width: none; }
 body.nodev .devonly, body.nodev #devbtn { display: none !important; }
-body.menu #dialog, body.menu #prompt, body.menu #waypoint, body.menu #objective, body.menu #touchui, body.menu #bagbtn, body.menu #devbtn, body.menu #devhint { display: none !important; }
+body.menu #dialog, body.menu #prompt, body.menu #waypoint, body.menu #markpoint, body.menu #objective, body.menu #touchui, body.menu #bagbtn, body.menu #devbtn, body.menu #devhint { display: none !important; }
 #bigmap .item { display: inline-block; width: auto; min-width: 160px; font-size: 24px; padding: 2px 20px; margin-top: 10px; }
 #pause.wide .card { max-width: 1000px; }
 #pause .cols { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 0 20px; }
@@ -159,3 +159,10 @@ body.menu #dialog, body.menu #prompt, body.menu #waypoint, body.menu #objective,
   color: var(--ink); font-family: inherit; font-size: 15px; touch-action: none;
 }
 #menubtns button:active { background: rgba(255, 210, 63, 0.6); }
+#markpoint { --wc: #c77dff; }
+#markpoint i { clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+#markpoint span { top: -46px; }
+#markpoint.low span { top: 18px; }
+#bigmap .mkhint { font-size: 20px; color: #c77dff; margin-top: 6px; }
+#minimap { pointer-events: auto; cursor: pointer; }
+#bigmap canvas { cursor: crosshair; }

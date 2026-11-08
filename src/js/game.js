@@ -57,7 +57,7 @@ TER.initWorld(scene, { lights, halos, flames }); // engine: link loose world obj
 // ---------------- state ----------------
 const SAVE_KEY = 'maple-grove-offleash-v1';
 // every key NEW GAME wipes: this save, fishing, weather, the sky's day counter, the dev view (not the world editor's maple-grove-world-v1, that is the map)
-const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view'];
+const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark'];
 const G = {
   cash: 0, hp: 100, heat: 0, seenT: 0, bustT: 0, clock: 21.5, done: {}, yarn: [],
   mission: null, dialog: null, paused: true, banner: null, over: false, time: 0,
@@ -414,6 +414,19 @@ const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.9, 60, 12, 1, tru
 const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3b6b, transparent: true, opacity: 0.7, depthWrite: false, fog: false, side: THREE.DoubleSide });
 const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.5, 32), ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; checkMark.add(ring);
 checkMark.userData.ring = ring;
+// player's own map marker (set on the Tab town map): violet beam + ring, HUD pointer, minimap pin; cleared on arrival
+const MARK_KEY = 'maple-grove-offleash-mark', MARK_COL = 0xc77dff;
+const userMark = new THREE.Group(); userMark.visible = false; scene.add(userMark);
+const umBeamMat = new THREE.MeshBasicMaterial({ color: MARK_COL, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+{ const b = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.75, 60, 12, 1, true), umBeamMat); b.position.y = 30; b.renderOrder = 5; userMark.add(b); }
+const umRing = new THREE.Mesh(new THREE.RingGeometry(1.8, 2.1, 32), new THREE.MeshBasicMaterial({ color: MARK_COL, transparent: true, opacity: 0.7, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+umRing.rotation.x = -Math.PI / 2; umRing.position.y = 0.12; userMark.add(umRing);
+function setMark(x, z) {
+  if (x === null || x === undefined) { G.mark = null; userMark.visible = false; }
+  else { G.mark = { x, z, label: 'Marker', col: '#c77dff' }; userMark.position.set(x, 0, z); userMark.visible = true; }
+  try { G.mark ? localStorage.setItem(MARK_KEY, JSON.stringify({ x, z })) : localStorage.removeItem(MARK_KEY); } catch (e) { /* storage blocked */ }
+}
+try { const m = JSON.parse(localStorage.getItem(MARK_KEY) || 'null'); if (m && isFinite(m.x) && isFinite(m.z)) setMark(m.x, m.z); } catch (e) { /* storage blocked */ }
 
 // ---------------- heat / patrol ----------------
 function addHeat(n, why) {
@@ -1260,6 +1273,7 @@ function drawMinimap() {
   for (const c of patrolList) blip(c.x, c.z, Math.floor(G.time * 4) % 2 ? '#ff8a00' : '#3060ff', 3.5);
   for (const b of police.blips()) blip(b.x, b.z, b.c, b.r); // police
   if (P.car && places.quik) blip(places.quik.x + 3, places.quik.z + 7.5, '#7fe07f', 5, 'G');
+  if (G.mark) blip(G.mark.x, G.mark.z, '#c77dff', 5 + 1.5 * (0.5 + 0.5 * Math.sin(G.time * 5)), 'M');
   if (G.check) blip(G.check.x, G.check.z, G.check.col || '#ff3b6b', 5 + 2 * (0.5 + 0.5 * Math.sin(G.time * 6)), '!');
   if (mission && mission.rivals) for (const r of mission.rivals) blip(r.x, r.z, '#ff4040', 3);
   // player arrow
@@ -1272,11 +1286,20 @@ function drawMinimap() {
 }
 
 // ---------------- waypoint (on-screen pointer to G.check) ----------------
-const wp = $('waypoint'), wpArrow = wp.querySelector('i'), wpText = wp.querySelector('span'), _wv = new THREE.Vector3(), _wf = new THREE.Vector3();
+const _wv = new THREE.Vector3(), _wf = new THREE.Vector3();
+const wpMission = { el: $('waypoint') }, wpMark = { el: $('markpoint') };
+for (const o of [wpMission, wpMark]) { o.arrow = o.el.querySelector('i'); o.text = o.el.querySelector('span'); }
 function updateWaypoint() {
-  const c = G.check;
-  if (INT.inside) { wp.style.display = 'none'; return; } // interiors
-  if (!c || G.paused || G.dialog || dev.editing) { wp.style.display = 'none'; return; }
+  const hide = INT.inside || G.paused || G.dialog || dev.editing; // interiors
+  if (G.mark && !hide && Math.hypot(G.mark.x - px(), G.mark.z - pz()) < (P.car ? 9 : 5)) { setMark(null); toast('You made it to your marker.', 2.5); Sfx.blip(880); }
+  drawPointer(wpMission, hide ? null : G.check);
+  drawPointer(wpMark, hide ? null : G.mark);
+  userMark.visible = !!G.mark && !INT.inside;
+  if (G.mark) { const k = (G.time * 0.7) % 1; umRing.scale.setScalar(0.6 + k * 0.9); umRing.material.opacity = 0.75 * (1 - k); umBeamMat.opacity = 0.26 + 0.08 * Math.sin(G.time * 3); }
+}
+function drawPointer(o, c) {
+  const wp = o.el, wpArrow = o.arrow, wpText = o.text;
+  if (!c) { wp.style.display = 'none'; return; }
   const W = innerWidth, H = innerHeight, d = Math.hypot(c.x - px(), c.z - pz());
   _wv.set(c.x, TER.heightAt(c.x, c.z) + (c.blipOnly ? 2.2 : 3.4), c.z);
   camera.getWorldDirection(_wf);
@@ -1287,6 +1310,7 @@ function updateWaypoint() {
   const m = 0.86, off = behind || Math.abs(sx) > m || Math.abs(sy) > m;
   if (off) { const k = m / Math.max(Math.abs(sx), Math.abs(sy), 1e-4); if (behind || k < 1) { sx *= k; sy *= k; } if (behind && Math.abs(sy) < m * 0.6) sy = m * 0.6; }
   if (off && sy > 0.7) sy = 0.7; // stay clear of the objective line
+  if (off && sx < -0.45 && sy > 0.25) sy = 0.25; // and clear of the minimap
   const X = Math.max(170, Math.min(W - 170, (sx * 0.5 + 0.5) * W)), Y = (sy * 0.5 + 0.5) * H;
   wp.classList.toggle('low', sy > 0.4);
   wp.style.display = 'block'; wp.style.transform = `translate(${X.toFixed(0)}px, ${Y.toFixed(0)}px)`;
@@ -1523,7 +1547,7 @@ const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pr
 const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, removeCar, setCheck, objective, toast, banner, addCash, addHeat, places, cars, peds, P, G, NPC, giverMarks, makeMarker, say, startMission, endMission, mission: () => mission, scene, T, Sfx, INT, ahead, fishing });
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
-const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev });
+const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
 

@@ -47,6 +47,8 @@ softHook('game.js', [
   ['    const q = collide(cx, cz, r, 0.5);', '    BRK.carHit(c, cx, cz, r); // engine: knock over lamps + hydrants\n    const q = collide(cx, cz, r, 0.5);', 'BRK.carHit('],
   ['window.__G = {', 'BRK.init({ scene, Sfx, toast, camera }); // engine: breakables\nwindow.__G = {', 'BRK.init('],
   ['  post.render(scene, camera, G.time);', '  BRK.update(dt);\n  post.render(scene, camera, G.time);', 'BRK.update('],
+  ["import * as BRK from './breakables.js';", "import * as BRK from './breakables.js';\nimport * as DONUT from './donut.js';", "from './donut.js'"],
+  ["window.__G.shops = shops;", "DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)\nwindow.__G.shops = shops;", 'DONUT.init('],
 ]);
 
 hook('game.js', [

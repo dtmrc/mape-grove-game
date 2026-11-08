@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (2026-11-08): your own map marker
+
+- Click or tap the Tab town map (or tap the minimap to open it) to drop a violet marker; click it again or press C / Delete to remove it, click elsewhere to move it. The map draws a dashed line from you to it.
+- The marker gets a violet light beam and pulsing ring in the world, a star HUD pointer with the distance (edge arrow when off-screen), and an "M" pin on the minimap. It clears itself when you arrive, and is kept across reloads (localStorage `maple-grove-offleash-mark`, cleared by NEW GAME).
+- `updateWaypoint()` now drives two pointers (mission `G.check` and `G.mark`); interiors-hooks matches the new hide flag.
+
 ## v1.2.0 (2026-11-08): Tracebench Goobles
 
 - The playable cat is now diet's Tracebench Goobles base (all-white unclothed cat, yellow eyes), loaded from `src/models/goobles.glb` (copy of `tools/tracebench/models/goobles-base/Goobles-base.glb`, embedded by esbuild's binary loader). Skinned, 28 bones, unlit baked-light textures with crisp pixels, scaled to 0.88 (about 0.98 m) to fit the cars and doors.

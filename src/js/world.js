@@ -416,6 +416,7 @@ function house(cx, cz, ry, o = {}) {
   addS(plane(1.0, pl), 'sidewalk', 0xd0ccc4, x, 0.065, z, ry);
   [x, z] = rot(cx, cz, doorX, d / 2 + 0.4, ry);
   addS(new THREE.BoxGeometry(1.8, 0.2, 0.8), 'plain', 0xb8b0a4, x, 0.1, z, ry);
+  floors.push({ top: 0.2, cx: x, cz: z, hw: 0.9, hd: 0.4, c: Math.cos(ry), s: Math.sin(ry) }); // engine: walkable door step
   if (dl > 3) { [x, z] = rot(cx, cz, doorX + 1.5, d / 2 + dl - 0.6, ry); mailbox(x, z, ry, o.mail ?? MAIL[(rnd() * MAIL.length) | 0]); }
   return { door: rot(cx, cz, doorX, d / 2 + 1.6, ry), drive: rot(cx, cz, w / 2 - 1.9, d / 2 + Math.min(3, dl * 0.6), ry), ry };
 }
@@ -434,6 +435,7 @@ function mobileHome(cx, cz, ry, o) {
   // wooden steps + little deck + awning
   F.box(-3.5, 0.35, d / 2 + 1.2, 2.6, 0.7, 2.2, 'wood', 0xd8c8b0);
   F.box(-3.5, 0.15, d / 2 + 2.6, 1.4, 0.3, 0.8, 'wood', 0xd8c8b0);
+  F.floor(-3.5, d / 2 + 1.2, 2.6, 2.2, 0.7); F.floor(-3.5, d / 2 + 2.6, 1.4, 0.8, 0.3); // engine: walk up the trailer steps
   F.geo(new THREE.BoxGeometry(3.6, 0.06, 2.2).rotateX(-0.12), 'metal', o.awning ?? 0x3a8f5a, -3.5, 3.4, d / 2 + 1.1);
   for (const s of [-1, 1]) F.box(-3.5 + s * 1.7, 1.7, d / 2 + 2.1, 0.08, 3.4, 0.08, 'metal', 0xcccccc);
   F.col(-3.5, d / 2 + 1.2, 2.6, 2.2, 0.7);
@@ -483,7 +485,7 @@ function extras(F, w, d, h, list, o) {
       F.col(w / 2 + 3, 1, 2.1, 4.8, 2);
     } else if (e === 'garden') {
       for (let k = 0; k < 3; k++) {
-        F.box(-w / 2 + 1.5 + k * 2.2, 0.2, -d / 2 - 3, 1.6, 0.4, 3, 'wood', 0xffffff);
+        F.box(-w / 2 + 1.5 + k * 2.2, 0.2, -d / 2 - 3, 1.6, 0.4, 3, 'wood', 0xffffff); F.floor(-w / 2 + 1.5 + k * 2.2, -d / 2 - 3, 1.6, 3, 0.4); // engine: stand on the beds
         for (let j = 0; j < 4; j++) F.geo(new THREE.IcosahedronGeometry(0.28, 0), 'leaves', [0x80c060, 0xc04030, 0xe0c040][k], -w / 2 + 1.5 + k * 2.2, 0.55, -d / 2 - 4.1 + j * 0.7);
       }
     } else if (e === 'scarecrow') {
@@ -893,7 +895,8 @@ function buildChapel() {
   F.face(0, 4.5, d / 2 + 2.93, 1, 1.6, 'storeWin', 0xffb070);
   // tall stained glass windows down the sides
   for (const z of [-5, -1.5, 2, 5.5]) for (const s of [2, 3]) F.face((s === 2 ? 1 : -1) * (w / 2 + 0.03), 2.9, z, 1.1, 2.6, 'storeWin', [0xff8060, 0x80a0ff, 0xffd060, 0x80ff90][(z + 5) % 4 | 0], s);
-  F.box(0, 0.2, d / 2 + 3.8, 3.6, 0.4, 1.6, 'plain', 0xb8b0a4);
+  F.box(0, 0.2, d / 2 + 3.8, 3.6, 0.4, 1.6, 'plain', 0xb8b0a4); F.floor(0, d / 2 + 3.8, 3.6, 1.6, 0.4); // engine: walk up the chapel slab
+  F.floor(0, 0, w + 0.2, d + 0.2, 0.4); F.floor(0, d / 2 + 1.4, 3.6, 3.2, 0.4); // engine: foundation lip
   F.geo(plane(2, 8, 1, 2, 0.4, 1.6), 'sidewalk', 0xd8d4cc, 0, 0.05, d / 2 + 8.5);
   F.light(0, 3, d / 2 + 4, 0xffd8a0, 0.8);
   // marquee
@@ -1003,7 +1006,7 @@ function buildForest() {
   F.box(0, 1.3, 0, 6, 2.6, 5, 'wood', 0x8a7a6a); F.bld(0, 0, 6, 5, 3);
   F.geo(gable(6.8, 3.2, 5.6).rotateZ(0.08), 'shingle', 0x4a4440, 0, 2.6, 0);
   F.face(0.8, 1.0, 2.52, 1, 2, 'door', 0x3a3028); F.face(-1.6, 1.6, 2.52, 1, 0.9, 'window', 0x707070);
-  F.box(-3.3, 0.4, 1.5, 0.8, 0.8, 0.8, 'wood', 0x6a5a4a);
+  F.box(-3.3, 0.4, 1.5, 0.8, 0.8, 0.8, 'wood', 0x6a5a4a); F.col(-3.3, 1.5, 0.8, 0.8, 0.8); // engine: solid crate
   // the old well at the end of the trail
   const wl = TRAIL[TRAIL.length - 1]; places.well = { x: wl[0] + 2, z: wl[1] + 2 };
   addS(new THREE.CylinderGeometry(1.1, 1.2, 1, 10, 1, true), 'brick', 0x9a9088, wl[0] + 2, 0.5, wl[1] + 2);
@@ -1138,7 +1141,7 @@ function buildLake(scene, T) {
     // raccoon den: overflowing bins, fire barrel, Ricky's wall
     const rx = 26, rz = 98;
     for (let k = 0; k < 3; k++) { F.geo(new THREE.CylinderGeometry(0.45, 0.4, 1.1, 7), 'plain', 0x3d5a3d, rx + k * 1.1, 0.55, rz); colliders.push({ cx: rx + k * 1.1, cz: rz, r: 0.45, h: 1.1 }); }
-    F.box(rx + 1, 0.1, rz + 1.5, 1.2, 0.2, 0.8, 'plain', 0x8a6a40);
+    F.box(rx + 1, 0.1, rz + 1.5, 1.2, 0.2, 0.8, 'plain', 0x8a6a40); F.floor(rx + 1, rz + 1.5, 1.2, 0.8, 0.2);
     places.park = { x: rx + 1, z: rz + 3 };
     places.raccoonHome = { x: 20, z: 90, r: 14 };
     F.geo(new THREE.CylinderGeometry(0.42, 0.4, 1.0, 10, 1, true), 'metal', 0x6a4a3a, rx - 2.5, 0.5, rz + 2);
@@ -1277,7 +1280,7 @@ function buildFarm() {
     }
     lights.push({ x: cx, y: 25.4, z: cz, c: 0xff3030, i: 0.4, always: true, flicker: true });
     halos.push({ x: cx, y: 25.4, z: cz, s: 2.5, c: 0xff3030 });
-    F.box(0, 0.2, 0, 9, 0.4, 9, 'plain', 0x9a9a94);
+    F.box(0, 0.2, 0, 9, 0.4, 9, 'plain', 0x9a9a94); F.floor(0, 0, 9, 9, 0.4); // engine: stand on the tower pad
     places.tower = { x: cx + 2, z: cz + 6 };
   }
   // fence lines along Old Mill

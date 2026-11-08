@@ -130,6 +130,10 @@ export function makePolice(A) {
   const gun = { has: false, ammo: 0, equipped: false, cd: 0, aimT: 0 };
   let cuff = null, bust = null, provoked = 0, levelShown = 0, dispatched = false, regT = 0, roomOK = false, lineT = 0;
   let cuffImmune = 0, lostT = 0;
+  // backing off: distance escape + hiding indoors (diet 2026-11-08)
+  const ESCAPE_M = 65, ESCAPE_T = 2;
+  let hiding = false, hideT = 0, sawIn = false, contact = false, escT = 0, escD = 0;
+  const INT = () => (window.__INT && typeof window.__INT.current === 'function' ? window.__INT : null);
   const say = (who, k, force) => { if (!force && lineT > 0) return; lineT = 3.5; A.toast(`${who}: ${pickL(k)}`, 2.6); };
 
   // ---------- HUD ----------
@@ -189,8 +193,11 @@ export function makePolice(A) {
     for (let i = 1; i < n; i++) { const k = i / n; if (A.blocked(x0 + (x1 - x0) * k, y, z0 + (z1 - z0) * k)) return k; }
     return 1;
   }
-  const px = () => A.px(), pz = () => A.pz();
-  const sees = (x, z) => lineClear(x, z, px(), pz(), 1.1) >= 1;
+  // while the cat is indoors, police chase the building's door instead of the cat's off-map room position
+  const hidePos = () => { const I = INT(); try { return I && I.savePos ? I.savePos() : null; } catch (e) { return null; } };
+  let hp0 = null;
+  const px = () => (hiding && hp0 ? hp0.x : A.px()), pz = () => (hiding && hp0 ? hp0.z : A.pz());
+  const sees = (x, z) => !hiding && lineClear(x, z, px(), pz(), 1.1) >= 1;
 
   // ---------- the cat's pistol + cuffs ----------
   const pawGun = makePawGun(); pawGun.position.set(0, -0.19, 0.012); cat.userData.arms[1].add(pawGun); pawGun.visible = false;
@@ -498,9 +505,10 @@ export function makePolice(A) {
     } else if (o.state === 'engage') {
       const lv = level();
       const carOk = o.car && !o.car.dead && cars.includes(o.car) && o.car.driver !== 'player';
-      o.lost = los0 ? 0 : (o.lost || 0) + dt;
-      if (G.heat < PD_HEAT || (P.car && d > 26 && carOk) || d > 30 || o.lost > 5) { o.state = carOk ? 'return' : 'walkoff'; if (o.lost > 5 || d > 30) say(`Officer ${o.name}`, 'lost'); }
+      o.lost = los0 && !hiding ? 0 : (o.lost || 0) + dt;
+      if (G.heat < PD_HEAT || (P.car && d > 26 && carOk) || d > 30 || o.lost > (hiding ? (sawIn ? 7 : 2) : 5)) { o.state = carOk ? 'return' : 'walkoff'; if (o.lost > 5 || d > 30) say(`Officer ${o.name}`, 'lost'); }
       else if (bust) { sp = 0; }
+      else if (hiding) { sp = d > 2.5 ? 3 : 0; u.gun.visible = level() >= 2; }   // stake out the door
       else {
         const armed = gun.equipped;
         const fire = lv >= 4 || (lv >= 3 && (armed || P.car || provoked > 0)) || (lv >= 2 && provoked > 0 && armed);
@@ -636,6 +644,7 @@ export function makePolice(A) {
     let live = 0; for (const c of CRU) if (c.pd.state !== 'leave') live++;
     if ((lostT -= dt) <= 0 && live < want && !bust && Math.random() < dt * 0.3) spawnCruiser();
     if (G.heat === 0) dispatched = false;
+    escapeCheck(dt, CRU);
     // G.seenT grows in game.js updateHeat only; units here just reset it when they see the cat
     // cruisers: lights, theft, cleanup
     const f = Math.floor(A.time() * 7) % 2;
@@ -722,10 +731,42 @@ export function makePolice(A) {
     levelShown = lv;
     let h = '';
     if (lv) h += `<div class="lvl${f ? ' b' : ''}">MAPLE GROVE PD  ${LADDER[lv]}</div>`;
+    if (hiding && contact && G.heat >= PD_HEAT) h += `<div class="gun">HIDING... ${sawIn ? 'THEY SAW YOU GO IN' : 'STAY PUT'}</div>`;
+    else if (escD > 35 && escD < 1e8) h += `<div class="gun">LOSING THEM  ${Math.min(ESCAPE_M, Math.round(escD))} / ${ESCAPE_M} m</div>`;
     if (gun.has) h += `<div class="gun">${gun.equipped ? '▶ ' : ''}PISTOL ${gun.ammo}</div>`;
     setHTML(hud, h);
   }
 
+  function giveUp(title, sub) {
+    G.heat = 0; G.seenT = 0; provoked = 0; lostT = 20; contact = false; escT = 0; sawIn = false; hideT = 0;
+    if (cuff) endCuff(true);
+    for (const c of cruisers()) { c.pd.state = 'leave'; c.pd.goal = null; }
+    for (const o of cops) if (o.state === 'engage' || o.state === 'exit') { const ok = o.car && !o.car.dead && cars.includes(o.car) && o.car.driver !== 'player'; o.state = ok ? 'return' : 'walkoff'; }
+    A.banner(title, sub, 2.6, 'pass'); SND.radio();
+  }
+  function escapeCheck(dt, CRU) {
+    const I = INT(), inNow = !!(I && I.current() && I.current() !== 'jail');
+    if (inNow && !hiding) {                                  // just went indoors: did anyone see?
+      hp0 = hidePos(); hiding = true; hideT = 0;
+      sawIn = !!hp0 && cops.some((o) => o.state === 'engage' && Math.hypot(o.x - hp0.x, o.z - hp0.z) < 25 && lineClear(o.x, o.z, hp0.x, hp0.z, 1.1) >= 1);
+    } else if (!inNow && hiding) { hiding = false; hp0 = null; }
+    if (G.heat < PD_HEAT || bust || cuff) { escT = 0; escD = 0; if (G.heat < PD_HEAT) contact = false; return; }
+    // nearest active unit
+    let d = 1e9;
+    const x = A.px(), z = A.pz();
+    for (const o of cops) if (o.state === 'engage' || o.state === 'exit' || o.state === 'down') d = Math.min(d, Math.hypot(o.x - x, o.z - z));
+    for (const c of CRU) if (c.pd.state !== 'leave') d = Math.min(d, Math.hypot(c.x - x, c.z - z));
+    if (d < 35) contact = true;
+    if (hiding) {
+      hideT += dt; G.seenT += dt * 2;                         // stars fade faster indoors
+      escD = 0;
+      if (contact && hideT > (sawIn ? 9 : 4)) giveUp('LOST THEM', sawIn ? 'They staked out the door, then gave up.' : 'Nobody thought to look inside.');
+      return;
+    }
+    escD = contact ? d : 0;
+    if (contact && d > ESCAPE_M) { escT += dt; if (escT > ESCAPE_T) giveUp('LOST THEM', 'Maple Grove PD gave up the chase.'); }
+    else escT = 0;
+  }
   function clear() {
     for (const o of cops) { scene.remove(o.mesh); dropBar(o); }
     cops.length = 0;

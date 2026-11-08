@@ -13,10 +13,10 @@ const PAD_HELP = [['Left stick', 'move, or drive'], ['Right stick', 'look'], ['A
 const EXTRA_KEYS = [['Esc', 'pause menu'], ['Tab', 'town map'], ['I / B', 'fishing bag'], ['Q', 'holster']];
 // district label spots (world metres); each is checked against districtAt at startup so a moved border just drops the label
 const DISTRICT_LABELS = [['Hollow Woods', -130, 40], ["Nana's Place", -98, 28], ['Chapel Hill', -85, -24], ['Maple Grove Estates', -80, -85], ['Lake Juniper', -18, 95], ['Maple Grove High', 100, -60], ['Old Mill Farm', 16, -90], ['Pine Hollow', 95, 70], ['Downtown Maple Grove', 0, 0]];
-const LEGEND = [['#fff', 'You'], ['#5fd0ff', 'RV (save)'], ['#ffd23f', 'Job'], ['#ff3b6b', 'Waypoint'], ['#7fe07f', 'Quik Stop gas'], ['#3a78c8', 'Suds N Paws'], ['#3ab0a0', "Earl's Bait & Tackle"], ['#1e2a44', 'Maple Grove PD']];
+const LEGEND = [['#fff', 'You'], ['#5fd0ff', 'RV (save)'], ['#ffd23f', 'Job'], ['#ff3b6b', 'Waypoint'], ['#c77dff', 'Your marker'], ['#7fe07f', 'Quik Stop gas'], ['#3a78c8', 'Suds N Paws'], ['#3ab0a0', "Earl's Bait & Tackle"], ['#1e2a44', 'Maple Grove PD']];
 
 export function makeUI(o) {
-  const { G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes, setRes, setInvert, toast, px, pz, yaw, mission, dev } = o;
+  const { G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes, setRes, setInvert, toast, px, pz, yaw, mission, dev, setMark } = o;
   const S = { sound: true, res: getRes(), weather: !!fx.weatherOn, invert: false, dev: false, ...loadSettings() };
   if (!RES[S.res]) S.res = getRes();
   const save = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) { /* storage blocked */ } };
@@ -39,11 +39,24 @@ export function makeUI(o) {
   // ---------- DOM ----------
   const pause = document.createElement('div'); pause.id = 'pause'; document.body.appendChild(pause);
   const bigmap = document.createElement('div'); bigmap.id = 'bigmap';
-  bigmap.innerHTML = `<div class="card"><h1>MAPLE GROVE</h1><canvas></canvas><div class="legend">${LEGEND.map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div><div class="item" data-a="close">CLOSE</div><div class="hint">${isTouch ? '' : 'Tab or Esc closes'}</div></div>`;
+  bigmap.innerHTML = `<div class="card"><h1>MAPLE GROVE</h1><canvas></canvas><div class="legend">${LEGEND.map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div><div class="mkhint"></div><div class="item" data-a="close">CLOSE</div><div class="hint">${isTouch ? '' : 'Tab or Esc closes'}</div></div>`;
   document.body.appendChild(bigmap);
   const mcv = bigmap.querySelector('canvas'), mctx = mcv.getContext('2d');
   for (const el of [pause, bigmap]) el.addEventListener('pointerdown', (e) => e.stopPropagation());
   bigmap.querySelector('.item').addEventListener('click', () => setMap(false));
+  // your own marker: click / tap the town map to drop it, tap it again (or press C) to remove it
+  const mkhint = bigmap.querySelector('.mkhint');
+  const markHint = () => { mkhint.textContent = G.mark ? (isTouch ? 'Tap your marker to remove it, or tap elsewhere to move it' : 'Click your marker (or press C) to remove it · click elsewhere to move it') : (isTouch ? 'Tap the map to set a marker' : 'Click the map to set a marker'); };
+  mcv.addEventListener('click', (e) => {
+    if (!setMark) return;
+    const r = mcv.getBoundingClientRect(), W = mcv.width, k = W / (2 * MAP_HALF);
+    const cx = (e.clientX - r.left) * W / r.width, cy = (e.clientY - r.top) * W / r.height;
+    const x = cx / k - MAP_HALF, z = cy / k - MAP_HALF;
+    if (G.mark && Math.hypot((G.mark.x + MAP_HALF) * k - cx, (G.mark.z + MAP_HALF) * k - cy) < Math.max(12, W / 40)) { setMark(null); Sfx.blip(330); }
+    else { setMark(x, z); Sfx.blip(760); }
+    markHint(); drawBig();
+  });
+  document.getElementById('minimap')?.addEventListener('click', () => { if (!titled() && !M.open) setMap(!M.map); });
   // the title card's own key table is the desktop controls list
   const keyRows = () => [...document.querySelectorAll('#title table tr')].filter((r) => !r.classList.contains('devonly')).map((r) => [r.cells[0].textContent, r.cells[1].textContent]).concat(EXTRA_KEYS);
   const table = (rows) => `<table>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`;
@@ -99,7 +112,7 @@ export function makeUI(o) {
     if (on === M.map) return;
     if (on && M.open) return;
     M.map = on; bigmap.classList.toggle('open', on); G.paused = on; document.body.classList.toggle('menu', on || M.open);
-    if (on) { try { document.exitPointerLock?.(); } catch (e) { /* ignore */ } fitMap(); drawBig(); Sfx.blip(520); } else { P.lock = Math.max(P.lock || 0, 0.3); Sfx.blip(440); }
+    if (on) { try { document.exitPointerLock?.(); } catch (e) { /* ignore */ } fitMap(); markHint(); drawBig(); Sfx.blip(520); } else { P.lock = Math.max(P.lock || 0, 0.3); Sfx.blip(440); }
   }
   function fitMap() { const s = Math.max(180, Math.min(innerWidth - 40, innerHeight - 190)); if (mcv.width !== s) mcv.width = mcv.height = s; }
   const labels = DISTRICT_LABELS.filter(([n, x, z]) => !districtAt || districtAt(x, z) === n);
@@ -122,6 +135,10 @@ export function makeUI(o) {
     if (!mission()) for (const [id, m] of Object.entries(giverMarks)) if (m.visible) dot(m.position.x, m.position.z, '#ffd23f', r * 1.1, id[0].toUpperCase());
     dot(places.rv.x, places.rv.z, '#5fd0ff', r, 'H');
     if (G.check) dot(G.check.x, G.check.z, G.check.col || '#ff3b6b', r * (1 + 0.3 * Math.sin(t * 6)), '!', '#fff');
+    if (G.mark) { // dashed line from you to your marker, then the pin
+      g.save(); g.setLineDash([6, 5]); g.lineDashOffset = -t * 20; g.strokeStyle = '#c77dff'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(px()), X(pz())); g.lineTo(X(G.mark.x), X(G.mark.z)); g.stroke(); g.restore();
+      dot(G.mark.x, G.mark.z, '#c77dff', r * (1.15 + 0.2 * Math.sin(t * 5)), 'M', '#fff');
+    }
     g.save(); g.translate(X(px()), X(pz())); g.rotate(-yaw() + Math.PI); g.scale(r / 5, r / 5);
     g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, -8); g.lineTo(6, 6); g.lineTo(0, 2.5); g.lineTo(-6, 6); g.closePath(); g.fill(); g.stroke(); g.restore();
   }
@@ -161,7 +178,8 @@ export function makeUI(o) {
         // a Tab tap toggles the map, a Tab hold (wall clock, not the capped frame dt) closes it on release
         if (hit('tab', 'escape', 'q') || (M.tabHold && !keys.has('tab') && performance.now() - M.mapT > 450)) setMap(false);
         if (!keys.has('tab')) M.tabHold = false;
-        eat('tab', 'escape', 'q');
+        if (hit('c', 'delete', 'backspace') && G.mark && setMark) { setMark(null); Sfx.blip(330); markHint(); }
+        eat('tab', 'escape', 'q', 'c', 'delete', 'backspace');
         return;
       }
       if (hit('escape') && !bagOpen() && !(dev && dev().editing)) { setPaused(true); eat('escape'); }

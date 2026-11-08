@@ -32,7 +32,8 @@ const HOOKS = [
   [['if (blocked(tx + _d.x * f, ty + _d.y * f, tz + _d.z * f))'], 'if ((INT.inside ? INT.blocked : blocked)(tx + _d.x * f, ty + _d.y * f, tz + _d.z * f))', 'replace', 'INT.inside ? INT.blocked : blocked'],
   [['  want.y = Math.max(0.3, want.y);'], '\n  if (INT.inside) INT.clampCam(want);', 'after', 'INT.clampCam(want)'],
   // no waypoint arrow indoors; the "district" is the room
-  [['function updateWaypoint() {\n  const c = G.check;'], "\n  if (INT.inside) { wp.style.display = 'none'; return; } // interiors", 'after', "if (INT.inside) { wp.style.display = 'none'; return; }"],
+  // waypoints (mission + your own map marker) hide indoors; updateWaypoint builds this flag itself since 2026-11-08
+  [['function updateWaypoint() {'], "\n  const hide = INT.inside || G.paused || G.dialog || dev.editing; // interiors", 'after', "INT.inside || G.paused"],
   [['const d = districtAt(px(), pz());'], 'const d = INT.inside ? INT.name : districtAt(px(), pz());', 'replace', 'INT.inside ? INT.name : districtAt('],
   // fade / door markers / prompt; the minimap shows the room plan instead
   [['  drawMinimap();\n  pressed.clear();'], '  INT.hud(dt);\n  if (!INT.inside) ', 'before', 'INT.hud(dt);'],

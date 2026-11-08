@@ -4,6 +4,8 @@
 // Contract (see game interior system):
 //   build(ctx) with ctx = { THREE, M, T } -> { group, size, cols, spawn, exit, lights, cam, interact }
 //   local origin = room centre at floor level (y = 0); +z = toward the entrance door; yaw 0 faces -z.
+// Optional `floors`: walkable raised surfaces (room-local, terrain.js floorAt shapes: decks {top,x0,x1,z0,z1}, discs
+// {top,cx,cz,r}, turned boxes/ramps). Solid cols are standable at `top ?? h` (jump onto counters, beds, pews).
 // Walls, floor and ceiling are single-sided planes facing INTO the room, so when the third-person camera is
 // pushed outside a wall it looks straight in (dollhouse cutaway) instead of staring at a wall.
 // Extra (optional, not required by the contract): the returned object also carries update(t) for tiny
@@ -353,15 +355,16 @@ function buildRV(ctx) {
   let st = 0;
   const update = (t) => { statik.offset.set(((t * 7) | 0) % 5 / 5, ((t * 13) | 0) % 3 / 3); st = t; };
   cols.push(
-    { kind: 'box', cx: 0, cz: -2.75, w: W, d: 1.5, rot: 0, h: 0.8 },           // bed
+    { kind: 'box', cx: 0, cz: -2.75, w: W, d: 1.5, rot: 0, h: 0.72 },          // bed (standable)
     { kind: 'box', cx: -0.95, cz: -1.05, w: 0.6, d: 1.9, rot: 0, h: 0.9 },     // galley counter
-    { kind: 'box', cx: 0.9, cz: -1.05, w: 0.6, d: 2.1, rot: 0, h: 0.8 },       // dinette + benches
-    { kind: 'box', cx: 0.93, cz: 0.7, w: 0.5, d: 0.5, rot: 0, h: 0.8 },        // TV crate
-    { kind: 'box', cx: -0.85, cz: 0.95, w: 0.6, d: 0.6, rot: 0, h: 0.5 },      // laundry basket
+    { kind: 'box', cx: 0.9, cz: -1.05, w: 0.6, d: 0.9, rot: 0, h: 0.77 },      // dinette table
+    { kind: 'box', cx: 0.9, cz: -1.85, w: 0.6, d: 0.5, rot: 0, h: 0.54 }, { kind: 'box', cx: 0.9, cz: -0.25, w: 0.6, d: 0.5, rot: 0, h: 0.54 }, // bench seats
+    { kind: 'box', cx: 0.93, cz: 0.7, w: 0.5, d: 0.5, rot: 0, h: 0.74 },       // TV crate
+    { kind: 'box', cx: -0.85, cz: 0.95, w: 0.6, d: 0.6, rot: 0, h: 0.45 },     // laundry basket
     { kind: 'box', cx: 1.0, cz: 2.75, w: 0.35, d: 0.25, rot: 0, h: 0.6 },      // kibble bag
   );
   return {
-    group, size: [W, D], cols,
+    group, size: [W, D], cols, floors: [],
     spawn: { x: 0.2, z: 2.3, yaw: 0 },
     exit: { x: 0.45, z: D / 2 + 0.05, r: 0.55 },
     lights: [
@@ -506,18 +509,18 @@ function buildQuik(ctx) {
   const update = (t) => { const on = Math.sin(t * 23) + Math.sin(t * 7.3) > 0.4; flick.material.color.setHex(on ? 0xf4f8ff : 0x30342a); };
   cols.push(
     { kind: 'box', cx: 0, cz: -D / 2 + 0.4, w: 8.6, d: 0.8, rot: 0, h: 2.5 },      // coolers
-    { kind: 'box', cx: -4.1, cz: 0.2, w: 1.0, d: 3.7, rot: 0, h: 1.1 },            // counter
+    { kind: 'box', cx: -4.1, cz: 0.2, w: 1.0, d: 3.7, rot: 0, h: 1.06 },           // counter (standable)
     { kind: 'box', cx: -4.85, cz: 0.2, w: 0.3, d: 3.0, rot: 0, h: 2.6 },           // back rack
     { kind: 'box', cx: -1.3, cz: 0.3, w: 1.0, d: 4.2, rot: 0, h: 1.5 },            // gondola 1
     { kind: 'box', cx: 1.3, cz: 0.3, w: 1.0, d: 4.2, rot: 0, h: 1.5 },             // gondola 2
     { kind: 'box', cx: 4.4, cz: -1.6, w: 1.0, d: 0.7, rot: 0, h: 1.9 },            // slushie
     { kind: 'box', cx: 4.4, cz: 1.2, w: 1.2, d: 0.6, rot: 0, h: 1.0 },             // coffee station
-    { kind: 'box', cx: 3.4, cz: 2.8, w: 0.9, d: 0.9, rot: 0, h: 0.9 },             // water-gun bin
+    { kind: 'box', cx: 3.4, cz: 2.8, w: 0.9, d: 0.9, rot: 0, h: 0.8 },             // water-gun bin
     { kind: 'box', cx: -1.8, cz: 3.6, w: 0.9, d: 0.3, rot: 0, h: 1.4 },            // magazine rack
     { kind: 'box', cx: -4.6, cz: 3.3, w: 0.6, d: 0.5, rot: 0, h: 1.5 },            // ATM
   );
   return {
-    group, size: [W, D], cols,
+    group, size: [W, D], cols, floors: [],
     spawn: { x: 1.0, z: 2.9, yaw: 0 },
     exit: { x: 1.0, z: D / 2 + 0.05, r: 0.6 },
     lights: [
@@ -636,6 +639,11 @@ function buildDiner(ctx) {
     if (o.cup) { B.cyl('plain', 0xf4f0e8, 0.045, 0.04, 0.09, bx + s * 0.1, 0.81, bz + 0.25, 8, { ao: false }); }
     if (o.paper) B.box('plain', 0xd8d8d0, 0.3, 0.004, 0.4, bx, 0.77, bz + 0.1, 0.15, { ao: false });
   };
+  // colliders per booth: table top 0.76, seats 0.52 (sit / stand on them), backs 1.1
+  const boothCols = (bx, bz, s) => [
+    { kind: 'box', cx: bx, cz: bz, w: 0.75, d: 1.1, rot: 0, h: 0.76 },
+    ...[-1, 1].flatMap((e) => [{ kind: 'box', cx: bx + s * 0.05, cz: bz + e * 0.95, w: 1.3, d: 0.5, rot: 0, h: 0.52 }, { kind: 'box', cx: bx + s * 0.05, cz: bz + e * 1.17, w: 1.3, d: 0.12, rot: 0, h: 1.1 }]),
+  ];
   booth(-5.45, -1.8, -1, { plate: true }); booth(-5.45, 0.5, -1, { cup: true, paper: true });
   booth(5.45, -1.6, 1, { cup: true }); booth(5.45, 0.9, 1, { plate: true, c: 0x3a6ab0 });
   // wall art: framed photos of regulars, a "WAITRESS WANTED" sign, a mounted fish
@@ -665,17 +673,16 @@ function buildDiner(ctx) {
 
   const group = B.finish(new THREE.Group());
   cols.push(
-    { kind: 'box', cx: -0.5, cz: -2.3, w: 7.9, d: 0.8, rot: 0, h: 1.0 },         // counter
+    { kind: 'box', cx: -0.5, cz: -2.3, w: 7.9, d: 0.8, rot: 0, h: 1.03 },        // counter (standable)
     { kind: 'box', cx: -0.5, cz: -D / 2 + 0.3, w: 8.4, d: 0.6, rot: 0, h: 1.8 }, // back bar
-    ...[-3.6, -2.55, -1.5, -0.45, 0.6, 1.65, 2.7].map((x) => ({ kind: 'box', cx: x, cz: -1.5, w: 0.4, d: 0.4, rot: 0, h: 0.7 })),
-    ...[-1.8, 0.5].map((z) => ({ kind: 'box', cx: -5.4, cz: z, w: 1.4, d: 2.5, rot: 0, h: 1.1 })),
-    ...[-1.6, 0.9].map((z) => ({ kind: 'box', cx: 5.4, cz: z, w: 1.4, d: 2.5, rot: 0, h: 1.1 })),
+    ...[-3.6, -2.55, -1.5, -0.45, 0.6, 1.65, 2.7].map((x) => ({ kind: 'box', cx: x, cz: -1.5, w: 0.4, d: 0.4, rot: 0, h: 0.65 })),
+    ...boothCols(-5.45, -1.8, -1), ...boothCols(-5.45, 0.5, -1), ...boothCols(5.45, -1.6, 1), ...boothCols(5.45, 0.9, 1),
     { kind: 'box', cx: jx, cz: jz, w: 1.0, d: 0.7, rot: ja, h: 1.8 },           // jukebox
     { kind: 'box', cx: 5.5, cz: 3.5, w: 0.4, d: 0.4, rot: 0, h: 0.9 },           // gumball
     { kind: 'box', cx: 2.8, cz: 3.5, w: 0.3, d: 0.3, rot: 0, h: 1.3 },           // host stand
   );
   return {
-    group, size: [W, D], cols,
+    group, size: [W, D], cols, floors: [],
     spawn: { x: 4.2, z: 2.6, yaw: 0 },
     exit: { x: 4.2, z: D / 2 + 0.05, r: 0.6 },
     lights: [
@@ -856,26 +863,28 @@ function buildNana(ctx) {
   const group = B.finish(group0);
   const update = (t) => { pend.rotation.x = Math.sin(t * 3.2) * 0.25; };
   cols.push(
-    { kind: 'box', cx: -4.4, cz: 0.3, w: 1.3, d: 2.5, rot: 0, h: 1.0 },         // couch
-    { kind: 'box', cx: -4.35, cz: 1.9, w: 0.6, d: 0.6, rot: 0, h: 1.3 },        // end table
+    { kind: 'box', cx: -4.25, cz: 0.3, w: 0.9, d: 2.2, rot: 0, h: 0.58 },       // couch seat (standable)
+    { kind: 'box', cx: -4.65, cz: 0.3, w: 0.3, d: 2.2, rot: 0, h: 1.0 },        // couch back
+    ...[-1, 1].map((e) => ({ kind: 'box', cx: -4.35, cz: 0.3 + e * 1.1, w: 0.9, d: 0.25, rot: 0, h: 0.7 })), // arms
+    { kind: 'box', cx: -4.35, cz: 1.9, w: 0.6, d: 0.6, rot: 0, h: 0.6 },        // end table
     { kind: 'box', cx: -2.4, cz: 0.3, w: 1.1, d: 0.55, rot: 0, h: 0.45 },       // coffee table
-    { kind: 'box', cx: rx0, cz: rz0, w: 0.7, d: 0.75, rot: ra, h: 1.0 },        // rocker
+    { kind: 'box', cx: rx0, cz: rz0, w: 0.7, d: 0.75, rot: ra, h: 1.0, top: 0.55 }, // rocker (seat)
     { kind: 'box', cx: rx0 + 0.75, cz: rz0 + 0.1, w: 0.45, d: 0.45, rot: 0, h: 0.4 }, // knitting basket
     { kind: 'box', cx: -2.2, cz: -D / 2 + 0.2, w: 2.3, d: 0.5, rot: 0, h: 1.4 }, // fireplace
-    { kind: 'box', cx: tx0, cz: tz0, w: 0.65, d: 0.9, rot: 0, h: 1.1 },         // TV
+    { kind: 'box', cx: tx0, cz: tz0, w: 0.65, d: 0.9, rot: 0, h: 1.0 },         // TV
     { kind: 'box', cx: -4.5, cz: -3.6, w: 0.9, d: 0.5, rot: 0, h: 1.9 },        // curio
     { kind: 'box', cx: -1.1, cz: -D / 2 + 0.3, w: 0.5, d: 0.5, rot: 0, h: 1.3 }, // fern
     { kind: 'box', cx: W / 2 - 0.33, cz: -1.0, w: 0.7, d: 3.5, rot: 0, h: 0.95 }, // counter
     { kind: 'box', cx: W / 2 - 0.4, cz: 1.3, w: 0.8, d: 0.7, rot: 0, h: 1.0 },   // stove
     { kind: 'box', cx: W / 2 - 0.5, cz: -D / 2 + 0.5, w: 0.9, d: 0.8, rot: 0, h: 1.9 }, // fridge
-    { kind: 'box', cx: kx, cz: kz, w: 1.5, d: 1.0, rot: 0, h: 0.8 },            // table
-    { kind: 'box', cx: kx - 1.0, cz: kz, w: 0.45, d: 0.45, rot: 0, h: 0.9 }, { kind: 'box', cx: kx + 1.0, cz: kz, w: 0.45, d: 0.45, rot: 0, h: 0.9 },
-    { kind: 'box', cx: kx - 0.2, cz: kz - 0.9, w: 0.45, d: 0.45, rot: 0, h: 0.9 }, { kind: 'box', cx: kx + 0.3, cz: kz + 0.9, w: 0.45, d: 0.45, rot: 0.2, h: 0.9 },
-    { kind: 'box', cx: 1.3, cz: D / 2 - 0.2, w: 0.5, d: 0.3, rot: 0, h: 0.9 },  // hall table
-    { kind: 'box', cx: -0.9, cz: -3.1, w: 0.6, d: 0.6, rot: 0, h: 0.2 },        // cat bed
+    { kind: 'box', cx: kx, cz: kz, w: 1.5, d: 1.0, rot: 0, h: 0.78 },           // table (standable)
+    { kind: 'box', cx: kx - 1.0, cz: kz, w: 0.45, d: 0.45, rot: 0, h: 0.5 }, { kind: 'box', cx: kx + 1.0, cz: kz, w: 0.45, d: 0.45, rot: 0, h: 0.5 },
+    { kind: 'box', cx: kx - 0.2, cz: kz - 0.9, w: 0.45, d: 0.45, rot: 0, h: 0.5 }, { kind: 'box', cx: kx + 0.3, cz: kz + 0.9, w: 0.45, d: 0.45, rot: 0.2, h: 0.5 }, // chair seats
+    { kind: 'box', cx: 1.3, cz: D / 2 - 0.2, w: 0.5, d: 0.3, rot: 0, h: 0.82 },  // hall table
   );
+  const floors = [{ top: 0.16, cx: -0.9, cz: -3.1, r: 0.3 }];   // the cat bed: a cushion you walk onto
   return {
-    group, size: [W, D], cols,
+    group, size: [W, D], cols, floors,
     spawn: { x: 0, z: 2.7, yaw: 0 },
     exit: { x: 0, z: D / 2 + 0.05, r: 0.6 },
     lights: [
@@ -998,17 +1007,23 @@ function buildChurch(ctx) {
 
   const group = B.finish(new THREE.Group());
   cols.push(
-    { kind: 'box', cx: 0, cz: -D / 2 + 2.0, w: W - 0.2, d: 4.0, rot: 0, h: 0.3 },  // chancel platform (interactions sit at its edge)
-    { kind: 'box', cx: 0, cz: -D / 2 + 4.25, w: 3.0, d: 0.5, rot: 0, h: 0.15 },     // step
-    { kind: 'box', cx: 0, cz: -D / 2 + 1.0, w: 1.9, d: 0.8, rot: 0, h: 1.2 },      // altar
+    { kind: 'box', cx: 0, cz: -D / 2 + 1.0, w: 1.9, d: 0.8, rot: 0, h: 1.15 },     // altar (standable)
     { kind: 'box', cx: px0, cz: pz0, w: 0.9, d: 0.6, rot: 0.25, h: 1.5 },           // pulpit
     { kind: 'box', cx: ix, cz: iz, w: 1.6, d: 0.7, rot: ia, h: 1.7 },               // piano
     { kind: 'box', cx: ix + Math.sin(ia) * 0.95, cz: iz + Math.cos(ia) * 0.95, w: 0.9, d: 0.35, rot: ia, h: 0.55 }, // bench
-    ...[0, 1, 2, 3, 4, 5].flatMap((r) => [-1, 1].map((e) => ({ kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 - 0.05, w: 3.3, d: 0.6, rot: 0, h: 0.95 }))),
-    { kind: 'box', cx: -3.3, cz: D / 2 - 0.4, w: 1.6, d: 0.5, rot: 0, h: 0.85 },   // narthex table
+    ...[0, 1, 2, 3, 4, 5].flatMap((r) => [-1, 1].flatMap((e) => [
+      { kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 + 0.02, w: 3.3, d: 0.5, rot: 0, h: 0.5 },     // pew seat (sit / stand)
+      { kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 - 0.25, w: 3.3, d: 0.1, rot: 0, h: 0.95 },    // pew back
+    ])),
+    { kind: 'box', cx: -3.3, cz: D / 2 - 0.4, w: 1.6, d: 0.5, rot: 0, h: 0.82 },   // narthex table
   );
+  // walkable: the step (0.15) and the chancel platform (0.3); the altar, pews, piano and tables are standable col tops
+  const floors = [
+    { top: 0.15, x0: -1.5, x1: 1.5, z0: -D / 2 + 4.0, z1: -D / 2 + 4.5 },
+    { top: 0.3, x0: -(W - 0.2) / 2, x1: (W - 0.2) / 2, z0: -D / 2, z1: -D / 2 + 4.0 },
+  ];
   return {
-    group, size: [W, D], cols,
+    group, size: [W, D], cols, floors,
     spawn: { x: 0, z: 6.6, yaw: 0 },
     exit: { x: 0, z: D / 2 + 0.05, r: 0.7 },
     lights: [
@@ -1022,9 +1037,182 @@ function buildChurch(ctx) {
     cam: { maxDist: 5.0, height: 2.4 },
     interact: [
       { id: 'pew', x: -2.5, z: 2.2, r: 1.0, label: 'Sit in a pew' },
-      { id: 'piano', x: 2.6, z: -3.3, r: 0.8, label: 'Play the piano' },
-      { id: 'pulpit', x: -2.0, z: -3.3, r: 0.8, label: 'Pulpit' },
+      { id: 'piano', x: ix + Math.sin(ia) * 1.3, z: iz + Math.cos(ia) * 1.3, r: 0.8, label: 'Play the piano' },
+      { id: 'pulpit', x: px0 + Math.sin(0.25) * 0.9, z: pz0 + Math.cos(0.25) * 0.9, r: 0.8, label: 'Pulpit' },
+      { id: 'altar', x: 0, z: -D / 2 + 1.9, r: 0.8, label: 'Altar' },
       { id: 'offering', x: -3.3, z: D / 2 - 1.1, r: 0.7, label: 'Offering plate' },
+    ],
+  };
+}
+
+// =====================================================================================================
+// 6. The Donut Hole: 10 x 7 m pink donut shop, 3 m ceiling. Display case + register counter along the
+//    back, kitchen pass-through with the fryer glow, three tiny tables, neon donut in the window.
+//    Currency is FISH (barter): fish scale on the counter, prices in bluegill, a bucket of ice by the register.
+// =====================================================================================================
+function buildDonut(ctx) {
+  const { THREE, T } = ctx; seed = 67;
+  const B = makeBuilder(THREE, T);
+  const W = 10, D = 7, H = 3.0;
+  const PINK = 0xffd0e0, PLUM = 0xb05070;
+  const tile = ctex(THREE, 'o:tile', 64, 64, (g) => {
+    for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { g.fillStyle = (x + y) % 2 ? '#f2d8e0' : '#f8f0ea'; g.fillRect(x * 32, y * 32, 32, 32); }
+    g.strokeStyle = 'rgba(120,60,80,0.35)'; for (let k = 0; k <= 64; k += 32) { g.beginPath(); g.moveTo(k + 0.5, 0); g.lineTo(k + 0.5, 64); g.moveTo(0, k + 0.5); g.lineTo(64, k + 0.5); g.stroke(); }
+    grime(g, 64, 64, 220, 0.2); g.fillStyle = 'rgba(200,120,60,0.3)'; g.beginPath(); g.ellipse(44, 18, 7, 4, 0.5, 0, 7); g.fill(); // old coffee stain
+  });
+  const owall = ctex(THREE, 'o:wall', 64, 64, (g) => {
+    g.fillStyle = '#fbe4ec'; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#f4cdd9'; for (let x = 0; x < 64; x += 16) g.fillRect(x, 0, 8, 64);
+    for (let i = 0; i < 10; i++) { g.fillStyle = `rgba(120,60,80,${0.05 + rnd() * 0.08})`; g.fillRect(rnd() * 64, rnd() * 64, 3, 1); } // scuffs
+    g.fillStyle = 'rgba(140,100,60,0.25)'; g.beginPath(); g.moveTo(50, 0); g.lineTo(56, 0); g.lineTo(58, 14); g.lineTo(52, 12); g.fill(); // water stain
+  });
+  const oceil = ctex(THREE, 'o:ceil', 64, 64, (g) => { g.fillStyle = '#ece4dc'; g.fillRect(0, 0, 64, 64); g.strokeStyle = '#a89890'; g.lineWidth = 2; g.strokeRect(1, 1, 62, 62); for (let i = 0; i < 160; i++) { g.fillStyle = 'rgba(0,0,0,0.1)'; g.fillRect(rnd() * 64, rnd() * 64, 1, 1); } g.fillStyle = 'rgba(140,100,50,0.4)'; g.beginPath(); g.arc(18, 44, 10, 0, 7); g.fill(); });
+  B.def('otile', { kind: 'lambert', map: tile }); B.def('owall', { kind: 'lambert', map: owall }); B.def('oceil', { kind: 'lambert', map: oceil });
+  const cols = shell(B, THREE, { w: W, d: D, h: H, floorKey: 'otile', wallKey: 'owall', ceilKey: 'oceil', ceilCol: 0xffffff, door: { x: 0, w: 1.1, h: 2.1 }, base: PLUM, frame: 0xffffff, wallTile: 1.5, floorTile: 1, trim: { c: PLUM, y: 1.05, h: 0.1 } });
+  // store windows either side of the door (match the outside: x = -3 / +3, 2 x 1.5), night outside with pink spill
+  const night = ctex(THREE, 'o:night', 64, 32, (g) => { g.fillStyle = '#131828'; g.fillRect(0, 0, 64, 32); g.fillStyle = '#2a2a44'; g.fillRect(0, 24, 64, 8); g.fillStyle = 'rgba(255,120,190,0.35)'; g.fillRect(0, 0, 64, 12); g.fillStyle = '#f0d060'; g.fillRect(44, 20, 5, 3); }, { repeat: false });
+  B.def('night', { kind: 'basic', map: night });
+  for (const x of [-3, 3]) {
+    B.quad('night', 0xffffff, 2.0, 1.5, x, 1.6, D / 2 - 0.02, Math.PI, { ao: false, tint: false });
+    for (const y of [2.38, 0.82]) B.quad('plain', 0xffffff, 2.1, 0.06, x, y, D / 2 - 0.03, Math.PI, { ao: false, tint: false });
+    for (const e of [-1, 1]) B.quad('plain', 0xffffff, 0.06, 1.6, x + e * 1.03, 1.6, D / 2 - 0.03, Math.PI, { ao: false, tint: false });
+  }
+  // neon donut sign hanging in the right window (reads from outside; glows inside too)
+  B.add(new THREE.TorusGeometry(0.42, 0.07, 6, 16), 'glow', 0xff5aa8, 3, 1.65, D / 2 - 0.12, 0, { ao: false, tint: false });
+  B.add(new THREE.TorusGeometry(0.42, 0.025, 4, 16), 'glow', 0xfff0a0, 3, 1.65, D / 2 - 0.17, 0, { ao: false, tint: false });
+  for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283 + 0.3; B.box('glow', pick([0x60f0ff, 0xf0ff60, 0xffffff]), 0.1, 0.03, 0.03, 3 + Math.cos(a) * 0.42, 1.65 + Math.sin(a) * 0.42, D / 2 - 0.11, a + 0.8, { ao: false, tint: false }); }
+  for (const e of [-1, 1]) B.cyl('plain', 0x333333, 0.004, 0.004, 0.65, 3 + e * 0.3, 2.4, D / 2 - 0.12, 3, { ao: false });
+  const hot = signTex(THREE, 'o:hot', ['HOT NOW'], null, '#ff5aa8', 128, 40, { glow: true });
+  B.def('hot', { kind: 'basic', map: hot, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide });
+  B.quad('hot', 0xffffff, 0.8, 0.25, -3, 2.2, D / 2 - 0.1, Math.PI, { ao: false, tint: false });
+  const sorry = signTex(THREE, 'o:sorry', ['SORRY', "WE'RE OPEN"], '#fff', '#b05070', 96, 64, { border: '#b05070' });
+  B.def('sorry', { kind: 'lambert', map: sorry }); B.quad('sorry', 0xffffff, 0.36, 0.24, -0.9, 1.9, D / 2 - 0.05, Math.PI, { ao: false, tint: false });
+  // door: white with a big glass pane and a plum push bar
+  B.quad('plain', 0xffffff, 1.06, 2.05, 0, 1.03, D / 2 - 0.04, Math.PI, { ao: false, sy: 4, paint: (_x, y) => 0.65 + 0.35 * sm(y / 0.8) });
+  B.quad('night', 0xffffff, 0.8, 1.2, 0, 1.4, D / 2 - 0.06, Math.PI, { ao: false, tint: false }); B.quad('plain', PLUM, 0.9, 0.06, 0, 1.0, D / 2 - 0.08, Math.PI, { ao: false, tint: false });
+  // --- counter along the back: display case on the left half, register on the right half, fish scale + ice bucket
+  const cz = -D / 2 + 1.6;
+  B.box('plain', 0xf4e0e6, 7.4, 0.9, 0.7, -0.3, 0.45, cz); B.box('plain', PLUM, 7.4, 0.3, 0.7, -0.3, 0.15, cz, 0, { ao: false }); B.box('shiny', 0xfff4f0, 7.5, 0.05, 0.8, -0.3, 0.925, cz, 0, { ao: false });
+  // glass case: 3 shelves of donuts
+  const gx = -2.1;
+  B.box('glass', 0xe8f4ff, 3.4, 0.7, 0.72, gx, 1.3, cz); B.box('shiny', 0xd8dce4, 3.42, 0.03, 0.74, gx, 1.66, cz, 0, { ao: false }); B.box('shiny', 0xd8dce4, 3.42, 0.03, 0.74, gx, 0.95, cz, 0, { ao: false }); for (const e of [-1, 1]) B.box('shiny', 0xd8dce4, 0.03, 0.7, 0.74, gx + e * 1.7, 1.3, cz, 0, { ao: false });
+  B.box('plain', 0xf8f4ec, 3.3, 0.02, 0.6, gx, 1.3, cz, 0, { ao: false });  // middle shelf
+  const donut = (x, y, z, kind) => {
+    const r = 0.075, t = 0.03;
+    const base = kind === 'choc' ? 0x5a3a20 : 0xd8a050;
+    B.add(new THREE.TorusGeometry(r, t, 5, 10), 'plain', base, x, y + t, z, 0, { ao: false, tint: false, rx: Math.PI / 2 });
+    if (kind === 'glazed') B.add(new THREE.TorusGeometry(r, t * 0.8, 5, 10), 'shiny', 0xf8ecd0, x, y + t + 0.012, z, 0, { ao: false, tint: false, rx: Math.PI / 2 });
+    if (kind === 'pink' || kind === 'choc') { B.add(new THREE.TorusGeometry(r, t * 0.8, 5, 10), 'plain', kind === 'pink' ? 0xff80b0 : 0x3a2010, x, y + t + 0.012, z, 0, { ao: false, tint: false, rx: Math.PI / 2 }); for (let k = 0; k < 7; k++) { const a = rnd() * 6.3, rr = r + (rnd() - 0.5) * 0.03; B.box('plain', pick([0x60f0ff, 0xf0ff60, 0xffffff, 0x60ff80, 0xff6060]), 0.016, 0.005, 0.005, x + Math.cos(a) * rr, y + 2 * t + 0.016, z + Math.sin(a) * rr, rnd() * 3, { ao: false, tint: false }); } }
+    if (kind === 'jelly') { B.sph('plain', 0xe8c070, r * 1.1, x, y + 0.04, z, { ao: false, tint: false, s: [1, 0.6, 1] }); B.sph('plain', 0xc02040, 0.012, x + 0.07, y + 0.035, z, { ao: false, tint: false, ws: 5, hs: 4 }); }
+    if (kind === 'maple') { B.box('plain', 0xe0b060, 0.2, 0.045, 0.085, x, y + 0.022, z, 0.1, { ao: false, tint: false }); B.box('plain', 0xb86a20, 0.19, 0.012, 0.075, x, y + 0.05, z, 0.1, { ao: false, tint: false }); }
+    if (kind === 'cruller') B.add(new THREE.TorusGeometry(r, t * 0.9, 4, 7), 'plain', 0xe8d090, x, y + t, z, 0, { ao: false, tint: false, rx: Math.PI / 2 });
+  };
+  const rows = [['glazed', 'glazed', 'glazed', 'pink', 'pink', 'choc', 'choc', 'glazed'], ['jelly', 'jelly', 'maple', 'maple', 'pink', 'glazed', 'choc', 'jelly']];
+  rows.forEach((row, ri) => row.forEach((k, i) => { B.box('plain', 0xffffff, 0.3, 0.004, 0.28, gx - 1.45 + i * 0.41, 0.965 + ri * 0.35, cz + 0.02, 0, { ao: false }); donut(gx - 1.45 + i * 0.41 + (rnd() - 0.5) * 0.04, 0.97 + ri * 0.35, cz + 0.02 + (rnd() - 0.5) * 0.06, k); }));
+  donut(gx + 1.2, 1.32, cz + 0.05, 'cruller');   // the sad lone cruller, no tray, no friends
+  const tags = ['GLAZED', 'SPRINKLE', 'CHOC', 'JELLY', 'MAPLE', 'CRULLER (1 LEFT)'];
+  tags.forEach((t, i) => { const tx = signTex(THREE, 'o:tag' + i, [t], '#fff', '#b05070', 96, 24, { border: '#b05070' }); B.def('otag' + i, { kind: 'lambert', map: tx }); B.quad('otag' + i, 0xffffff, 0.3, 0.075, gx - 1.5 + i * 0.6, 0.99, cz + 0.3, 0, { ao: false, tint: false }); });
+  // register + fish scale + PAY HERE sign + bell + take-a-number + tip jar of buttons + ice bucket
+  const rx0 = 1.6;
+  B.box('plain', 0xf0ece0, 0.42, 0.26, 0.42, rx0, 1.08, cz - 0.1, -0.15); B.box('plain', 0x333333, 0.36, 0.22, 0.06, rx0, 1.3, cz - 0.28, -0.15); B.quad('glow', 0x80ff90, 0.3, 0.14, rx0 - 0.03, 1.3, cz - 0.24, -0.15, { ao: false, tint: false });
+  const scx = 2.8;
+  B.cyl('shiny', 0xcfd4d8, 0.16, 0.18, 0.06, scx, 0.98, cz + 0.05, 10, { ao: false }); B.cyl('shiny', 0xcfd4d8, 0.03, 0.03, 0.4, scx, 1.2, cz - 0.1, 6, { ao: false }); B.cyl('shiny', 0xf4f4f4, 0.12, 0.12, 0.05, scx, 1.4, cz - 0.1, 12, { ao: false, rx: Math.PI / 2 });
+  B.cyl('shiny', 0xcfd4d8, 0.15, 0.15, 0.015, scx, 1.02, cz + 0.05, 10, { ao: false }); B.box('plain', 0x222222, 0.004, 0.08, 0.004, scx, 1.41, cz - 0.07, 0, { ao: false, rz: 0.6 });
+  B.box('plain', 0x6a9ab0, 0.2, 0.05, 0.07, scx + 0.03, 1.07, cz + 0.05, 0.4, { ao: false }); B.box('plain', 0x6a9ab0, 0.06, 0.07, 0.04, scx + 0.15, 1.09, cz + 0.1, 0.4, { ao: false }); // a bluegill on the scale
+  const pay = signTex(THREE, 'o:pay', ['WE ACCEPT', 'FISH', '(NO BOOTS)'], '#fff8c0', '#b05070', 128, 80, { border: '#b05070', tape: true });
+  B.def('pay', { kind: 'lambert', map: pay }); B.quad('pay', 0xffffff, 0.42, 0.26, scx, 1.62, cz - 0.13, 0, { ao: false, tint: false });
+  B.cyl('shiny', 0xd8b050, 0.05, 0.06, 0.05, rx0 - 0.5, 0.975, cz + 0.15, 10, { ao: false }); B.sph('shiny', 0xd8b050, 0.012, rx0 - 0.5, 1.01, cz + 0.15, { ao: false }); // bell
+  const ring = signTex(THREE, 'o:ring', ['RING FOR', 'SERVICE', '(once.)'], '#fff', '#222', 64, 48, { font: 'sans-serif' }); B.def('ring', { kind: 'lambert', map: ring }); B.quad('ring', 0xffffff, 0.16, 0.12, rx0 - 0.5, 1.03, cz + 0.28, 0, { ao: false, tint: false });
+  B.cyl('glass', 0xffffff, 0.08, 0.07, 0.18, rx0 + 0.55, 1.04, cz + 0.1, 10, { ao: false }); for (let k = 0; k < 14; k++) B.cyl('plain', pick([0xf04040, 0x4060c0, 0xf0e040, 0xffffff, 0x222222]), 0.02, 0.02, 0.006, rx0 + 0.55 + (rnd() - 0.5) * 0.1, 0.96 + rnd() * 0.12, cz + 0.1 + (rnd() - 0.5) * 0.1, 8, { ao: false, tint: false, rx: rnd() * 2 });
+  const tips = signTex(THREE, 'o:tips', ['TIPS', '(buttons ok)'], '#fff', '#222', 64, 40, { font: 'sans-serif' }); B.def('tips', { kind: 'lambert', map: tips }); B.quad('tips', 0xffffff, 0.14, 0.09, rx0 + 0.55, 1.04, cz + 0.18, 0, { ao: false, tint: false });
+  B.box('plain', 0xd03030, 0.14, 0.18, 0.1, 3.1, 1.04, cz + 0.2, 0.2); B.box('plain', 0xffffff, 0.06, 0.03, 0.02, 3.1, 1.0, cz + 0.26, 0.2, { ao: false });
+  const num = signTex(THREE, 'o:num', ['TAKE A', 'NUMBER', 'now serving: 2'], '#d03030', '#fff', 64, 48); B.def('num', { kind: 'lambert', map: num }); B.quad('num', 0xffffff, 0.13, 0.1, 3.1 + Math.sin(0.2) * 0.051, 1.1, cz + 0.2 + Math.cos(0.2) * 0.051, 0.2, { ao: false, tint: false });
+  // bucket of ice with a fish tail sticking out, parked at the end of the counter
+  B.cyl('plain', 0x4a7ab0, 0.22, 0.18, 0.4, 3.9, 0.2, cz + 0.6, 10); B.cyl('shiny', 0xe8f8ff, 0.2, 0.2, 0.04, 3.9, 0.41, cz + 0.6, 10, { ao: false });
+  for (let k = 0; k < 8; k++) B.box('shiny', 0xf0fbff, 0.05, 0.04, 0.05, 3.9 + (rnd() - 0.5) * 0.3, 0.44, cz + 0.6 + (rnd() - 0.5) * 0.3, rnd() * 3, { ao: false, tint: false });
+  B.box('plain', 0x6a9ab0, 0.07, 0.22, 0.05, 3.95, 0.52, cz + 0.55, 0.3, { rz: 0.25, ao: false }); for (const e of [-1, 1]) B.box('plain', 0x6a9ab0, 0.1, 0.09, 0.03, 3.95 + e * 0.05 + 0.03, 0.66 + 0.03, cz + 0.55, 0.3, { rz: e * 0.7, ao: false });
+  const fishy = signTex(THREE, 'o:fishy', ['TODAYS', 'CATCH', '= PETTY CASH'], '#4a7ab0', '#fff', 64, 48); B.def('fishy', { kind: 'lambert', map: fishy }); B.quad('fishy', 0xffffff, 0.22, 0.16, 3.9, 0.25, cz + 0.82, 0, { ao: false, tint: false });
+  // --- back wall: menu board priced in fish, pass-through with fryer glow, coffee urn, napkins, "employee of the month"
+  const menu = ctex(THREE, 'o:menu', 256, 128, (g) => {
+    g.fillStyle = '#4a2030'; g.fillRect(0, 0, 256, 128); g.fillStyle = '#ff80b0'; g.fillRect(0, 0, 256, 22);
+    textLines(g, ['THE DONUT HOLE  -  PRICES IN FISH'], 128, 11, 0, 'bold 14px Impact, sans-serif', '#4a2030');
+    const items = [['GLAZED', '1 bluegill'], ['SPRINKLE / CHOC', '1 bluegill'], ['MAPLE BAR', '2 bluegill'], ['DOZEN', '1 bass'], ['COFFEE', '1 minnow'], ['DAY-OLD', '1 old boot, fine']];
+    g.font = '10px monospace'; g.fillStyle = '#fff0f6'; items.forEach(([n, p], i) => { g.textAlign = 'left'; g.fillText(n, 10, 38 + i * 14); g.textAlign = 'right'; g.fillText(p, 246, 38 + i * 14); });
+    g.font = '7px monospace'; g.textAlign = 'left'; g.fillStyle = '#ffb0d0'; g.fillText('no refunds. no boots. we can tell.', 10, 124);
+  }, { repeat: false });
+  B.def('menu', { kind: 'lambert', map: menu }); B.box('plain', 0x2a1018, 2.4, 1.2, 0.04, -2.6, 2.2, -D / 2 + 0.02, 0, { ao: false }); B.quad('menu', 0xffffff, 2.3, 1.1, -2.6, 2.2, -D / 2 + 0.05, 0, { ao: false, tint: false });
+  // pass-through: opening into the kitchen with the fryer's orange glow, fryer baskets, a rack of cooling donuts
+  B.quad('glow', 0x2a1408, 1.8, 1.0, 0.6, 1.9, -D / 2 + 0.03, 0, { ao: false, tint: false }); B.quad('glow', 0xff9a40, 1.8, 0.14, 0.6, 1.47, -D / 2 + 0.035, 0, { ao: false, tint: false }); B.quad('glow', 0xff6a20, 0.6, 0.5, 0.3, 1.75, -D / 2 + 0.036, 0, { ao: false, tint: false });
+  B.box('shiny', 0xcfd4d8, 1.9, 0.05, 0.3, 0.6, 1.38, -D / 2 + 0.15, 0, { ao: false }); B.box('shiny', 0xd8dce4, 0.4, 0.04, 0.26, 1.2, 1.42, -D / 2 + 0.17, 0, { ao: false }); for (let k = 0; k < 4; k++) donut(1.05 + k * 0.1, 1.44, -D / 2 + 0.17, 'glazed');
+  B.box('shiny', 0x8a8a90, 0.3, 0.2, 0.25, 0.8, 1.5, -D / 2 + 0.2, 0, { ao: false }); B.cyl('shiny', 0x8a8a90, 0.01, 0.01, 0.3, 0.8, 1.7, -D / 2 + 0.2, 4, { ao: false, rz: 0.8 }); // fryer basket
+  const order = signTex(THREE, 'o:order', ['ORDER UP'], '#fff', '#222', 96, 24, { font: 'sans-serif' }); B.def('order', { kind: 'lambert', map: order }); B.quad('order', 0xffffff, 0.5, 0.12, 0.6, 2.5, -D / 2 + 0.04, 0, { ao: false, tint: false });
+  // coffee urn + cups + creamer on a back shelf, napkin holder, employee of the month (a photo of the owner's cat)
+  B.box('plain', 0xf4e0e6, 1.4, 0.9, 0.5, 3.0, 0.45, -D / 2 + 0.3); B.box('shiny', 0xfff4f0, 1.42, 0.04, 0.52, 3.0, 0.92, -D / 2 + 0.3, 0, { ao: false });
+  B.cyl('shiny', 0xcfd4d8, 0.17, 0.17, 0.5, 2.7, 1.19, -D / 2 + 0.3, 12, { ao: false }); B.cyl('shiny', 0xcfd4d8, 0.08, 0.17, 0.06, 2.7, 1.47, -D / 2 + 0.3, 12, { ao: false }); B.box('plain', 0x222222, 0.03, 0.08, 0.05, 2.7, 1.02, -D / 2 + 0.48, 0, { ao: false }); B.box('glow', 0xff4040, 0.02, 0.02, 0.01, 2.7, 1.3, -D / 2 + 0.475, 0, { ao: false, tint: false });
+  for (let k = 0; k < 6; k++) B.cyl('plain', 0xf8f4ec, 0.045, 0.04, 0.09, 3.2 + (k % 3) * 0.12, 0.985 + ((k / 3) | 0) * 0.09, -D / 2 + 0.3, 8, { ao: false });
+  B.box('plain', 0xf4f0e8, 0.08, 0.14, 0.08, 3.55, 1.01, -D / 2 + 0.3, 0, { ao: false }); B.box('shiny', 0xd8dce4, 0.12, 0.14, 0.14, 2.3, 1.01, -D / 2 + 0.3);
+  const eotm = ctex(THREE, 'o:eotm', 48, 64, (g) => { g.fillStyle = '#fff'; g.fillRect(0, 0, 48, 64); g.fillStyle = '#b05070'; g.font = 'bold 7px sans-serif'; g.textAlign = 'center'; g.fillText('EMPLOYEE', 24, 9); g.fillText('OF THE MONTH', 24, 17); g.fillStyle = '#d8c8b0'; g.fillRect(8, 20, 32, 32); g.fillStyle = '#e8a040'; g.beginPath(); g.arc(24, 38, 10, 0, 7); g.fill(); g.fillStyle = '#222'; g.fillRect(19, 35, 2, 3); g.fillRect(27, 35, 2, 3); g.beginPath(); g.moveTo(15, 30); g.lineTo(17, 23); g.lineTo(21, 29); g.moveTo(33, 30); g.lineTo(31, 23); g.lineTo(27, 29); g.fill(); g.fillStyle = '#222'; g.font = '6px sans-serif'; g.fillText('"BISCUIT"', 24, 60); }, { repeat: false });
+  B.def('eotm', { kind: 'lambert', map: eotm }); framedPicture(B, THREE, 'eotm', 0.3, 0.4, 3.6, 2.1, -D / 2 + 0.02, 0, 0xb05070);
+  // --- bulletin board on the left wall: lost-cat posters (one is Goobles), a flyer, a business card
+  B.box('plain', 0xc8a060, 1.3, 0.9, 0.04, -W / 2 + 0.04, 1.75, 0.6, Math.PI / 2, { ao: false }); B.box('plain', 0xffffff, 1.4, 1.0, 0.03, -W / 2 + 0.03, 1.75, 0.6, Math.PI / 2, { ao: false });
+  const lostG = ctex(THREE, 'o:lostG', 48, 64, (g) => { g.fillStyle = '#fff'; g.fillRect(0, 0, 48, 64); g.fillStyle = '#111'; g.font = 'bold 9px Impact, sans-serif'; g.textAlign = 'center'; g.fillText('LOST CAT', 24, 11); g.fillStyle = '#f8f8f8'; g.fillRect(10, 15, 28, 26); g.strokeStyle = '#333'; g.strokeRect(10, 15, 28, 26); g.fillStyle = '#eee'; g.beginPath(); g.arc(24, 30, 8, 0, 7); g.fill(); g.fillStyle = '#556040'; g.beginPath(); g.arc(24, 25, 8, Math.PI, 0); g.fill(); g.fillStyle = '#111'; for (let i = 0; i < 4; i++) g.fillRect(18 + i * 4, 25, 2, 3); g.fillStyle = '#222'; g.font = '5px sans-serif'; g.fillText('WHITE. GRUMPY.', 24, 48); g.fillText('WEARS A HELMET', 24, 55); g.fillText('REWARD: 2 BLUEGILL', 24, 62); }, { repeat: false });
+  const lostO = ctex(THREE, 'o:lostO', 48, 64, (g) => { g.fillStyle = '#fff8c0'; g.fillRect(0, 0, 48, 64); g.fillStyle = '#111'; g.font = 'bold 9px Impact, sans-serif'; g.textAlign = 'center'; g.fillText('LOST CAT', 24, 11); g.fillStyle = '#d8d8d8'; g.fillRect(10, 15, 28, 26); g.fillStyle = '#e8a040'; g.beginPath(); g.arc(24, 28, 9, 0, 7); g.fill(); g.fillStyle = '#222'; g.font = '5px sans-serif'; g.fillText('"MR. BISCUITS"', 24, 48); g.fillText('ANSWERS TO FOOD', 24, 55); g.fillText('NOT ACTUALLY LOST', 24, 62); }, { repeat: false });
+  const flyer = signTex(THREE, 'o:flyer', ['BAKE SALE', 'CHAPEL HILL', 'SUNDAY', '(bring fish)'], '#d0e8ff', '#1a3a6a', 64, 80, { font: 'sans-serif' });
+  B.def('lostG', { kind: 'lambert', map: lostG }); B.def('lostO', { kind: 'lambert', map: lostO }); B.def('flyer', { kind: 'lambert', map: flyer });
+  for (const [key, w, h, dz, dy, rr] of [['lostG', 0.3, 0.4, -0.4, 0.05, 0.05], ['lostO', 0.3, 0.4, 0.0, -0.02, -0.08], ['flyer', 0.28, 0.35, 0.4, 0.03, 0.04]]) B.quad(key, 0xffffff, w, h, -W / 2 + 0.06, 1.75 + dy, 0.6 + dz, Math.PI / 2, { ao: false, tint: false, rz: 0, paint: () => 1, ...(rr ? {} : {}) });
+  for (const dz of [-0.4, 0, 0.4]) B.sph('plain', pick([0xf04040, 0x4060c0, 0xf0e040]), 0.012, -W / 2 + 0.07, 1.95, 0.6 + dz, { ao: false, tint: false, ws: 5, hs: 4 });
+  const notice = signTex(THREE, 'o:notice', ['BULLETIN', 'BOARD', '(no HOA notices, Gary)'], '#b05070', '#fff', 128, 48); B.def('notice', { kind: 'lambert', map: notice }); B.quad('notice', 0xffffff, 0.8, 0.2, -W / 2 + 0.06, 2.4, 0.6, Math.PI / 2, { ao: false, tint: false });
+  // --- three tiny round tables with stools; one wobbles on a folded napkin
+  const table = (tx, tz, o = {}) => {
+    B.cyl('shiny', 0xfff4f0, 0.42, 0.42, 0.04, tx, 0.74, tz, 12, { ao: false }); B.cyl('shiny', PLUM, 0.44, 0.44, 0.02, tx, 0.72, tz, 12, { ao: false }); B.cyl('shiny', 0xcfd4d8, 0.04, 0.04, 0.7, tx, 0.36, tz, 8); B.cyl('shiny', 0xcfd4d8, 0.3, 0.3, 0.03, tx, 0.015, tz, 10, { ao: false });
+    for (let k = 0; k < (o.stools || 3); k++) { const a = k / 3 * 6.283 + (o.a || 0); const sx = tx + Math.cos(a) * 0.65, sz = tz + Math.sin(a) * 0.65; B.cyl('shiny', 0xcfd4d8, 0.03, 0.03, 0.45, sx, 0.22, sz, 6); B.cyl('cloth', o.c || 0xff8ab8, 0.16, 0.15, 0.08, sx, 0.49, sz, 10, { ao: false }); B.cyl('shiny', 0xcfd4d8, 0.14, 0.14, 0.02, sx, 0.01, sz, 8, { ao: false }); }
+    B.box('plain', 0xf0d8e0, 0.1, 0.1, 0.1, tx + 0.2, 0.81, tz - 0.1, 0.3, { ao: false }); B.box('plain', 0xd8dce4, 0.04, 0.12, 0.08, tx - 0.15, 0.82, tz + 0.1, 0, { ao: false });
+    if (o.cup) { B.cyl('plain', 0xf8f4ec, 0.045, 0.04, 0.09, tx - 0.05, 0.805, tz - 0.2, 8, { ao: false }); B.cyl('plain', 0x3a2410, 0.035, 0.035, 0.01, tx - 0.05, 0.845, tz - 0.2, 8, { ao: false }); }
+    if (o.crumbs) { B.box('plain', 0xffffff, 0.22, 0.003, 0.22, tx + 0.05, 0.762, tz + 0.15, 0.4, { ao: false }); for (let k = 0; k < 8; k++) B.box('plain', pick([0xe0b060, 0xff80b0, 0x60f0ff]), 0.012, 0.005, 0.012, tx + 0.05 + (rnd() - 0.5) * 0.18, 0.766, tz + 0.15 + (rnd() - 0.5) * 0.18, rnd(), { ao: false, tint: false }); }
+    if (o.paper) B.box('plain', 0xe8e8e0, 0.3, 0.004, 0.42, tx, 0.762, tz, -0.2, { ao: false });
+    if (o.wobble) B.box('plain', 0xffffff, 0.08, 0.02, 0.08, tx + 0.22, 0.01, tz + 0.1, 0.5, { ao: false });
+  };
+  table(-3.0, 0.9, { cup: true, crumbs: true, a: 0.5 }); table(-1.3, 1.4, { paper: true, stools: 2, a: 1.1, c: 0xd03060 }); table(2.8, 1.2, { wobble: true, cup: true, a: 0.2 });
+  // misc: pink trash can with a lid, a wet-floor cone, a potted fake plant, a highchair, a fly zapper
+  B.cyl('plain', 0xff8ab8, 0.25, 0.22, 0.75, 4.4, 0.375, 2.6, 10); B.cyl('plain', PLUM, 0.27, 0.27, 0.06, 4.4, 0.78, 2.6, 10, { ao: false }); B.box('plain', 0x222222, 0.2, 0.02, 0.2, 4.4, 0.8, 2.6, 0, { ao: false });
+  const thanks = signTex(THREE, 'o:thanks', ['THANK', 'YOU'], null, '#b05070', 64, 48); B.def('thanks', { kind: 'lambert', map: thanks, transparent: true, alphaTest: 0.3 }); B.quad('thanks', 0xffffff, 0.3, 0.22, 4.4, 0.45, 2.86, 0, { ao: false, tint: false });
+  B.cyl('plain', 0xf0d020, 0.02, 0.18, 0.55, -4.3, 0.275, 2.5, 6); B.box('plain', 0xf0d020, 0.4, 0.03, 0.4, -4.3, 0.015, 2.5, 0, { ao: false });
+  B.cyl('plain', 0xc86a40, 0.15, 0.12, 0.3, -4.4, 0.15, -2.2, 8); B.sph('plain', 0x4a8a4a, 0.28, -4.4, 0.55, -2.2, { ao: false, s: [1, 1.2, 1], ws: 7, hs: 5 });
+  B.box('wood', 0x8a6238, 0.4, 0.6, 0.4, 4.2, 0.6, -0.9); for (const [lx, lz] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) B.box('wood', 0x8a6238, 0.04, 0.6, 0.04, 4.2 + lx, 0.3, -0.9 + lz); B.box('plain', 0xf8f4ec, 0.44, 0.04, 0.3, 4.2, 0.92, -1.1, 0, { ao: false });
+  B.box('plain', 0x333333, 0.3, 0.4, 0.12, W / 2 - 0.1, 2.5, 1.2, 0, { ao: false }); B.quad('glow', 0xa0b0ff, 0.22, 0.32, W / 2 - 0.17, 2.5, 1.2, -Math.PI / 2, { ao: false, tint: false });
+  // ceiling: two fluorescent fixtures and a pink pendant over the case
+  tubeLight(B, -2.5, H - 0.1, 0.4, 1.2, 0, 0xfff4f8); tubeLight(B, 2.5, H - 0.1, 0.4, 1.2, 0, 0xfff4f8);
+  B.cyl('plain', 0x333333, 0.01, 0.01, 0.5, -2.1, H - 0.25, cz + 0.3, 4, { ao: false }); B.cyl('plain', 0xff8ab8, 0.1, 0.3, 0.22, -2.1, H - 0.58, cz + 0.3, 10, { ao: false }); B.sph('glow', 0xfff0c0, 0.07, -2.1, H - 0.68, cz + 0.3, { ao: false, tint: false });
+
+  const group = B.finish(new THREE.Group());
+  cols.push(
+    { kind: 'box', cx: -2.1, cz, w: 3.5, d: 0.8, rot: 0, h: 1.7 },                 // display case
+    { kind: 'box', cx: -3.9, cz, w: 0.35, d: 0.8, rot: 0, h: 0.95 }, { kind: 'box', cx: 1.5, cz, w: 3.9, d: 0.8, rot: 0, h: 0.95 }, // counter (standable)
+    { kind: 'box', cx: 3.0, cz: -D / 2 + 0.3, w: 1.4, d: 0.6, rot: 0, h: 1.5 },     // coffee shelf
+    { kind: 'box', cx: 3.9, cz: cz + 0.6, w: 0.5, d: 0.5, rot: 0, h: 0.7 },        // ice bucket
+    ...[[-3.0, 0.9], [-1.3, 1.4], [2.8, 1.2]].map(([x, z]) => ({ kind: 'box', cx: x, cz: z, w: 0.9, d: 0.9, rot: 0, h: 0.76 })),
+    { kind: 'box', cx: 4.4, cz: 2.6, w: 0.55, d: 0.55, rot: 0, h: 0.82 },           // trash can
+    { kind: 'box', cx: -4.3, cz: 2.5, w: 0.4, d: 0.4, rot: 0, h: 0.6 },             // cone
+    { kind: 'box', cx: -4.4, cz: -2.2, w: 0.5, d: 0.5, rot: 0, h: 0.9 },            // plant
+    { kind: 'box', cx: 4.2, cz: -0.95, w: 0.5, d: 0.55, rot: 0, h: 0.95, top: 0.62 }, // highchair (seat)
+  );
+  return {
+    group, size: [W, D], cols, floors: [],
+    spawn: { x: 0, z: 2.2, yaw: 0 },
+    exit: { x: 0, z: D / 2 + 0.05, r: 0.6 },
+    lights: [
+      { x: -2.5, y: H - 0.3, z: 0.4, c: 0xfff0f4, i: 0.9, always: true },
+      { x: 2.5, y: H - 0.3, z: 0.4, c: 0xfff0f4, i: 0.9, always: true },
+      { x: -2.1, y: H - 0.8, z: cz + 0.3, c: 0xffd0a0, i: 0.7, always: true },      // pendant over the case
+      { x: 0.6, y: 1.8, z: -D / 2 + 0.5, c: 0xff8a30, i: 0.6, always: true, flicker: true },  // fryer
+      { x: 3, y: 1.7, z: D / 2 - 0.4, c: 0xff5aa8, i: 0.6, always: true },          // neon donut
+    ],
+    cam: { maxDist: 4.5, height: 2.2 },
+    interact: [
+      { id: 'counter', x: 1.6, z: cz + 0.95, r: 0.9, label: 'Buy donuts' },
+      { id: 'bell', x: 1.1, z: cz + 0.9, r: 0.6, label: 'Ring the bell' },
+      { id: 'table', x: -1.3, z: 2.3, r: 0.9, label: 'Sit down' },
+      { id: 'board', x: -4.2, z: 0.6, r: 0.8, label: 'Bulletin board' },
     ],
   };
 }
@@ -1035,4 +1223,5 @@ export const ROOMS = {
   diner: { name: "Rosie's Diner", build: buildDiner },
   nana: { name: "Nana's House", build: buildNana },
   church: { name: 'Chapel Hill Church', build: buildChurch },
+  donut: { name: 'The Donut Hole', build: buildDonut },
 };
