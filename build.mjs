@@ -10,7 +10,7 @@ const src = (p) => path.join(root, 'src', p);
 
 const out = await build({
   entryPoints: [src('js/game.js')], bundle: true, minify: true, format: 'iife', write: false, target: 'es2020',
-  legalComments: 'none',
+  legalComments: 'none', loader: { '.glb': 'binary' },
 });
 const js = out.outputFiles[0].text;
 let html = fs.readFileSync(src('index.html'), 'utf8');

@@ -250,6 +250,7 @@ export function makeCat() {
 /** Shared walk / idle animation for bipeds. ph = phase (rad), amt = 0..1 stride. */
 export function animBiped(o, ph, amt, t, punch = 0) {
   const u = o.userData;
+  if (u.onBiped) return u.onBiped(ph, amt, t, punch); // skinned Tracebench Goobles (goobles.js): clips do the walk, this resets override proxies
   const sw = Math.sin(ph) * 0.8 * amt;
   u.legs[0].rotation.x = sw; u.legs[1].rotation.x = -sw;
   u.arms[0].rotation.x = -sw * 0.8; u.arms[1].rotation.x = sw * 0.8;

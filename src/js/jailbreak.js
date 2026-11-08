@@ -411,7 +411,7 @@ export function makeJail(ctx) {
   let perched = null;
   function perchBart() {
     if (perched) return;
-    perched = makeFrog(); perched.scale.setScalar(0.75); perched.position.set(0, 0.40, 0.03); perched.rotation.y = 0;
+    perched = makeFrog(); perched.scale.setScalar(0.75); perched.position.set(0, cat.userData.crown ?? 0.40, 0.03); // crown: top of the head in the head prop frame (goobles.js) perched.rotation.y = 0;
     const sh = perched.children.find((c) => c.material && c.material.map === T.shadow); if (sh) sh.visible = false;
     cat.userData.head.add(perched); perched.userData.ride = true;
   }

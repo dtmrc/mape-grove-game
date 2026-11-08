@@ -1,6 +1,7 @@
 // Maple Grove: Off Leash. A small open-world sandbox in a PS2-era suburb.
 import * as THREE from 'three';
 import { makeTextures, basic, lambert, mat, rnd, makeSky, makePost } from './gfx.js';
+import { makeGoobles } from './goobles.js';
 import { setTextures, makeCat, makeHuman, makeRaccoon, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
 import { buildWorld, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
 import { Sfx } from './sfx.js';
@@ -243,8 +244,9 @@ function updateParts(dt) {
   flushInst(partMesh[0], n0); partN = n1;
 }
 // ---------------- player ----------------
-const cat = makeCat();
+const cat = makeGoobles({ legacy: makeCat, shadow: (r) => addShadow(r, 0.5, 0.5) }); // Tracebench Goobles (?goobles=old for the procedural one)
 scene.add(cat);
+const catLight = () => ({ k: Math.min(1, 0.3 + hemi.intensity * 0.5), color: hemi.color });
 const P = { x: places.spawn.x, z: places.spawn.z, y: 0, vy: 0, yaw: Math.PI, vx: 0, vz: 0, ph: 0, punch: 0, car: null, down: 0, invuln: 0, lock: 0 };
 if (SV && SV.x !== undefined && !SV.inside && Math.abs(+SV.x) < LIMIT && Math.abs(+SV.z) < LIMIT) { P.x = +SV.x; P.z = +SV.z; P.yaw = +SV.yaw || 0; camYaw = P.yaw + Math.PI; } // back where you saved
 
@@ -603,6 +605,7 @@ const DONE_LINES = {
   gary: [['Gary', '...I have nothing further.']],
 };
 function talkTo(id) {
+  cat.userData.emote?.('Wave'); // goobles: wave hello
   if (jobs.talk(id)) return; // content: replays + side jobs (src/js/jobs.js)
   if (G.done[id]) return say(DONE_LINES[id]);
   if (id === 'gary' && !(G.done.nana && G.done.kids && G.done.ricky)) {
@@ -972,8 +975,9 @@ function updatePlayer(dt) {
     }
   }
   animBiped(cat, P.ph, Math.min(1, sp / 3.4), G.time, P.punch > 0 ? Math.sin((0.35 - P.punch) / 0.35 * Math.PI) : 0);
-  if (P.y > (P.fl || 0) + 0.01) { cat.userData.legs[0].rotation.x = 0.6; cat.userData.legs[1].rotation.x = -0.3; }
-  if (P.swim) { const k = Math.sin(G.time * (sp > 0.3 ? 9 : 4)) * 0.7; cat.userData.legs[0].rotation.x = k; cat.userData.legs[1].rotation.x = -k; }
+  cat.userData.air = P.y > (P.fl || 0) + 0.01; cat.userData.swim = !!P.swim; // goobles: Jump / swim clips
+  if (!cat.userData.glb && P.y > (P.fl || 0) + 0.01) { cat.userData.legs[0].rotation.x = 0.6; cat.userData.legs[1].rotation.x = -0.3; }
+  if (!cat.userData.glb && P.swim) { const k = Math.sin(G.time * (sp > 0.3 ? 9 : 4)) * 0.7; cat.userData.legs[0].rotation.x = k; cat.userData.legs[1].rotation.x = -k; }
   if (hit('e', 'f', 'enter') && !(P.lock > 0) && INT.use()) { pressed.delete('e'); pressed.delete('f'); pressed.delete('enter'); } // interiors
   // interact
   if (hit('e', 'f', 'enter') && !(P.lock > 0)) {
@@ -1457,6 +1461,7 @@ function frame(now) {
     Sfx.engine(P.car && !P.car.dead ? Math.abs(P.car.speed) / P.car.spec.top : -1, (G.heat > 0 || cru.length) ? Math.min(1, 25 / Math.max(5, sirenNear(cru))) : 0);
   }
   cat.position.set(P.x, P.y - (P.swim ? SWIM_SINK - Math.sin(G.time * 3) * 0.03 : 0), P.z); cat.rotation.y = P.yaw;
+  cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
   if (!dev.camera(Math.max(dt, 0.001)))   updateCamera(Math.max(dt, 0.001));
   sky.mesh.position.copy(camera.position);
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
@@ -1511,7 +1516,7 @@ BRK.init({ scene, Sfx, toast, camera }); // engine: breakables
 window.__G = { G, P, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
-window.__G.police = police;
+window.__G.police = police; window.__G.cat = cat;
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });
