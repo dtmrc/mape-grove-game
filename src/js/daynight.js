@@ -5,8 +5,19 @@
 import * as THREE from 'three';
 
 const KEY = 'maple-grove-offleash-sky';
-export const LUNAR_DAYS = 8;
-const PHASE0 = 2;   // day 1 at 21:30 is a full moon
+// Real lunar cycle: the moon starts at today's real phase (from the reference new moon of
+// 2000-01-06 18:14 UTC, synodic month 29.530589 days), then each in-game day moves it on by one day.
+export const LUNAR_DAYS = 29.530588853;
+const NEW_MOON_REF = Date.UTC(2000, 0, 6, 18, 14);
+export function realPhase(ms = Date.now()) { const p = ((ms - NEW_MOON_REF) / 864e5 / LUNAR_DAYS) % 1; return p < 0 ? p + 1 : p; }
+// named phases: the quarters, new and full get about a day either side, like almanacs do
+const QB = 1 / LUNAR_DAYS;
+export function phaseIndex(p) {
+  if (p < QB || p >= 1 - QB) return 0;
+  if (p < 0.25 - QB) return 1; if (p < 0.25 + QB) return 2; if (p < 0.5 - QB) return 3;
+  if (p < 0.5 + QB) return 4; if (p < 0.75 - QB) return 5; if (p < 0.75 + QB) return 6; return 7;
+}
+export const litPct = (p) => Math.round((1 - Math.cos(p * Math.PI * 2)) / 2 * 100);
 export const PHASES = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
 
 const FRAG = `
@@ -84,6 +95,8 @@ export function makeDayNight(o) {
   const { sky, sun, moon, hemi, G } = o;
   let day = 1, lastClock = G.clock;
   try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.day > 0) day = s.day | 0; } catch (e) { /* storage blocked */ }
+  // line the cycle up so that right now (this save's day + clock) shows today's real moon
+  const anchor = realPhase() - (day - 1 + G.clock / 24) / LUNAR_DAYS;
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify({ day })); } catch (e) { /* ignore */ } };
 
   // swap in our sky shader; keep the existing uniforms object so game.js keeps writing the base colours
@@ -110,13 +123,13 @@ export function makeDayNight(o) {
   (clockEl?.parentNode || document.body).insertBefore(box, clockEl || null);
   const [dial, moonC] = box.querySelectorAll('canvas'), tEl = box.querySelector('.t'), sEl = box.querySelector('.s');
   const dg = dial.getContext('2d'), mg = moonC.getContext('2d');
-  let lastMin = -1, lastPhaseIdx = -1;
+  let lastMin = -1, lastIcon = -1;
   function drawHud(h, phase) {
     const min = Math.floor(h * 60);
     if (min === lastMin) return; lastMin = min;
     const hr = Math.floor(h), mm = min % 60, ampm = hr < 12 ? 'AM' : 'PM', h12 = hr % 12 || 12;
     tEl.innerHTML = `${h12}:${String(mm).padStart(2, '0')}<b>${ampm}</b>`;
-    const pi = Math.floor(phase * 8 + 0.5) % 8;
+    const pi = phaseIndex(phase);
     sEl.textContent = `DAY ${day} · ${PHASES[pi].toUpperCase()}`;
     // dial: sky-coloured face (day blue / dusk orange / night navy), hour + minute hands
     const g = dg, c = 36, R = 32, dayK = Math.max(0, Math.sin((h - 6) / 12 * Math.PI));
@@ -131,14 +144,15 @@ export function makeDayNight(o) {
     hand(((h % 12) / 12) * Math.PI * 2, R - 15, 5, '#f4efe0');
     hand((mm / 60) * Math.PI * 2, R - 8, 3, '#ffd23f');
     g.fillStyle = '#000'; g.beginPath(); g.arc(c, c, 3, 0, Math.PI * 2); g.fill();
-    if (pi !== lastPhaseIdx) { lastPhaseIdx = pi; mg.clearRect(0, 0, 40, 40); phaseIcon(mg, 20, 20, 16, pi / 8); }
+    const ic = Math.round(phase * 60) % 60;
+    if (ic !== lastIcon) { lastIcon = ic; mg.clearRect(0, 0, 40, 40); phaseIcon(mg, 20, 20, 16, phase); }
   }
 
   const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3(), warm = new THREE.Color(), pale = new THREE.Color(0xffe8c8);
   const api = {
     get day() { return day; },
-    get phase() { return ((day + PHASE0 + G.clock / 24) / LUNAR_DAYS) % 1; },
-    setDay(d) { day = Math.max(1, d | 0); persist(); lastMin = -1; lastPhaseIdx = -1; },
+    get phase() { const p = (anchor + (day - 1 + G.clock / 24) / LUNAR_DAYS) % 1; return p < 0 ? p + 1 : p; },
+    setDay(d) { day = Math.max(1, d | 0); persist(); lastMin = -1; lastIcon = -1; },
     jump(h) { lastClock = h; lastMin = -1; },
     sunDir, moonDir,
     update(nightK) {
@@ -224,7 +238,7 @@ export function makeTimeDebug(G, dn) {
     if (document.activeElement !== slider) slider.value = h.toFixed(2);
     freeze.checked = st.frozen;
     el.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('on', +b.dataset.s === st.speed && !st.frozen));
-    q('[data-v=moon]').textContent = `Day ${dn.day} · ${PHASES[Math.floor(dn.phase * 8 + 0.5) % 8]}`;
+    q('[data-v=moon]').textContent = `Day ${dn.day} · ${PHASES[phaseIndex(dn.phase)]} ${litPct(dn.phase)}%`;
   }
   slider.addEventListener('input', () => setTime(+slider.value));
   freeze.addEventListener('change', () => { st.frozen = freeze.checked; st.at = G.clock; refresh(); });
