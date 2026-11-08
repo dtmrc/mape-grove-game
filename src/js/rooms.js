@@ -961,10 +961,10 @@ function buildChurch(ctx) {
   // pews: 6 rows x 2 sides, with hymnals in the racks and a forgotten umbrella
   for (let r = 0; r < 6; r++) for (const e of [-1, 1]) {
     const z = -1.9 + r * 1.35, x = e * 2.5;
-    B.box('wood', 0x8a5a30, 3.2, 0.08, 0.45, x, 0.45, z); B.box('wood', 0x8a5a30, 3.2, 0.4, 0.06, x, 0.72, z - 0.22, 0, { aoLo: 0.8 }); B.box('wood', 0x8a5a30, 3.2, 0.03, 0.1, x, 0.92, z - 0.25, 0, { ao: false });
-    for (const s of [-1, 1]) B.box('wood', 0x6a4426, 0.08, 0.9, 0.5, x + s * 1.58, 0.45, z - 0.02, 0, { aoLo: 0.5 });
+    B.box('wood', 0x8a5a30, 3.2, 0.08, 0.45, x, 0.45, z); B.box('wood', 0x8a5a30, 3.2, 0.4, 0.06, x, 0.72, z + 0.22, 0, { aoLo: 0.8 }); B.box('wood', 0x8a5a30, 3.2, 0.03, 0.1, x, 0.92, z + 0.25, 0, { ao: false }); // backrest on the door side: pews face the altar
+    for (const s of [-1, 1]) B.box('wood', 0x6a4426, 0.08, 0.9, 0.5, x + s * 1.58, 0.45, z + 0.02, 0, { aoLo: 0.5 });
     B.box('wood', 0x8a5a30, 0.4, 0.04, 0.45, x, 0.3, z, 0, { ao: false });
-    if (r > 0) { B.box('wood', 0x6a4426, 3.0, 0.1, 0.06, x, 0.6, z - 1.35 + 0.2, 0, { ao: false }); for (let k = 0; k < 4; k++) if (rnd() < 0.75) B.box('plain', pick([0x8a2020, 0x2a3a6a, 0x8a2020]), 0.14, 0.2, 0.05, x - 1.2 + k * 0.75 + rnd() * 0.3, 0.68, z - 1.35 + 0.17, 0, { ao: false }); }
+    if (r > 0) { B.box('wood', 0x6a4426, 3.0, 0.1, 0.06, x, 0.6, z - 1.35 + 0.3, 0, { ao: false }); for (let k = 0; k < 4; k++) if (rnd() < 0.75) B.box('plain', pick([0x8a2020, 0x2a3a6a, 0x8a2020]), 0.14, 0.2, 0.05, x - 1.2 + k * 0.75 + rnd() * 0.3, 0.68, z - 1.35 + 0.33, 0, { ao: false }); }
     B.flat('cloth', 0x8a2a2a, 3.1, 0.4, x, 0.495, z + 0.01, 0, { ao: false, paint: () => 0.8 });
   }
   B.cyl('plain', 0x222222, 0.02, 0.02, 0.8, 1.2, 0.5, 4.9, 6, { rz: 1.2, ao: false }); B.cyl('plain', 0x222222, 0.08, 0.02, 0.4, 0.6, 0.58, 4.9, 6, { rz: 1.2, ao: false }); // umbrella
@@ -1012,8 +1012,8 @@ function buildChurch(ctx) {
     { kind: 'box', cx: ix, cz: iz, w: 1.6, d: 0.7, rot: ia, h: 1.7 },               // piano
     { kind: 'box', cx: ix + Math.sin(ia) * 0.95, cz: iz + Math.cos(ia) * 0.95, w: 0.9, d: 0.35, rot: ia, h: 0.55 }, // bench
     ...[0, 1, 2, 3, 4, 5].flatMap((r) => [-1, 1].flatMap((e) => [
-      { kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 + 0.02, w: 3.3, d: 0.5, rot: 0, h: 0.5 },     // pew seat (sit / stand)
-      { kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 - 0.25, w: 3.3, d: 0.1, rot: 0, h: 0.95 },    // pew back
+      { kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 - 0.02, w: 3.3, d: 0.5, rot: 0, h: 0.5 },     // pew seat (sit / stand)
+      { kind: 'box', cx: e * 2.5, cz: -1.9 + r * 1.35 + 0.25, w: 3.3, d: 0.1, rot: 0, h: 0.95 },    // pew back
     ])),
     { kind: 'box', cx: -3.3, cz: D / 2 - 0.4, w: 1.6, d: 0.5, rot: 0, h: 0.82 },   // narthex table
   );
