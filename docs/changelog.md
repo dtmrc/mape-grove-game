@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased (2026-11-08): Goobles meows
+
+- diet asked for meow sounds when Goobles puts effort into a jump, hops onto raised platforms, or swims. New `src/js/meows.js` (+ `tools/meows-hooks.mjs`) watches the player state, so the movement code is untouched; `Sfx.meow(kind, pitch, delay)` in sfx.js synthesizes them (sawtooth through two gliding formants, vibrato or a rolled "rrr", breath noise).
+- Jump 'hup', double jump 'mew', triple jump 'yowl'; stepping up or landing on something higher 'mrrp'; falling in water splash + 'hiss', a grumble every 4-8 s while swimming, 'pff' climbing out. Preview: `goobles-meows.m4a`.
+
 ## Unreleased (2026-11-08): house fires
 
 - diet asked to start a fire inside a house after gathering materials and tools. New `src/js/firestarter.js` (+ `tools/firestarter-hooks.mjs`).

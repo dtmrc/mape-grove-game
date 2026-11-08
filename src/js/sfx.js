@@ -61,5 +61,43 @@ export const Sfx = {
   boom() { noise(1.2, 0.6, 400); tone(80, 0.8, 'sine', 0.4, -50); },
   door() { tone(180, 0.05, 'square', 0.08); tone(120, 0.06, 'square', 0.08, 0, 0.06); },
   horn() { tone(392, 0.35, 'square', 0.06); tone(466, 0.35, 'square', 0.05); },
+  /** Goobles' voice: a synthesized meow. kind: 'hup' (jump effort), 'mew' (double jump), 'yowl' (triple jump),
+   *  'mrrp' (hops up onto something), 'hiss' (falls into water), 'grumble' (still swimming), 'pff' (climbs out). */
+  meow(kind = 'mew', pitch = 1, delay = 0) {
+    if (!ctx || !on) return;
+    const K = {   // f0 start / peak / end (Hz), duration, formant open (Hz), loudness, breathiness
+      hup:     [520, 640, 470, 0.13, 1500, 0.10, 0.25],
+      mew:     [620, 860, 560, 0.22, 1900, 0.11, 0.15],
+      yowl:    [480, 900, 380, 0.48, 1700, 0.12, 0.2],
+      mrrp:    [380, 560, 600, 0.16, 1100, 0.10, 0.3, true],
+      hiss:    [430, 700, 300, 0.62, 1300, 0.12, 0.35, true],
+      grumble: [300, 380, 260, 0.45, 900, 0.07, 0.3, true],
+      pff:     [500, 420, 330, 0.14, 1000, 0.07, 0.6],
+    }[kind] || [620, 860, 560, 0.22, 1900, 0.11, 0.15];
+    const [a, b, c, dur, open, vol, br, trill] = K;
+    const t = ctx.currentTime + delay, j = pitch * (0.94 + Math.random() * 0.12), d = dur * (0.9 + Math.random() * 0.2);
+    const out = ctx.createGain(); out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(vol * 1.5, t + Math.min(0.04, d * 0.2));
+    out.gain.setValueAtTime(vol * 1.5, t + d * 0.7); out.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    out.connect(master);
+    // two formants: closed "m" -> open "eow" -> closing "w"
+    const f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter();
+    f1.type = f2.type = 'bandpass'; f1.Q.value = 5; f2.Q.value = 7;
+    f1.frequency.setValueAtTime(350, t); f1.frequency.linearRampToValueAtTime(open * 0.55, t + d * 0.35); f1.frequency.linearRampToValueAtTime(420, t + d);
+    f2.frequency.setValueAtTime(900, t); f2.frequency.linearRampToValueAtTime(open * 1.6, t + d * 0.35); f2.frequency.linearRampToValueAtTime(1000, t + d);
+    f1.connect(out); f2.connect(out);
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(a * j, t); o.frequency.exponentialRampToValueAtTime(b * j, t + d * 0.4); o.frequency.exponentialRampToValueAtTime(c * j, t + d);
+    const vib = ctx.createOscillator(), vg = ctx.createGain();   // vibrato, or a rolled "rrr" trill
+    vib.frequency.value = trill ? 28 : 6; vg.gain.value = trill ? a * j * 0.12 : a * j * 0.02;
+    vib.connect(vg); vg.connect(o.frequency);
+    const og = ctx.createGain(); og.gain.value = 1; o.connect(og); og.connect(f1); og.connect(f2);
+    // breath
+    const n = Math.floor(ctx.sampleRate * d), buf = ctx.createBuffer(1, n, ctx.sampleRate), dd = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) dd[i] = Math.random() * 2 - 1;
+    const ns = ctx.createBufferSource(); ns.buffer = buf; const ng = ctx.createGain(); ng.gain.value = br * 0.6; ns.connect(ng); ng.connect(f2);
+    o.start(t); vib.start(t); ns.start(t);   // (delay lets a preview line several up) o.stop(t + d + 0.05); vib.stop(t + d + 0.05); ns.stop(t + d + 0.05);
+  },
+  splash() { noise(0.35, 0.25, 1800); },
   siren() { tone(560, 0.25, 'triangle', 0.08, 200); tone(760, 0.25, 'triangle', 0.08, -200, 0.25); },
 };

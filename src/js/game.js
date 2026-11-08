@@ -5,6 +5,7 @@ import { makeGoobles } from './goobles.js';
 import { setTextures, makeCat, makeHuman, makeRaccoon, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
 import { buildWorld, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
 import { Sfx } from './sfx.js';
+import { makeMeows } from './meows.js';
 import { makeFirestarter } from './firestarter.js';
 import { setText, setHTML, setStyle, setClass, setData } from './dom.js'; // P10: write-on-change HUD
 import { makeFishing } from './fishing.js';
@@ -12,6 +13,7 @@ import * as BRK from './breakables.js';
 import * as DONUT from './donut.js';
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
+import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patrons
 import { makeShops } from './shops.js'; // content: shops + belly food
 import { makeJobs } from './jobs.js'; // content: replayable missions, side jobs, post-game
 import * as RD from './roads.js';
@@ -1480,6 +1482,7 @@ function frame(now) {
     for (const a of animated) a.fn(G.time);
     updateParts(dt);
     events.update(dt);
+    meows.update(dt);
     fires.update(dt);
     fishing.update(dt);
     jobs.update(dt); // content
@@ -1542,6 +1545,8 @@ const INT = makeInteriors({ scene, camera, camPos, G, P, cat, pool, hemi, sun, m
 BRK.init({ scene, Sfx, toast, camera }); // engine: breakables
 // firestarter: house fires (src/js/firestarter.js)
 const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff, hurt, addCash, peds, places, isTouch, pool, lights, hemi, $, fishing: () => fishing });
+// meows: Goobles voice (src/js/meows.js)
+const meows = makeMeows({ P, G });
 window.__G = { G, P, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
