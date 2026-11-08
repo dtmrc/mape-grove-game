@@ -37,7 +37,7 @@ multicam plate carrier). Walk, sprint, jump, paw-swipe, steal any car, do jobs f
   and the post-game beat after Final Notice (THE RV STAYS, 24 h HOA truce `G.hoaTruce`, FOR SALE sign). `tools/test-content.cjs` checks both.
 
 - `firestarter.js`: house fires (`docs/house-fires.md`). Fire kit pickups around town (newspapers, kindling, oily rags, gas can),
-  matches and lighter fluid on the diner / Quik Stop menus, Earl's lighter; E inside the Quik Stop, the diner, the church or
+  matches and lighter fluid on the diner / Quik Stop menus, Earl's lighter; E inside the Quik Stop, the diner, the Donut Hole, the church or
   Nana's house lights it; flames + smoke indoors (hurts), breakout, witnesses -> PD heat, the VFD truck hoses it down, condemned,
   rebuilt. Hooked by `tools/firestarter-hooks.mjs`; indoor E / prompt / lights go through interiors.js `addUse`, `addPrompt`,
   `close` and the 'env' event. Debug `window.__FIRE`.

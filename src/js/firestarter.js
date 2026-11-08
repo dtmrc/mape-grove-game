@@ -16,7 +16,7 @@ import { heightAt } from './terrain.js';
 import * as INTM from './interiors.js';
 
 const KEY = 'maple-grove-offleash-fire-v1';
-const BURNABLE = { quik: 'Quik Stop', diner: "Rosie's Diner", church: 'Chapel Hill Church', nana: "Nana's House" };
+const BURNABLE = { quik: 'Quik Stop', diner: "Rosie's Diner", church: 'Chapel Hill Church', nana: "Nana's House", donut: 'the Donut Hole' };
 const NO_BURN = { rv: "Not the RV. Where would you nap?", jail: 'Concrete walls, steel bunk. Nothing in here burns.' };
 const ITEMS = {
   matches:  { name: 'Book of Matches', kind: 'ign' },

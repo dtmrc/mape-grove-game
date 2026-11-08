@@ -9,6 +9,7 @@ import { makeFirestarter } from './firestarter.js';
 import { setText, setHTML, setStyle, setClass, setData } from './dom.js'; // P10: write-on-change HUD
 import { makeFishing } from './fishing.js';
 import * as BRK from './breakables.js';
+import * as DONUT from './donut.js';
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
 import { makeShops } from './shops.js'; // content: shops + belly food
@@ -1549,6 +1550,7 @@ if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gu
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });
 const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, removeCar, setCheck, objective, toast, banner, addCash, addHeat, places, cars, peds, P, G, NPC, giverMarks, makeMarker, say, startMission, endMission, mission: () => mission, scene, T, Sfx, INT, ahead, fishing });
+DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });

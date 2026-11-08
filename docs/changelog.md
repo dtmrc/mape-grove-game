@@ -7,7 +7,7 @@
   Old Newspapers (by the Donut Hole), Dry Kindling (the ruined cabin in Hollow Woods), Oily Rags (Feed & Seed); Lighter Fluid
   (Quik Stop menu, $5) or a Gas Can (by the farm water tower, spreads faster). Outdoor pickups glow with a little flame and come
   back 2 minutes after you use them. A FIRE KIT line under the belly meter shows what you have.
-- Inside the Quik Stop, Rosie's Diner, Chapel Hill Church or Nana's house: E "Start a fire" -> pile, splash, light (FWOOSH). Not
+- Inside the Quik Stop, Rosie's Diner, the Donut Hole, Chapel Hill Church or Nana's house: E "Start a fire" -> pile, splash, light (FWOOSH). Not
   in the RV or the jail. Flames spread across the room over ~30 s, smoke fills it (screen haze, fog, orange light), standing in
   it or in the flames costs HP.
 - After 14 s it breaks out: windows blow, flames out of every opening and the roof, smoke column, orange light over the block,
