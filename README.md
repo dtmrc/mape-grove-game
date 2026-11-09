@@ -100,3 +100,16 @@ every minute and on leaving a car). NEW GAME clears every key in `SAVE_KEYS`. De
   colliders and camera: catch the fly, feed Bart the toilet frog, play as Bart to tongue Officer Pruitt's keys (freeze when the Z's stop), unlock
   the cell, paw cell 3's floor vent loose, crawl to the evidence room, grab the fine back, leave by the back door. Bart then rides on Goobles' head.
   Design: `docs/jailbreak-design.md`. Debug: `__G.jail.skip('frog'|'keys'|'vent'|'evidence')`, `__G.jail.state()`.
+
+## Dev build (cheats + debug panel)
+`node tools/devcheats-hooks.mjs src/js/game.js && node build.mjs && node tools/dev-build.mjs` -> dist/dev.html (game + src/js/devcheats.js, F4 panel).
+Published at https://claude.ai/artifact/J8AHQkYpjQuwQT2gQLxMbd with capabilities {db:{}}; its saved world is its own copy (seeded from the main game's `world` docs on 2026-11-08).
+
+## Play on GitHub Pages (phone friendly)
+
+Every push to `main` runs `.github/workflows/pages.yml`: it builds the game, bakes the saved world from `world/*.json` into it (the Pages site has no artifact database, so the world is a snapshot), and deploys:
+
+- `/` the player build (dev tools hidden; progress saves in the browser's localStorage)
+- `/dev.html` the dev build (F2 editor, F4 cheats; world edits save in that browser only)
+
+To refresh the world snapshot, pull the `world` collection (terrain, ground, edits) from the game artifact's db into `world/` and push.

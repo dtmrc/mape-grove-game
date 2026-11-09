@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased (2026-11-08): NPC Creator
+- New src/js/npcgen.js (art thread): parametric townspeople in the Tracebench/Legends look. One skinned mesh (~480-590 tris),
+  one painted 256x256 atlas, baked front+top light in the vertex colours, unlit material, standard Tracebench skeleton
+  (hips..head_end, shoulder/arm/forearm/hand _L/_R, thigh/shin/foot/toe _L/_R) and the worker's Idle/Walk/Run/Jump/Wave clips
+  retargeted (src/js/npc-clips.js). Recipe: sex, build (average/built[male]/skinny/fat), face shape, nose, skin, hair style +
+  colour, facial hair, shirt/pants/jacket style + colour, shoes, height. buildNPC(recipe) -> {root, clips, play, update}.
+- New creator page tools/npc-creator (build: node tools/npc-creator/build.mjs -> dist/npc-creator.html, its own artifact):
+  presets, chips/swatches, live turntable with the clips, random, library saved in the artifact db (collection npcs),
+  Download GLB (downloads capability), copy/import recipe JSON. Review sheets in /mnt/project-files/cat-3d/npc/.
+- 14:xx body rebuilt on the worker's construction (straight prisms: octagon head/torso, hex arms, box legs/hands/boots, prism
+  nose), measured from Worker.tracebench.json; see docs/npc-design-principles.md. Average male reviewed next to the worker.
+- Not yet in the game: spawnPed still uses makeHuman. Next step is a loader that builds saved recipes into peds.
+
+## Unreleased (2026-11-08): Tracebench travel trailer
+
+- diet asked to redesign the RV from a photo of a white tandem-axle travel trailer, built with Tracebench. New model at
+  `tools/tracebench/models/rv` (RV.glb + RV.tracebench.json, built by `tools/tracebench/scripts/rv-build.cjs`), embedded as
+  `src/models/rv.glb`. `makeRV()` in models.js now loads it (lit Lambert materials over the baked texture, nearest filtering) so
+  day/night still works. Same 2.5 x 8.5 m footprint and the entry door is still at local (+1.27, -1.8) facing +X; the old side
+  window is now painted at local z 1.0-2.0, y 1.95-2.6, the cabover and its windscreen are gone (hitch end is toward -Z),
+  slide-out on the -X side, awning rolled.
+- v56: the trailer body had been extruded half a width off centre (door and wheels floating); fixed. The save marker by the RV
+  moved from places.rv.x + 1.4 to + 3.2 so it sits clear of the rear bumper (game.js line with `saveMark`).
+- v57: diet asked for the trailer turned so the hitch faces the dirt road. world.js rotation is now -PI/2 + 0.1 (hitch east,
+  door side facing +z across the lot). interiors.js E.rv door/window entries updated to the new world positions (door
+  r.x-0.88, r.z+0.58 facing +z; window r.x-1.18, r.z+0.9). Save marker now at places.rv.x - 3.2, z + 4.5.
+- v58: RV interior rebuilt from diet's floor plan (rooms.js buildRV, art thread with the engine thread's blessing pending).
+  Room is now 8.2 x 3.0 m, long along x, door at x 1.3 on the +z wall. Facing in: queen bedroom to the right behind a
+  partition (bed = 'Sleep (save)'), stove counter left of the door, corner sink right of it, fridge + TV cabinet, sofa and
+  recliner on the slide side with the coffee table (bills), bathroom (tub, toilet, vanity) on the entrance side left of
+  the living area with a corridor to the bunk room at the far end ('Nap on the bunk (save)', id 'nap'). Kibble bowls in
+  front of the fridge. Same room contract (cols, spawn, exit, lights, interact, update).
+- v59: RV kitchen rearranged per diet's markup: recliner removed, TV cabinet removed, fridge moved to the bathroom wall
+  (x -1.2), a smaller two-burner stove counter beside it (x -0.5), the sink counter now directly left of the door
+  (x 0.375, corner nook gone). Kibble bowls and fridge note follow the fridge; the room no longer needs an update().
+- v60: hard hat shelf above the RV door removed (diet: "weird bell thing").
+
 ## Unreleased (2026-11-08): Goobles meows
 
 - diet asked for meow sounds when Goobles puts effort into a jump, hops onto raised platforms, or swims. New `src/js/meows.js` (+ `tools/meows-hooks.mjs`) watches the player state, so the movement code is untouched; `Sfx.meow(kind, pitch, delay)` in sfx.js synthesizes them (sawtooth through two gliding formants, vibrato or a rolled "rrr", breath noise).

@@ -1,5 +1,7 @@
 // Models built from primitives at PS2-era density: the tactical cat, painted-face people, raccoons, vehicles.
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import RV_GLB from '../models/rv.glb';
 import { mat, lambert, phong, basic, faceTex } from './gfx.js';
 import { TUBE_FACE_PNG } from './tubeface.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -495,26 +497,22 @@ export function makeCar(type, color, o = {}) {
   root.userData = { body, wheels, bar, wr, spec: S, paint, glows: B.glows };
   return root;
 }
+// Goobles' travel trailer, built in Tracebench from diet's photo (tools/tracebench/models/rv, script scripts/rv-build.cjs) and
+// embedded at build time. Same footprint as the old code-built RV (2.5 x 8.5 m, origin on the ground under the middle) and the
+// entry door is still at local (+1.27, -1.8) facing +X, so the interiors/door code is unchanged. The GLB arrives unlit with the
+// light baked in; here it is swapped to lit materials so the day/night cycle still darkens it.
 export function makeRV() {
-  const g = new THREE.Group();
-  const white = mat(0xf1ede2, null, 0, 30), stripe = mat(0x9a5b2b), stripe2 = mat(0xd08a3a), dark = mat(0x222222);
-  const win = phong({ map: T.carWin, shininess: 120, specular: 0xffffff });
-  const bodyG = new THREE.BoxGeometry(2.5, 2.6, 8.5, 1, 1, 1);
-  m(bodyG, white, 0, 1.75, 0, g);
-  m(box(2.52, 0.25, 8.52), stripe, 0, 1.5, 0, g);
-  m(box(2.52, 0.12, 8.52), stripe2, 0, 1.25, 0, g);
-  m(box(2.4, 0.9, 1.4), white, 0, 3.0, 3.4, g);
-  m(box(2.3, 0.7, 0.05), win, 0, 2.2, 4.26, g);
-  for (const z of [-2.5, -0.5, 1.5]) m(box(0.05, 0.6, 1.0), win, 1.26, 2.3, z, g);
-  for (const z of [-2.5, 1.5]) m(box(0.05, 0.56, 0.96), basic({ map: T.windowLit }), -1.26, 2.3, z, g);
-  m(box(0.06, 1.9, 0.8), mat(0xcfc8b6), 1.27, 1.4, -1.8, g);
-  m(box(1.2, 0.3, 0.8), mat(0x8a8a8a, T.metal), 0, 3.2, -1, g); // AC unit
-  const wg = new THREE.CylinderGeometry(0.45, 0.45, 0.3, 16); wg.rotateZ(Math.PI / 2);
-  for (const [x, z] of [[-1.15, 2.8], [1.15, 2.8], [-1.15, -2.6], [1.15, -2.6]]) m(wg, [dark, mat(0xffffff, T.tire), mat(0xffffff, T.tire)], x, 0.45, z, g);
-  m(box(1.6, 0.06, 3.0), mat(0x2f8f6f, T.cloth), 2.05, 2.7, -0.5, g).rotation.z = -0.15;
-  const chair = mat(0x3b7bd6, T.cloth);
-  m(box(0.5, 0.05, 0.5), chair, 2.6, 0.45, 0.4, g);
-  m(box(0.5, 0.55, 0.05), chair, 2.6, 0.7, 0.15, g);
+  const g = new THREE.Group(); g.name = 'RV';
+  new GLTFLoader().parse(RV_GLB.buffer.slice(RV_GLB.byteOffset, RV_GLB.byteOffset + RV_GLB.byteLength), '', (gltf) => {
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const old = o.material, map = old.map || null;
+      if (map) { map.magFilter = map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; map.needsUpdate = true; }
+      o.material = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : old.color });
+      o.castShadow = o.receiveShadow = false;
+    });
+    g.add(gltf.scene);
+  }, (e) => console.warn('RV model failed to load', e));
   return g;
 }
 

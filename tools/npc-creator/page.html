@@ -1,0 +1,113 @@
+<title>Off Leash NPC Creator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+  /* Layout: a dark workshop. Preview stage on the left (top on phones), casting-sheet controls on the right. */
+  :root {
+    --bg: #1a2026; --panel: #222a32; --panel-2: #2b343d; --line: #3a4550; --fg: #e9eef2; --muted: #9aa8b4;
+    --accent: #e8862a; --accent-fg: #1a1208; --ok: #5fc28a; --bad: #e05a5a; --stage: radial-gradient(ellipse at 50% 35%, #3a4a5a 0%, #1e262e 70%);
+    --display: 'Chakra Petch', 'Trebuchet MS', sans-serif; --body: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg: #eef0ee; --panel: #ffffff; --panel-2: #f1f3f1; --line: #d3d9d6; --fg: #1c2328; --muted: #5d6b75; --accent: #d26f12; --accent-fg: #fff7ee; --stage: radial-gradient(ellipse at 50% 35%, #cfd9df 0%, #a9b7c0 70%); color-scheme: light; } }
+  :root[data-theme="light"] { --bg: #eef0ee; --panel: #ffffff; --panel-2: #f1f3f1; --line: #d3d9d6; --fg: #1c2328; --muted: #5d6b75; --accent: #d26f12; --accent-fg: #fff7ee; --stage: radial-gradient(ellipse at 50% 35%, #cfd9df 0%, #a9b7c0 70%); color-scheme: light; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 14px; line-height: 1.4; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font: 700 18px/1 var(--display); letter-spacing: .02em; margin: 0; text-transform: uppercase; }
+  header h1 small { display: block; font: 400 11px/1.2 var(--body); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 3px; }
+  #name { flex: 1 1 160px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+  .btn { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font-weight: 700; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  main { min-height: 0; display: grid; grid-template-columns: minmax(280px, 5fr) minmax(320px, 4fr); }
+  #stage { position: relative; min-height: 0; background: var(--stage); touch-action: none; user-select: none; overflow: hidden; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  .overlay { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); right: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; pointer-events: none; }
+  .overlay > * { pointer-events: auto; }
+  .overlay.top { top: 10px; } .overlay.bottom { bottom: 10px; justify-content: space-between; }
+  .pill { padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(10,14,18,.55); color: #f2f5f7; font-size: 12px; font-weight: 700; backdrop-filter: blur(4px); }
+  .pill.on { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  #stats { font-variant-numeric: tabular-nums; }
+  aside { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); padding-block: 8px 24px; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .sec { padding-block: 10px 6px; border-bottom: 1px solid var(--line); }
+  .sec h2 { font: 700 13px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; }
+  .row { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; align-items: start; padding-block: 5px; }
+  .lab { font-weight: 700; padding-top: 5px; } .lab small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+  .chip { padding: 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; }
+  .chip.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .chip:disabled { opacity: .35; cursor: default; text-decoration: line-through; }
+  .sw { width: 26px; height: 26px; border-radius: 6px; border: 2px solid var(--line); padding: 0; position: relative; }
+  .sw.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+  .sw.custom { background: conic-gradient(#e05a5a, #e8c84a, #5fc28a, #4aa0e8, #b05ae0, #e05a5a); overflow: hidden; }
+  .sw.custom input { position: absolute; inset: -8px; width: 200%; height: 200%; opacity: 0; cursor: pointer; }
+  input[type=range] { flex: 1 1 120px; accent-color: var(--accent); }
+  output { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 52px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; padding-block: 12px 4px; }
+  #paste { width: 100%; min-height: 90px; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); padding: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
+  #library { display: grid; gap: 6px; margin-top: 8px; }
+  .card { display: grid; grid-template-columns: 48px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+  .card.on { border-color: var(--accent); }
+  .card img { width: 48px; height: 72px; object-fit: cover; border-radius: 4px; background: var(--stage); image-rendering: pixelated; }
+  .card .meta { display: grid; gap: 2px; min-width: 0; } .card .meta span { color: var(--muted); font-size: 12px; }
+  .card .del { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; }
+  .card .del:hover { color: var(--bad); border-color: var(--bad); }
+  .empty { color: var(--muted); margin: 6px 0; }
+  #toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; background: var(--ok); color: #08200f; font-weight: 700; z-index: 20; max-width: calc(100% - 32px); }
+  #toast.bad { background: var(--bad); color: #fff; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 46vh 1fr; }
+    aside { border-left: 0; border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+    .row { grid-template-columns: 1fr; gap: 4px; } .lab { padding-top: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+<div class="app">
+  <header>
+    <h1>NPC Creator<small>Maple Grove: Off Leash</small></h1>
+    <input id="name" type="text" placeholder="Name this townsperson" maxlength="40" autocomplete="off">
+    <button class="btn" id="random" type="button" title="Random look for the current preset">Randomise</button>
+    <button class="btn primary" id="save" type="button">Save to library</button>
+  </header>
+  <main>
+    <div id="stage">
+      <div class="overlay top" id="clips">
+        <button class="pill on" type="button" data-clip="Idle">Idle</button>
+        <button class="pill" type="button" data-clip="Walk">Walk</button>
+        <button class="pill" type="button" data-clip="Run">Run</button>
+        <button class="pill" type="button" data-clip="Jump">Jump</button>
+        <button class="pill" type="button" data-clip="Wave">Wave</button>
+      </div>
+      <div class="overlay bottom">
+        <span class="pill" id="stats">…</span>
+        <button class="pill on" type="button" id="spin" title="Turntable">Spin</button>
+      </div>
+    </div>
+    <aside>
+      <div id="controls"></div>
+      <section class="sec">
+        <h2>Actions</h2>
+        <div class="actions">
+          <button class="btn" id="random-any" type="button">Random anyone</button>
+          <button class="btn" id="reset" type="button">Reset to preset</button>
+          <button class="btn" id="dup" type="button">Duplicate</button>
+          <button class="btn" id="glb" type="button">Download GLB</button>
+          <button class="btn" id="json" type="button">Copy recipe</button>
+          <button class="btn" id="import" type="button">Import recipe</button>
+        </div>
+        <textarea id="paste" hidden spellcheck="false"></textarea>
+      </section>
+      <section class="sec">
+        <h2>Library</h2>
+        <div id="library"><p class="empty">Loading saved NPCs…</p></div>
+      </section>
+    </aside>
+  </main>
+</div>
+<div id="toast" hidden></div>
+<script>/*APP*/</script>

@@ -410,7 +410,7 @@ const giverMarks = {
   ricky: makeMarker('mission', places.park.x, places.park.z + 2),
   gary: makeMarker('mission', ahead(places.gary, 2.2).x, ahead(places.gary, 2.2).z),
 };
-const saveMark = makeMarker('save', places.rv.x + 1.4, places.rv.z + 0.5, 0.8);
+const saveMark = makeMarker('save', places.rv.x - 3.2, places.rv.z + 4.5, 0.8); // beside the path to the trailer door, clear of the hitch
 let checkMark = makeMarker('check', 0, 0, 2.5); checkMark.visible = false;
 // waypoint beacon: a tall glowing column + pulsing ground ring so the drop-off reads from across town
 const beamMat = new THREE.MeshBasicMaterial({ color: 0xff3b6b, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
@@ -1561,6 +1561,7 @@ window.__G.shops = shops; window.__G.jobs = jobs;
 const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
+Object.assign(window.__G, { spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
 
 // P17: pre-warm the shader programs that would otherwise compile mid-game (first officer, HP bar, muzzle flash, tracer,
 // plane, contrail, waypoint beam): hidden stand-ins go into the scene for one renderer.compile against the HDR target.

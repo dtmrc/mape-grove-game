@@ -8,3 +8,4 @@ node_modules
 smoke.png
 .claude/
 marker-*.png
+dist/dev.html

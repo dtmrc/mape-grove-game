@@ -79,7 +79,7 @@ function emit(ev, ...a) { let used = false; for (const f of listeners[ev].slice(
 //           (x = +-(w/2+0.03), y 2.9): uses east z=2 and west z=-1.5. places.church = (cx, cz+d/2+4)
 //   nana:   home(-106,16,PI/2) farm house: front door at local (0, d/2), ground-floor windows at local x +-2.6 (y 1.7);
 //           places.nana = door + 1.6 out. Upper-floor windows (y 4.2) are not entries.
-//   rv:     makeRV at (lx-1, lz+1) rotated PI/2+0.1: side door at RV-local (1.27,-1.8), side window at (1.26, 1.5);
+//   rv:     makeRV at (lx-1, lz+1) rotated -PI/2+0.1 (hitch east): side door at RV-local (1.27,-1.8), side window at (1.26, 1.5);
 //           places.rv = (lx+1.8, lz+1.5)
 //   donut:  frame(-44,18,PI) 10x7 shop: door face local (0,3.53) = world (-44,14.47); store windows local x +-3 = world -47/-41
 // `inside` = room-local landing spot by the matching wall in rooms.js (nudged off furniture at runtime).
@@ -98,7 +98,7 @@ function builtinEntries(places) {
   const lat = (k) => ({ x: nd.x + Math.cos(ny) * k, z: nd.z - Math.sin(ny) * k });   // along the facade (house-local +x)
   E.nana = [D(nd.x, nd.z, ny), Wn(lat(-2.6).x, lat(-2.6).z, ny, -2.6, 3.2), Wn(lat(2.6).x, lat(2.6).z, ny, 2.6, 3.2)];
   const r = P.rv || { x: -102.2, z: 41.5 };
-  E.rv = [D(r.x - 4.72, r.z - 1.58, -Math.PI + 0.1), Wn(r.x - 1.43, r.z - 1.9, -Math.PI + 0.1, 0.45, 1.7)];
+  E.rv = [D(r.x - 0.88, r.z + 0.58, 0.1), Wn(r.x - 1.18, r.z + 0.9, 0.1, 0.45, 1.7)];   // trailer turned 2026-11-08: rotation -PI/2+0.1, door local (1.27,-1.8) now faces +z
   // donut: frame(-44,18,PI), 10x7 shop; door face local (0,3.53) -> world (-44,14.47) facing -z; store windows at local x -3/+3
   //        -> world x -41/-47. Facing the shop you look +z, so world -x is your right = room +x (yaw PI mirrors x).
   E.donut = [D(-44, 14.47, Math.PI), Wn(-47, 14.47, Math.PI, 3, 2.4), Wn(-41, 14.47, Math.PI, -3, 2.4)];

@@ -954,7 +954,7 @@ function buildNanaAndRV(scene) {
   const lx = -104, lz = 40;
   const F = frame(lx, lz, 0);
   F.flat(0, 0, 18, 16, 'dirt', 0xffffff, 0.05, '#8a6a48');
-  const rv = makeRV(); rv.position.set(lx - 1, 0, lz + 1); rv.rotation.y = Math.PI / 2 + 0.1; scene.add(rv);
+  const rv = makeRV(); rv.position.set(lx - 1, 0, lz + 1); rv.rotation.y = -Math.PI / 2 + 0.1; scene.add(rv);   // hitch toward the dirt road (east), door side facing north across the lot
   colBox(lx - 1, lz + 1, 8.5, 2.6, 4, Math.PI / 2, { bld: true });
   // fire pit, flamingo, tarp, camp chairs, string lights
   F.geo(new THREE.CylinderGeometry(0.7, 0.8, 0.3, 7), 'plain', 0x777777, 2, 0.15, -4);

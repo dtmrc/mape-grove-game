@@ -225,9 +225,13 @@ const C = { // shared colour helpers
 // 1. Goobles' RV: cramped camper, 2.4 x 7 m, 2.1 m ceiling. Bed at the back, galley left, dinette right.
 // =====================================================================================================
 function buildRV(ctx) {
+  // Goobles' travel trailer, laid out from diet's floor plan (2026-11-08): hitch end to the RIGHT when you stand in the
+  // entrance facing in (-z). Right: queen bedroom behind a partition. Entrance wall (+z): stove counter left of the door,
+  // corner sink right of it, fridge and TV cabinet further left. Slide side (-z): sofa and recliner with a table.
+  // Left: bathroom (toilet, tub, vanity) on the entrance side with a corridor past it to the bunk room at the far end.
   const { THREE, T } = ctx; seed = 11;
   const B = makeBuilder(THREE, T);
-  const W = 2.4, D = 7, H = 2.1;
+  const W = 8.2, D = 3.0, H = 2.1, DX = 1.3;   // room is long along x; the door sits at x = DX on the +z wall
   const lino = ctex(THREE, 'rv:lino', 64, 64, (g) => {
     g.fillStyle = '#c8b48a'; g.fillRect(0, 0, 64, 64);
     for (let y = 0; y < 64; y += 16) for (let x = 0; x < 64; x += 16) { g.fillStyle = ((x + y) / 16) % 2 ? '#bfa97c' : '#d2c19a'; g.fillRect(x, y, 16, 16); }
@@ -240,144 +244,171 @@ function buildRV(ctx) {
     for (let x = 0; x < 64; x += 16) { g.fillStyle = 'rgba(40,20,5,0.55)'; g.fillRect(x, 0, 2, 64); }
     grime(g, 64, 64, 60, 0.2);
   });
+  const carpet = ctex(THREE, 'rv:carpet', 32, 32, (g) => { g.fillStyle = '#7a5a3a'; g.fillRect(0, 0, 32, 32); for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(${40 + rnd() * 60},${20 + rnd() * 40},10,${0.3 * rnd()})`; g.fillRect(rnd() * 32, rnd() * 32, 1, 1); } });
   B.def('lino', { kind: 'lambert', map: lino });
   B.def('panel', { kind: 'lambert', map: panel });
-  const cols = shell(B, THREE, { w: W, d: D, h: H, floorKey: 'lino', wallKey: 'panel', ceilCol: 0xcfc6b4, door: { x: 0.45, w: 0.8, h: 1.9 }, base: 0x4a3a2a, frame: 0xcfc8b6, wallTile: 1, floorTile: 1 });
+  B.def('carpet', { kind: 'lambert', map: carpet });
+  const cols = shell(B, THREE, { w: W, d: D, h: H, floorKey: 'lino', wallKey: 'panel', ceilCol: 0xcfc6b4, door: { x: DX, w: 0.8, h: 1.9 }, base: 0x4a3a2a, frame: 0xcfc8b6, wallTile: 1, floorTile: 1 });
+  const solid = (cx, cz, w, d, h, rot = 0) => cols.push({ kind: 'box', cx, cz, w, d, rot, h });
+  // interior partition walls (panelled both sides): bedroom wall at x 2.3 with a doorway on the entrance side,
+  // bathroom box x -2.9..-1.6 on the entrance side with its door onto the corridor, bunk-room wall at x -2.9
+  const wallBox = (cx, cz, w, d) => { B.box('panel', 0xffffff, w, H, d, cx, H / 2, cz, 0, { ao: false }); solid(cx, cz, w, d, H); };
+  wallBox(2.3, -0.6, 0.08, 1.8); wallBox(2.3, 1.3, 0.08, 0.4);                       // bedroom wall, opening z 0.3..1.1
+  B.box('plain', 0x4a3a2a, 0.1, 0.1, 0.9, 2.3, 1.85, 0.7, 0, { ao: false });          // doorway header
+  wallBox(-1.6, 0.85, 0.08, 1.3); wallBox(-2.9, 0.85, 0.08, 1.3);                      // bathroom side walls (z 0.2..1.5)
+  wallBox(-2.78, 0.2, 0.24, 0.08); wallBox(-1.78, 0.2, 0.36, 0.08);                   // bathroom front wall with a door gap x -2.66..-1.96
+  B.quad('plain', 0xe8e2d4, 0.68, 1.9, -2.31, 0.95, 0.17, Math.PI, { ao: false, sy: 4, paint: (_x, y) => 0.6 + 0.4 * sm(y / 0.8) });   // bathroom door, ajar-looking panel
+  B.box('shiny', 0xd8c080, 0.03, 0.03, 0.08, -2.05, 0.95, 0.15, 0, { ao: false });
+  wallBox(-2.9, -0.95, 0.08, 1.1);                                                   // bunk-room wall, opening z -0.4..0.2 (the corridor)
+  B.flat('carpet', 0xffffff, 1.7, D - 0.1, 3.2, 0.004, 0, 0, { ao: false, sx: 2, sy: 3 });   // bedroom carpet
+  B.flat('carpet', 0xffffff, 1.1, D - 0.1, -3.55, 0.004, 0, 0, { ao: false, sx: 2, sy: 3 });  // bunk-room carpet
   // windows: dark night panes with sagging curtains
   const night = ctex(THREE, 'rv:night', 32, 32, (g) => { g.fillStyle = '#121a2c'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#1e2c48'; g.fillRect(0, 20, 32, 12); for (let i = 0; i < 8; i++) { g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(rnd() * 32, rnd() * 18, 1, 1); } }, { repeat: false });
   B.def('night', { kind: 'basic', map: night });
   const curtain = ctex(THREE, 'rv:curtain', 32, 32, (g) => { g.fillStyle = '#c86a3a'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#e0904a'; for (let x = 0; x < 32; x += 8) g.fillRect(x, 0, 4, 32); g.fillStyle = 'rgba(255,230,120,0.6)'; for (let y = 2; y < 32; y += 6) for (let x = 2; x < 32; x += 8) g.fillRect(x, y, 2, 2); });
   B.def('curtain', { kind: 'lambert', map: curtain });
-  for (const [x, z, ry] of [[-W / 2, -2.6, Math.PI / 2], [W / 2, -0.8, -Math.PI / 2], [-W / 2, 1.2, Math.PI / 2]]) {
+  for (const [x, z, ry] of [[-0.4, -D / 2, 0], [3.3, -D / 2, 0], [-3.5, -D / 2, 0], [W / 2, 0.6, -Math.PI / 2], [2.6, D / 2, Math.PI]]) {
     const nx = Math.sin(ry) * 0.02, nz = Math.cos(ry) * 0.02;
     B.quad('night', 0xffffff, 0.9, 0.55, x + nx, 1.45, z + nz, ry, { ao: false, tint: false });
     B.box('plain', 0xcfc8b6, 1.0, 0.04, 0.05, x + nx, 1.75, z + nz, ry, { ao: false }); B.box('plain', 0xcfc8b6, 1.0, 0.04, 0.05, x + nx, 1.16, z + nz, ry, { ao: false });
     for (const s of [-1, 1]) B.quad('curtain', 0xffffff, 0.28, 0.66, x + nx * 2.5 + Math.cos(ry) * s * 0.4, 1.46, z + nz * 2.5 - Math.sin(ry) * s * 0.4, ry, { ao: false, sx: 2, sy: 2, paint: (_x, y) => 0.75 + 0.25 * sm((y - 1.1) / 0.7) });
   }
-  // --- bed at the back: platform, saggy mattress, rumpled blanket, pillow, a flattened cat spot
-  B.box('wood', 0x7a5634, W - 0.1, 0.45, 1.5, 0, 0.225, -2.75);
-  B.box('cloth', 0xe8e0d0, W - 0.2, 0.22, 1.4, 0, 0.56, -2.75, 0, { aoLo: 0.8 });
+  // ---- bedroom (x 2.3..4.1): queen bed across the end wall, nightstands, wardrobe by the door, saggy blanket, pillows
   const blanket = ctex(THREE, 'rv:blanket', 32, 32, (g) => { g.fillStyle = '#4e6b8a'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#6d8aa8'; for (let y = 0; y < 32; y += 8) g.fillRect(0, y, 32, 3); g.fillStyle = '#c04040'; g.fillRect(0, 14, 32, 2); });
   B.def('blanket', { kind: 'lambert', map: blanket });
-  B.box('blanket', 0xffffff, 1.5, 0.12, 1.1, -0.3, 0.72, -2.6, 0.12, { aoLo: 0.8 });
-  B.box('blanket', 0xffffff, 0.7, 0.18, 0.5, 0.35, 0.72, -2.3, -0.4, { aoLo: 0.8 });   // bunched-up corner
-  B.box('cloth', 0xf4f0e8, 0.6, 0.14, 0.4, -0.5, 0.74, -3.2, 0.1, { aoLo: 0.9 });        // pillow
-  B.box('cloth', 0xd8d0c0, 0.5, 0.1, 0.35, 0.6, 0.72, -3.15, -0.2, { aoLo: 0.9 });       // the cat's own flattened spot
-  B.box('wood', 0x7a5634, W - 0.1, 0.25, 0.08, 0, 1.15, -3.45);                           // headboard shelf
-  B.box('plain', 0x333333, 0.3, 0.12, 0.18, -0.6, 1.33, -3.4);                           // cassette radio
-  B.box('glow', 0xff6030, 0.05, 0.02, 0.02, -0.5, 1.36, -3.3, 0, { ao: false });
-  B.box('plain', 0xf0e8d8, 0.2, 0.28, 0.02, 0.5, 1.4, -3.46, 0, { ao: false });          // pinned photo
-  // alarm clock, blinking 12:00 forever
-  B.box('plain', 0x222222, 0.16, 0.08, 0.08, 0.1, 1.31, -3.4);
+  B.box('wood', 0x7a5634, 1.5, 0.45, 2.0, 3.35, 0.225, -0.25);                           // platform (head at the +x wall)
+  B.box('cloth', 0xe8e0d0, 1.4, 0.22, 1.9, 3.35, 0.56, -0.25, 0, { aoLo: 0.8 });
+  B.box('blanket', 0xffffff, 1.1, 0.12, 1.6, 3.1, 0.72, -0.2, 0.1, { aoLo: 0.8 });
+  B.box('blanket', 0xffffff, 0.5, 0.18, 0.7, 2.9, 0.72, 0.4, -0.4, { aoLo: 0.8 });        // bunched-up corner
+  for (const z of [-0.75, 0.25]) B.box('cloth', 0xf4f0e8, 0.4, 0.14, 0.6, 3.85, 0.74, z, 0.05, { aoLo: 0.9 }); // two pillows
+  B.box('cloth', 0xd8d0c0, 0.35, 0.1, 0.5, 2.95, 0.72, -0.8, -0.2, { aoLo: 0.9 });         // the cat's own flattened spot
+  B.box('wood', 0x7a5634, 0.08, 0.5, 2.1, W / 2 - 0.05, 0.95, -0.25);                      // headboard
+  B.box('wood', 0x7a5634, 0.25, 0.08, 2.1, W / 2 - 0.13, 1.2, -0.25);                      // headboard shelf
+  B.box('plain', 0x333333, 0.18, 0.12, 0.3, W / 2 - 0.14, 1.3, -1.1);                     // cassette radio
+  B.box('glow', 0xff6030, 0.02, 0.02, 0.05, W / 2 - 0.24, 1.33, -1.0, 0, { ao: false });
+  B.box('plain', 0x222222, 0.08, 0.08, 0.16, W / 2 - 0.14, 1.28, 0.3);                    // alarm clock, blinking 12:00 forever
   const clk = signTex(THREE, 'rv:clock', ['12:00'], '#000', '#ff3020', 64, 32, { glow: true });
   B.def('clk', { kind: 'basic', map: clk });
-  B.quad('clk', 0xffffff, 0.14, 0.06, 0.1, 1.31, -3.355, 0, { ao: false, tint: false });
-  // --- galley (left): counter, two-burner stove, sink full of dishes, overhead cabinets, mini fridge
-  B.box('plain', 0xd8d2c4, 0.6, 0.85, 1.9, -0.9, 0.425, -1.05);
-  B.box('shiny', 0xcfd4d8, 0.62, 0.04, 1.92, -0.9, 0.87, -1.05, 0, { ao: false });
-  for (let k = 0; k < 3; k++) B.box('plain', 0x3a3a3a, 0.02, 0.5, 0.55, -0.61, 0.45, -1.7 + k * 0.62, 0, { ao: false }); // door gaps
-  B.box('plain', 0x8a8a8a, 0.5, 0.03, 0.5, -0.9, 0.905, -1.65);                          // stove top
-  for (const z of [-1.8, -1.5]) { B.cyl('plain', 0x222222, 0.1, 0.1, 0.02, -0.9, 0.93, z, 10); B.cyl('plain', 0x444444, 0.07, 0.07, 0.03, -0.9, 0.94, z, 8); }
-  B.box('plain', 0x444444, 0.26, 0.1, 0.24, -0.9, 0.95, -1.5, 0.3);                       // greasy pan
-  B.cyl('plain', 0x222222, 0.02, 0.02, 0.3, -1.05, 0.96, -1.72, 5, { ry: 0, rz: 1.2 });
-  B.box('plain', 0x8a9298, 0.5, 0.2, 0.5, -0.9, 0.8, -0.65);                             // sink basin (recess is faked)
-  B.box('plain', 0x1a2a30, 0.42, 0.02, 0.42, -0.9, 0.9, -0.65, 0, { ao: false });        // grey dishwater
-  for (let k = 0; k < 5; k++) B.cyl('plain', pick([0xf0f0e8, 0xe8d0a0, 0xb0d0e0, 0xf0f0e8]), 0.11, 0.11, 0.015, -0.9 + (rnd() - 0.5) * 0.12, 0.91 + k * 0.02, -0.65 + (rnd() - 0.5) * 0.12, 10, { ao: false }); // plate stack
-  B.cyl('plain', 0xe0e0e0, 0.05, 0.04, 0.12, -0.72, 0.95, -0.5, 8); B.cyl('plain', 0xa02020, 0.045, 0.04, 0.14, -1.05, 0.96, -0.85, 8);
-  B.cyl('shiny', 0xcfd4d8, 0.015, 0.015, 0.3, -1.1, 1.0, -0.65, 6, { ry: 0, rz: 0, ao: false }); B.box('shiny', 0xcfd4d8, 0.04, 0.03, 0.22, -1.1, 1.16, -0.55, 0, { ao: false }); // tap
-  B.box('wood', 0x8a6238, 0.38, 0.5, 1.9, -1.0, 1.75, -1.05, 0, { ao: false });          // overhead cabinets
-  for (let k = 0; k < 3; k++) { B.box('plain', 0x3a2a1a, 0.02, 0.44, 0.56, -0.8, 1.75, -1.68 + k * 0.63, 0, { ao: false }); B.box('shiny', 0xd8c080, 0.03, 0.03, 0.08, -0.79, 1.75, -1.68 + k * 0.63, 0, { ao: false }); }
-  B.box('plain', 0xd8d8d0, 0.32, 0.38, 0.4, -1.0, 1.14, -0.0);                             // microwave on the counter end
-  B.box('glow', 0x202020, 0.02, 0.26, 0.26, -0.83, 1.14, -0.04, 0, { ao: false }); B.box('glow', 0x40ff60, 0.01, 0.02, 0.06, -0.83, 1.28, 0.14, 0, { ao: false, tint: false });
-  // coffee can, instant noodles tower, hot sauce
-  B.cyl('plain', 0xc03020, 0.08, 0.08, 0.16, -0.9, 0.96, -0.18, 10); B.cyl('plain', 0xe8d8a0, 0.07, 0.06, 0.08, -0.72, 0.92, -0.25, 8); B.cyl('plain', 0xe8d8a0, 0.07, 0.06, 0.08, -0.72, 1.0, -0.25, 8);
-  B.cyl('plain', 0xd02020, 0.025, 0.025, 0.12, -1.05, 0.94, -0.3, 6);
-  // --- dinette (right): table between two bench seats, crumbs, bills, a mug ring
-  B.box('wood', 0x8a6238, 0.6, 0.06, 0.8, 0.9, 0.74, -1.05); B.box('plain', 0x8a8a8a, 0.08, 0.72, 0.08, 0.9, 0.36, -1.05);
-  for (const z of [-1.85, -0.25]) { B.box('cloth', 0x8a5a3a, 0.6, 0.42, 0.5, 0.9, 0.21, z); B.box('cloth', 0x9a6a46, 0.6, 0.12, 0.5, 0.9, 0.48, z, 0, { aoLo: 0.8 }); B.box('cloth', 0x8a5a3a, 0.6, 0.55, 0.1, 0.9, 0.7, z + (z < -1 ? -0.22 : 0.22), 0, { aoLo: 0.8 }); }
-  for (let k = 0; k < 14; k++) B.box('plain', pick([0xe8c070, 0xd8a050, 0xf0d890]), 0.015, 0.006, 0.015, 0.9 + (rnd() - 0.5) * 0.5, 0.773, -1.05 + (rnd() - 0.5) * 0.7, rnd() * 3, { ao: false });  // crumbs
-  B.box('plain', 0xf0ece0, 0.22, 0.004, 0.28, 0.8, 0.772, -1.2, 0.2, { ao: false }); B.box('plain', 0xffe8f0, 0.2, 0.004, 0.24, 0.95, 0.776, -1.0, -0.4, { ao: false });  // bills ("PAST DUE" pink one)
+  B.quad('clk', 0xffffff, 0.14, 0.06, W / 2 - 0.185, 1.28, 0.3, -Math.PI / 2, { ao: false, tint: false });
+  B.box('plain', 0xf0e8d8, 0.02, 0.28, 0.2, W / 2 - 0.02, 1.6, 0.6, 0, { ao: false });    // pinned photo above the bed
+  B.box('wood', 0x8a6238, 0.9, 1.9, 0.55, 2.8, 0.95, 1.2);                                 // wardrobe by the bedroom door
+  for (const s of [-1, 1]) { B.box('plain', 0x3a2a1a, 0.02, 1.7, 0.02, 2.8 + s * 0.22, 0.95, 0.92, 0, { ao: false }); B.box('shiny', 0xd8c080, 0.03, 0.08, 0.03, 2.8 + s * 0.1, 0.95, 0.91, 0, { ao: false }); }
+  B.box('wood', 0x8a6238, 0.5, 0.45, 0.4, 3.85, 0.225, 1.2); B.box('plain', 0xe8d0a0, 0.12, 0.3, 0.12, 3.85, 0.6, 1.2); // nightstand + lamp
+  B.sph('glow', 0xffe0a0, 0.1, 3.85, 0.8, 1.2, { ao: false, tint: false });
+  solid(3.35, -0.25, 1.5, 2.0, 0.72); solid(2.8, 1.2, 0.9, 0.55, 1.9); solid(3.85, 1.2, 0.5, 0.4, 0.45);
+  // ---- kitchen along the entrance wall (diet 2026-11-08): from the door going left, sink counter, then a small
+  // stove counter, then the fridge against the bathroom wall. Cabinets above the sink and stove.
+  const CZ = D / 2 - 0.3;
+  const sinkX = 0.375, stoveX = -0.5, fridgeX = -1.2;
+  B.box('plain', 0xd8d2c4, 0.95, 0.85, 0.6, sinkX, 0.425, CZ); B.box('shiny', 0xcfd4d8, 0.97, 0.04, 0.62, sinkX, 0.87, CZ, 0, { ao: false });
+  for (let k = 0; k < 2; k++) B.box('plain', 0x3a3a3a, 0.42, 0.5, 0.02, sinkX - 0.23 + k * 0.46, 0.45, CZ - 0.31, 0, { ao: false }); // door gaps
+  B.box('plain', 0x8a9298, 0.44, 0.2, 0.44, sinkX, 0.8, CZ);                                 // sink basin (recess is faked)
+  B.box('plain', 0x1a2a30, 0.38, 0.02, 0.38, sinkX, 0.9, CZ, 0, { ao: false });              // grey dishwater
+  for (let k = 0; k < 5; k++) B.cyl('plain', pick([0xf0f0e8, 0xe8d0a0, 0xb0d0e0, 0xf0f0e8]), 0.1, 0.1, 0.015, sinkX + (rnd() - 0.5) * 0.1, 0.91 + k * 0.02, CZ + (rnd() - 0.5) * 0.1, 10, { ao: false }); // plate stack
+  B.cyl('shiny', 0xcfd4d8, 0.015, 0.015, 0.3, sinkX, 1.0, D / 2 - 0.1, 6, { ao: false }); B.box('shiny', 0xcfd4d8, 0.04, 0.03, 0.22, sinkX, 1.16, D / 2 - 0.2, 0, { ao: false }); // tap
+  B.cyl('plain', 0xe0e0e0, 0.05, 0.04, 0.12, sinkX + 0.38, 0.95, CZ + 0.1, 8); B.cyl('plain', 0xa02020, 0.045, 0.04, 0.14, sinkX - 0.4, 0.96, CZ - 0.1, 8); // soap, hot sauce bottle
+  B.box('plain', 0xd8d2c4, 0.8, 0.85, 0.6, stoveX, 0.425, CZ); B.box('shiny', 0xcfd4d8, 0.82, 0.04, 0.62, stoveX, 0.87, CZ, 0, { ao: false });
+  B.box('plain', 0x3a3a3a, 0.7, 0.5, 0.02, stoveX, 0.45, CZ - 0.31, 0, { ao: false }); B.box('shiny', 0xcfd4d8, 0.4, 0.03, 0.03, stoveX, 0.6, CZ - 0.32, 0, { ao: false }); // oven door + handle
+  B.box('plain', 0x8a8a8a, 0.5, 0.03, 0.5, stoveX, 0.905, CZ);                               // small two-burner stove top
+  for (const x of [stoveX - 0.13, stoveX + 0.13]) { B.cyl('plain', 0x222222, 0.1, 0.1, 0.02, x, 0.93, CZ, 10); B.cyl('plain', 0x444444, 0.07, 0.07, 0.03, x, 0.94, CZ, 8); }
+  B.box('plain', 0x444444, 0.26, 0.1, 0.24, stoveX - 0.13, 0.95, CZ - 0.05, 0.3);             // greasy pan
+  B.cyl('plain', 0x222222, 0.02, 0.02, 0.3, stoveX - 0.25, 0.96, CZ - 0.2, 5, { ry: 0, rz: 1.2 });
+  B.cyl('plain', 0xc03020, 0.08, 0.08, 0.16, stoveX + 0.3, 0.96, CZ + 0.12, 10); B.cyl('plain', 0xe8d8a0, 0.07, 0.06, 0.08, stoveX + 0.3, 0.92, CZ - 0.15, 8); B.cyl('plain', 0xe8d8a0, 0.07, 0.06, 0.08, stoveX + 0.3, 1.0, CZ - 0.15, 8); // coffee can, noodle tower
+  B.box('wood', 0x8a6238, 1.75, 0.5, 0.38, -0.05, 1.75, D / 2 - 0.19, 0, { ao: false });     // overhead cabinets over sink + stove
+  for (let k = 0; k < 3; k++) { B.box('plain', 0x3a2a1a, 0.52, 0.44, 0.02, -0.63 + k * 0.58, 1.75, D / 2 - 0.39, 0, { ao: false }); B.box('shiny', 0xd8c080, 0.08, 0.03, 0.03, -0.63 + k * 0.58, 1.75, D / 2 - 0.4, 0, { ao: false }); }
+  solid(sinkX, CZ, 0.95, 0.6, 0.9); solid(stoveX, CZ, 0.8, 0.6, 0.9);
+  // fridge against the bathroom wall, magnets and overdue notices on the door
+  B.box('plain', 0xe8e4dc, 0.6, 1.7, 0.6, fridgeX, 0.85, CZ); B.box('plain', 0x3a3a3a, 0.5, 0.02, 0.02, fridgeX, 1.1, CZ - 0.31, 0, { ao: false });
+  B.box('shiny', 0xcfd4d8, 0.03, 0.5, 0.03, fridgeX + 0.25, 1.45, CZ - 0.32, 0, { ao: false }); B.box('shiny', 0xcfd4d8, 0.03, 0.3, 0.03, fridgeX + 0.25, 0.8, CZ - 0.32, 0, { ao: false });
+  for (let k = 0; k < 5; k++) B.box('plain', pick([0xf0e8d8, 0xffe8f0, 0xd8f0e0]), 0.08, 0.1, 0.005, fridgeX - 0.15 + rnd() * 0.3, 1.0 + rnd() * 0.6, CZ - 0.31, 0, { ao: false });
+  solid(fridgeX, CZ, 0.6, 0.6, 1.7);
+  // ---- living area on the slide side: sofa, recliner, coffee table with the bills, crumbs and the mug
+  const SZ = -D / 2 + 0.42;
+  B.box('cloth', 0x8a5a3a, 1.9, 0.42, 0.8, -0.45, 0.21, SZ); B.box('cloth', 0x9a6a46, 1.9, 0.12, 0.8, -0.45, 0.48, SZ, 0, { aoLo: 0.8 });
+  B.box('cloth', 0x8a5a3a, 1.9, 0.55, 0.14, -0.45, 0.75, -D / 2 + 0.1, 0, { aoLo: 0.8 });   // sofa back
+  for (const s of [-1, 1]) B.box('cloth', 0x8a5a3a, 0.14, 0.3, 0.8, -0.45 + s * 0.95, 0.65, SZ, 0, { aoLo: 0.8 }); // arms
+  B.box('cloth', 0xd0c0a0, 0.4, 0.1, 0.4, -1.0, 0.59, SZ - 0.05, 0.3, { aoLo: 0.9 });       // a cushion gone flat
+  B.box('wood', 0x8a6238, 0.8, 0.05, 0.45, -0.45, 0.45, SZ + 0.75); for (const s of [-1, 1]) B.box('plain', 0x8a8a8a, 0.05, 0.43, 0.4, -0.45 + s * 0.35, 0.21, SZ + 0.75); // coffee table
+  for (let k = 0; k < 14; k++) B.box('plain', pick([0xe8c070, 0xd8a050, 0xf0d890]), 0.015, 0.006, 0.015, -0.45 + (rnd() - 0.5) * 0.7, 0.478, SZ + 0.75 + (rnd() - 0.5) * 0.35, rnd() * 3, { ao: false });  // crumbs
+  B.box('plain', 0xf0ece0, 0.22, 0.004, 0.28, -0.6, 0.477, SZ + 0.7, 0.2, { ao: false }); B.box('plain', 0xffe8f0, 0.2, 0.004, 0.24, -0.3, 0.481, SZ + 0.8, -0.4, { ao: false });  // bills ("PAST DUE" pink one)
   const due = signTex(THREE, 'rv:due', ['FINAL', 'NOTICE'], '#ff9fb0', '#8a0020', 64, 48);
   B.def('due', { kind: 'lambert', map: due });
-  B.flat('due', 0xffffff, 0.16, 0.12, 0.95, 0.779, -1.0, -0.4, { ao: false, tint: false });
-  B.cyl('plain', 0xf0f0f0, 0.05, 0.045, 0.1, 1.05, 0.82, -0.85, 8); B.box('plain', 0xf0f0f0, 0.02, 0.05, 0.06, 1.11, 0.82, -0.85, 0, { ao: false });  // mug
-  B.cyl('plain', 0x3a2a1a, 0.055, 0.055, 0.003, 0.72, 0.772, -0.9, 10, { ao: false });  // mug ring
-  B.box('plain', 0xd8b040, 0.08, 0.14, 0.06, 0.72, 0.84, -1.3, 0.3);                  // mustard
-  // --- TV with rabbit ears on a milk crate (right, near the middle)
-  B.box('plain', 0xd04030, 0.4, 0.32, 0.4, 0.95, 0.16, 0.7, 0.1);
-  B.box('plain', 0x3a3a3a, 0.5, 0.42, 0.46, 0.92, 0.53, 0.7, -0.25);
-  const statik = ctex(THREE, 'rv:static', 32, 32, (g) => { for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const b = 60 + rnd() * 180; g.fillStyle = `rgb(${b},${b},${b + 10})`; g.fillRect(x, y, 1, 1); } }, { nearest: true });
-  B.def('static', { kind: 'basic', map: statik });
-  B.quad('static', 0xcfd8ff, 0.36, 0.28, 0.92 - Math.sin(-0.25) * 0.235, 0.56, 0.7 - Math.cos(-0.25) * 0.235, Math.PI - 0.25, { ao: false, tint: false });
-  for (const s of [-1, 1]) B.cyl('shiny', 0xcfd4d8, 0.006, 0.006, 0.5, 0.92 + s * 0.1, 0.95, 0.7, 4, { rz: s * 0.5 });
-  B.box('plain', 0xa0a0a0, 0.06, 0.06, 0.06, 0.9, 0.76, 0.75);                           // foil ball on the antenna base
-  // --- laundry: basket overflowing by the left wall, socks on the floor
-  B.cyl('plain', 0x3a6ab0, 0.3, 0.26, 0.4, -0.85, 0.2, 0.95, 8);
-  for (let k = 0; k < 11; k++) B.sph('cloth', pick([0x4a4a4a, 0xd04030, 0xf0f0f0, 0x3a5a8a, 0xc8a060, 0x7a7a7a]), 0.13 + rnd() * 0.06, -0.85 + (rnd() - 0.5) * 0.5, 0.4 + rnd() * 0.15, 0.95 + (rnd() - 0.5) * 0.5, { ao: false, s: [1, 0.45, 0.8], ws: 6, hs: 4 });
-  B.box('cloth', 0x3a5a8a, 0.28, 0.06, 0.4, -0.75, 0.03, 1.5, 0.6, { ao: false }); B.box('cloth', 0xf0f0f0, 0.1, 0.03, 0.18, -0.3, 0.015, 1.9, 1.2, { ao: false });
-  // work boots by the door, hi-vis vest on a hook, hard hat
-  for (const s of [0, 1]) { B.box('plain', 0x6a4420, 0.14, 0.14, 0.3, -0.55 + s * 0.18, 0.07, 2.9, -0.1 + s * 0.3); B.box('plain', 0x4a2e14, 0.14, 0.1, 0.12, -0.55 + s * 0.18, 0.19, 2.82, -0.1 + s * 0.3); B.box('plain', 0x3a2a1a, 0.15, 0.03, 0.32, -0.55 + s * 0.18, 0.015, 2.9, -0.1 + s * 0.3, { ao: false }); }
+  B.flat('due', 0xffffff, 0.16, 0.12, -0.3, 0.484, SZ + 0.8, -0.4, { ao: false, tint: false });
+  B.cyl('plain', 0xf0f0f0, 0.05, 0.045, 0.1, -0.05, 0.53, SZ + 0.65, 8); B.box('plain', 0xf0f0f0, 0.02, 0.05, 0.06, 0.01, 0.53, SZ + 0.65, 0, { ao: false });  // mug
+  B.cyl('plain', 0x3a2a1a, 0.055, 0.055, 0.003, -0.7, 0.477, SZ + 0.85, 10, { ao: false });  // mug ring
+  B.box('plain', 0xd8b040, 0.08, 0.14, 0.06, -0.15, 0.54, SZ + 0.85, 0.3);                   // mustard
+  solid(-0.45, SZ, 1.9, 0.8, 0.54); solid(-0.45, SZ + 0.75, 0.8, 0.45, 0.48);
+  // laundry basket and socks in the corridor, kibble bag slumped by the sofa
+  B.cyl('plain', 0x3a6ab0, 0.3, 0.26, 0.4, -2.25, 0.2, -1.05, 8);
+  for (let k = 0; k < 11; k++) B.sph('cloth', pick([0x4a4a4a, 0xd04030, 0xf0f0f0, 0x3a5a8a, 0xc8a060, 0x7a7a7a]), 0.13 + rnd() * 0.06, -2.25 + (rnd() - 0.5) * 0.5, 0.4 + rnd() * 0.15, -1.05 + (rnd() - 0.5) * 0.5, { ao: false, s: [1, 0.45, 0.8], ws: 6, hs: 4 });
+  B.box('cloth', 0x3a5a8a, 0.28, 0.06, 0.4, -2.0, 0.03, -0.3, 0.6, { ao: false }); B.box('cloth', 0xf0f0f0, 0.1, 0.03, 0.18, -1.3, 0.015, 0.2, 1.2, { ao: false });
+  B.box('plain', 0xe0a030, 0.3, 0.55, 0.18, -1.45, 0.27, -1.3, -0.3, { rz: 0.12 });
+  solid(-2.25, -1.05, 0.6, 0.6, 0.45); solid(-1.45, -1.3, 0.35, 0.25, 0.6);
+  // work boots by the door, hi-vis vest on a hook on the bathroom wall
+  for (const s of [0, 1]) { B.box('plain', 0x6a4420, 0.14, 0.14, 0.3, 0.72 + s * 0.18, 0.07, 0.65, -0.1 + s * 0.3); B.box('plain', 0x4a2e14, 0.14, 0.1, 0.12, 0.72 + s * 0.18, 0.19, 0.57, -0.1 + s * 0.3); B.box('plain', 0x3a2a1a, 0.15, 0.03, 0.32, 0.72 + s * 0.18, 0.015, 0.65, -0.1 + s * 0.3, { ao: false }); }
   const vest = ctex(THREE, 'rv:vest', 32, 48, (g) => { g.clearRect(0, 0, 32, 48); g.fillStyle = '#ff8a10'; g.beginPath(); g.moveTo(4, 8); g.lineTo(11, 2); g.lineTo(16, 6); g.lineTo(21, 2); g.lineTo(28, 8); g.lineTo(28, 46); g.lineTo(4, 46); g.fill(); g.fillStyle = '#e8e8e8'; g.fillRect(4, 22, 24, 4); g.fillRect(4, 34, 24, 4); g.fillRect(8, 2, 3, 44); g.fillRect(21, 2, 3, 44); g.fillStyle = '#222'; g.fillRect(14, 8, 4, 38); }, { repeat: false });
   B.def('vest', { kind: 'lambert', map: vest, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
-  B.box('shiny', 0xcfd4d8, 0.04, 0.04, 0.08, -1.16, 1.75, 2.6, 0, { ao: false });
-  B.quad('vest', 0xffffff, 0.5, 0.75, -1.15, 1.35, 2.6, Math.PI / 2, { ao: false, tint: false });
-  B.cyl('plain', 0xf0d020, 0.14, 0.17, 0.12, 0.95, 1.8, 3.2, 10); B.cyl('plain', 0xf0d020, 0.2, 0.2, 0.02, 0.95, 1.74, 3.2, 10);  // hard hat on the shelf above the door
-  B.box('wood', 0x8a6238, 0.5, 0.03, 0.5, 0.95, 1.72, 3.2);
-  // cat food bowls on a mat: GOOBLES / WATER
-  B.box('plain', 0x6a8a4a, 0.55, 0.01, 0.35, 0.7, 0.005, 2.2, 0, { ao: false });
-  B.cyl('plain', 0xd04030, 0.11, 0.09, 0.07, 0.58, 0.035, 2.2, 10); B.cyl('plain', 0x8a5a2a, 0.09, 0.09, 0.02, 0.58, 0.07, 2.2, 10, { ao: false });
-  B.cyl('plain', 0x3a6ab0, 0.11, 0.09, 0.07, 0.84, 0.035, 2.2, 10); B.cyl('shiny', 0x7ab0e0, 0.09, 0.09, 0.02, 0.84, 0.065, 2.2, 10, { ao: false });
+  B.box('shiny', 0xcfd4d8, 0.08, 0.04, 0.04, -1.53, 1.75, 0.9, 0, { ao: false });
+  B.quad('vest', 0xffffff, 0.5, 0.75, -1.52, 1.35, 0.9, Math.PI / 2, { ao: false, tint: false });
+  // cat food bowls on a mat in front of the fridge: GOOBLES / WATER
+  B.box('plain', 0x6a8a4a, 0.55, 0.01, 0.35, -1.2, 0.005, 0.6, 0, { ao: false });
+  B.cyl('plain', 0xd04030, 0.11, 0.09, 0.07, -1.32, 0.035, 0.6, 10); B.cyl('plain', 0x8a5a2a, 0.09, 0.09, 0.02, -1.32, 0.07, 0.6, 10, { ao: false });
+  B.cyl('plain', 0x3a6ab0, 0.11, 0.09, 0.07, -1.06, 0.035, 0.6, 10); B.cyl('shiny', 0x7ab0e0, 0.09, 0.09, 0.02, -1.06, 0.065, 0.6, 10, { ao: false });
   const bowlTag = signTex(THREE, 'rv:bowl', ['GOOBLES'], null, '#f8f8f0', 96, 24);
   B.def('bowlTag', { kind: 'basic', map: bowlTag, transparent: true, alphaTest: 0.4 });
-  B.flat('bowlTag', 0xffffff, 0.5, 0.12, 0.7, 0.012, 2.33, 0, { ao: false, tint: false });
-  // a bag of kibble slumped against the wall with a bite hole
-  B.box('plain', 0xe0a030, 0.3, 0.55, 0.18, 1.0, 0.27, 2.75, -0.3, { rz: 0.12 });
+  B.flat('bowlTag', 0xffffff, 0.5, 0.12, -1.2, 0.012, 0.73, 0, { ao: false, tint: false });
+  // ---- bathroom (x -2.9..-1.6, z 0.2..1.5): tub along the outer wall, toilet, vanity with a cracked mirror
+  B.box('plain', 0xf4f4f0, 0.9, 0.55, 0.55, -2.4, 0.275, D / 2 - 0.3); B.box('plain', 0xdce8f0, 0.74, 0.02, 0.4, -2.4, 0.5, D / 2 - 0.3, 0, { ao: false });   // tub with a little grey water
+  B.cyl('shiny', 0xcfd4d8, 0.015, 0.015, 0.7, -2.0, 1.4, D / 2 - 0.08, 6, { ao: false }); B.box('plain', 0xc8d0d8, 0.9, 0.9, 0.02, -2.4, 1.6, D / 2 - 0.06, 0, { ao: false, tint: false }); // shower riser + curtain-less tiled wall
+  B.box('plain', 0xf4f4f0, 0.4, 0.4, 0.5, -1.85, 0.2, 0.5); B.box('plain', 0xf4f4f0, 0.42, 0.14, 0.2, -1.85, 0.45, 0.68); B.cyl('plain', 0xf4f4f0, 0.2, 0.18, 0.06, -1.85, 0.43, 0.42, 10); // toilet
+  B.box('plain', 0xd8d2c4, 0.35, 0.8, 0.45, -2.7, 0.4, 0.5); B.box('plain', 0x8a9298, 0.26, 0.06, 0.3, -2.7, 0.82, 0.5); B.box('shiny', 0xdfe6ee, 0.02, 0.4, 0.3, -2.87, 1.4, 0.5, 0, { ao: false }); // vanity, basin, mirror
+  B.cyl('plain', 0xf4f4f0, 0.05, 0.05, 0.1, -1.6 + 0.12, 0.9, 1.3, 8); B.cyl('plain', 0xf4f4f0, 0.05, 0.05, 0.1, -1.6 + 0.12, 0.78, 1.3, 8); // spare rolls
+  B.cyl('plain', 0x3a9a40, 0.0, 0.08, 0.16, -2.25, 1.7, 1.0, 3, { ao: false }); B.cyl('plain', 0x888888, 0.004, 0.004, 0.3, -2.25, 1.93, 1.0, 3, { ao: false }); // air freshener tree
+  solid(-2.4, D / 2 - 0.3, 0.9, 0.55, 0.55); solid(-1.85, 0.5, 0.4, 0.55, 0.45); solid(-2.7, 0.5, 0.35, 0.45, 0.82);
+  // ---- bunk room at the far end: two bunks on the end wall, a ladder, wardrobe, a window
+  B.box('wood', 0x7a5634, 0.85, 0.1, 1.9, -3.65, 0.4, -0.55); B.box('cloth', 0xe8e0d0, 0.8, 0.14, 1.8, -3.65, 0.52, -0.55, 0, { aoLo: 0.8 }); B.box('blanket', 0xffffff, 0.7, 0.08, 1.3, -3.6, 0.62, -0.45, 0.05, { aoLo: 0.8 });
+  B.box('wood', 0x7a5634, 0.85, 0.1, 1.9, -3.65, 1.3, -0.55); B.box('cloth', 0xe8e0d0, 0.8, 0.14, 1.8, -3.65, 1.42, -0.55, 0, { aoLo: 0.8 }); B.box('cloth', 0xc8a060, 0.7, 0.08, 1.3, -3.7, 1.52, -0.6, -0.05, { aoLo: 0.8 });
+  for (const z of [-1.5, 0.4]) B.box('wood', 0x7a5634, 0.08, 1.4, 0.08, -3.25, 0.7, z);   // bunk posts
+  for (let k = 0; k < 4; k++) B.box('wood', 0x8a6238, 0.3, 0.03, 0.03, -3.2, 0.55 + k * 0.25, 0.45, 0, { ao: false });   // ladder rungs
+  for (const s of [-1, 1]) B.box('wood', 0x8a6238, 0.03, 1.1, 0.03, -3.2 + s * 0.15, 1.0, 0.45, 0, { ao: false });
+  B.box('wood', 0x8a6238, 0.8, 1.9, 0.55, -3.7, 0.95, 1.2); B.box('plain', 0x3a2a1a, 0.02, 1.7, 0.02, -3.7, 0.95, 0.92, 0, { ao: false });   // wardrobe
+  B.box('plain', 0xd04030, 0.3, 0.3, 0.3, -3.2, 0.15, 1.15); B.box('plain', 0x4a4a4a, 0.25, 0.1, 0.2, -3.2, 0.35, 1.15, 0.3);   // toolbox and a stray boot
+  solid(-3.65, -0.55, 0.9, 1.9, 0.6); solid(-3.7, 1.2, 0.8, 0.55, 1.9); solid(-3.2, 1.15, 0.3, 0.3, 0.35);
   // wall stuff: calendar with the overtime days crossed off, a note from the foreman
   const cal = ctex(THREE, 'rv:cal', 64, 80, (g) => { g.fillStyle = '#f4f0e4'; g.fillRect(0, 0, 64, 80); g.fillStyle = '#2a5a9a'; g.fillRect(0, 0, 64, 26); g.fillStyle = '#fff'; g.font = 'bold 10px sans-serif'; g.textAlign = 'center'; g.fillText('NOVEMBER', 32, 17); g.strokeStyle = '#888'; for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) { g.strokeRect(2 + c * 8.5, 30 + r * 9.5, 8.5, 9.5); if (rnd() < 0.7) { g.strokeStyle = '#c02020'; g.beginPath(); g.moveTo(3 + c * 8.5, 31 + r * 9.5); g.lineTo(9 + c * 8.5, 38 + r * 9.5); g.moveTo(9 + c * 8.5, 31 + r * 9.5); g.lineTo(3 + c * 8.5, 38 + r * 9.5); g.stroke(); g.strokeStyle = '#888'; } } g.fillStyle = '#c02020'; g.font = 'bold 7px sans-serif'; g.fillText('OT  OT  OT', 32, 76); }, { repeat: false });
   B.def('cal', { kind: 'lambert', map: cal });
-  B.quad('cal', 0xffffff, 0.3, 0.38, W / 2 - 0.02, 1.5, 1.6, -Math.PI / 2, { ao: false, tint: false });
+  B.quad('cal', 0xffffff, 0.3, 0.38, 2.25, 1.5, -0.9, -Math.PI / 2, { ao: false, tint: false });   // on the bedroom wall, living side
   const note = signTex(THREE, 'rv:note', ['DOUBLE SHIFT', 'SAT.  -BOSS', '(no excuses)'], '#fff7b0', '#333', 128, 64, { font: 'sans-serif', weight: 'normal', tape: true });
   B.def('note', { kind: 'lambert', map: note });
-  B.quad('note', 0xffffff, 0.3, 0.15, -0.55, 1.65, -3.47, 0, { ao: false, tint: false });
-  // ceiling: bare bulb and a vent fan; a dangling air freshener tree
-  bulbLamp(B, 0, H - 0.12, -0.3); bulbLamp(B, 0, H - 0.12, -2.6, 0xffe0a0);
-  B.box('plain', 0xb8b8b0, 0.4, 0.04, 0.4, 0, H - 0.02, 1.6, 0, { ao: false });
-  B.cyl('plain', 0x3a9a40, 0.0, 0.08, 0.16, 0.4, 1.7, 2.2, 3, { ao: false }); B.cyl('plain', 0x888888, 0.004, 0.004, 0.3, 0.4, 1.93, 2.2, 3, { ao: false });
+  B.quad('note', 0xffffff, 0.3, 0.15, fridgeX + 0.05, 1.55, CZ - 0.31, 0, { ao: false, tint: false });   // taped to the fridge
+  // ceiling: bare bulbs, a vent fan in the living area
+  bulbLamp(B, 3.3, H - 0.12, -0.2, 0xffe0a0); bulbLamp(B, 0.9, H - 0.12, 0.3); bulbLamp(B, -0.8, H - 0.12, -0.6); bulbLamp(B, -2.25, H - 0.12, 0.85, 0xf0f0ff); bulbLamp(B, -3.5, H - 0.12, -0.2, 0xffe0a0);
+  B.box('plain', 0xb8b8b0, 0.4, 0.04, 0.4, -0.2, H - 0.02, -0.6, 0, { ao: false });
   // entrance door (closed, with a cracked frosted pane) and a doormat that says the obvious
-  B.quad('plain', 0xcfc8b6, 0.78, 1.88, 0.45, 0.95, D / 2 - 0.06, Math.PI, { ao: false, sy: 4, paint: (_x, y) => 0.6 + 0.4 * sm(y / 0.8) });
-  B.quad('glow', 0x8a98a8, 0.5, 0.5, 0.45, 1.4, D / 2 - 0.08, Math.PI, { ao: false, tint: false }); B.box('shiny', 0xd8c080, 0.1, 0.03, 0.04, 0.78, 0.95, D / 2 - 0.12, 0, { ao: false });
+  B.quad('plain', 0xcfc8b6, 0.78, 1.88, DX, 0.95, D / 2 - 0.06, Math.PI, { ao: false, sy: 4, paint: (_x, y) => 0.6 + 0.4 * sm(y / 0.8) });
+  B.quad('glow', 0x8a98a8, 0.5, 0.5, DX, 1.4, D / 2 - 0.08, Math.PI, { ao: false, tint: false }); B.box('shiny', 0xd8c080, 0.1, 0.03, 0.04, DX + 0.33, 0.95, D / 2 - 0.12, 0, { ao: false });
   const mat = signTex(THREE, 'rv:mat', ['GO AWAY'], '#6a5a40', '#e8e0c8', 96, 32);
   B.def('mat', { kind: 'lambert', map: mat });
-  B.flat('mat', 0xffffff, 0.6, 0.35, 0.45, 0.006, D / 2 - 0.45, 0, { ao: false, tint: false });
+  B.flat('mat', 0xffffff, 0.6, 0.35, DX, 0.006, D / 2 - 0.45, 0, { ao: false, tint: false });
 
   const group = B.finish(new THREE.Group());
-  // dynamic bits: TV static scroll
-  let st = 0;
-  const update = (t) => { statik.offset.set(((t * 7) | 0) % 5 / 5, ((t * 13) | 0) % 3 / 3); st = t; };
-  cols.push(
-    { kind: 'box', cx: 0, cz: -2.75, w: W, d: 1.5, rot: 0, h: 0.72 },          // bed (standable)
-    { kind: 'box', cx: -0.95, cz: -1.05, w: 0.6, d: 1.9, rot: 0, h: 0.9 },     // galley counter
-    { kind: 'box', cx: 0.9, cz: -1.05, w: 0.6, d: 0.9, rot: 0, h: 0.77 },      // dinette table
-    { kind: 'box', cx: 0.9, cz: -1.85, w: 0.6, d: 0.5, rot: 0, h: 0.54 }, { kind: 'box', cx: 0.9, cz: -0.25, w: 0.6, d: 0.5, rot: 0, h: 0.54 }, // bench seats
-    { kind: 'box', cx: 0.93, cz: 0.7, w: 0.5, d: 0.5, rot: 0, h: 0.74 },       // TV crate
-    { kind: 'box', cx: -0.85, cz: 0.95, w: 0.6, d: 0.6, rot: 0, h: 0.45 },     // laundry basket
-    { kind: 'box', cx: 1.0, cz: 2.75, w: 0.35, d: 0.25, rot: 0, h: 0.6 },      // kibble bag
-  );
   return {
     group, size: [W, D], cols, floors: [],
-    spawn: { x: 0.2, z: 2.3, yaw: 0 },
-    exit: { x: 0.45, z: D / 2 + 0.05, r: 0.55 },
+    spawn: { x: DX, z: 0.9, yaw: 0 },
+    exit: { x: DX, z: D / 2 + 0.05, r: 0.55 },
     lights: [
-      { x: 0, y: H - 0.2, z: -0.3, c: 0xffe8c0, i: 0.9, always: true },
-      { x: 0, y: H - 0.2, z: -2.6, c: 0xffd8a0, i: 0.6, always: true },
-      { x: 0.7, y: 0.7, z: 1.2, c: 0x9ab0ff, i: 0.45, always: true, flicker: true },  // TV glow
+      { x: 0.9, y: H - 0.2, z: 0.3, c: 0xffe8c0, i: 0.9, always: true },
+      { x: -0.8, y: H - 0.2, z: -0.6, c: 0xffe8c0, i: 0.8, always: true },
+      { x: 3.3, y: H - 0.2, z: -0.2, c: 0xffd8a0, i: 0.6, always: true },
+      { x: -2.25, y: H - 0.2, z: 0.85, c: 0xe8f0ff, i: 0.5, always: true },
+      { x: -3.5, y: H - 0.2, z: -0.2, c: 0xffd8a0, i: 0.5, always: true },
     ],
     cam: { maxDist: 3.2, height: 1.8 },
     interact: [
-      { id: 'bed', x: 0, z: -1.95, r: 0.8, label: 'Sleep (save)' },
-      { id: 'bowl', x: 0.7, z: 2.2, r: 0.55, label: 'Kibble' },
+      { id: 'bed', x: 3.0, z: -0.25, r: 0.9, label: 'Sleep (save)' },
+      { id: 'nap', x: -3.3, z: -0.55, r: 0.7, label: 'Nap on the bunk (save)' },
+      { id: 'bowl', x: -1.2, z: 0.6, r: 0.55, label: 'Kibble' },
     ],
-    update,
   };
 }
 
