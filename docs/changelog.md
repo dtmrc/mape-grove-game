@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased (2026-11-09): grey mannequin base (NOT published)
+- diet: "make a new model: take the chest and hips out, genderless, grey, unclothed; use the boxy arms/legs/body principles"
+  from a Legends reference picture. npcgen.js exports buildMannequin({height, color, name}): chamfered-box torso tapering
+  to the waist into a pelvis block (no chest, no hip flare), square neck post, the D head left blank, square upper arms
+  and forearms, thick mitten hands with a thumb wedge, square thighs/shins with a knee ring and a calf, oversized block
+  feet with a sloped toe. 488 tris, one flat grey texel, baked tones, same 24-bone skeleton and clips as buildNPC.
+  Renders npc/mannequin-idle.png, mannequin-wire.png (T-pose), mannequin-walk.png; npc/mannequin.glb.
+- 04:36Z pass (diet's markup): shoulders raised and squared (torso rings at 1.37/1.415 m) with round-ish 8-sided shoulder
+  caps over each arm joint; back of the skull curves in to the neck (chin rings pulled forward); thighs thinned (half
+  width 0.054 at the top, legX 0.084) so their outer edge lines up with the pelvis block. 632 tris.
+- 04:50Z pass: upper arm is ONE loft from inside the shoulder through a round-ish chamfered cap to a near-square arm
+  (loft rings may now carry their own outline, rg.pts), forearm 8-sided to match; shoulders broader (armX 0.205, torso
+  shoulder rings 0.2/0.19) so the cap tucks under the shoulder corner; pelvis stays a block down to 0.80 m and the thighs
+  start inside it, so no seams show at the hips. 680 tris.
+
+## Tracebench fix (2026-11-09, NOT published)
+- diet: "I try selecting a point and it selects one that's in another direction". Cause: edit mode built its three-mesh-bvh
+  tree with the default options, which REORDERS the triangle index, but click() maps hit.faceIndex through triFace[] in the
+  original order, so every click landed on an unrelated face (old build: 0 of 271 points, 0 of 161 faces right on the
+  mannequin). Fix in src/editMode.ts: computeBoundsTree({ indirect: true }); points and edges are now also picked where they
+  are drawn on screen (nearest visible point within 14 px / edge within 10 px), box select shares the same helper.
+  After: 271/271 points, 159/161 faces, 12/12 real mouse clicks. Tests: scripts/qa/pick-test.cjs, real-click.cjs.
+  Tracebench.html rebuilt (old copy Tracebench.before-pick-fix.html); tsc clean, vitest 50/50.
+
+## Unreleased (2026-11-09): average male head + fists (NOT published, diet reviews first)
+- diet: "new hands and head for male" with a Legends fist reference and a D-profile head sketch. npcgen.js: head is now a
+  5-ring loft on a D outline (flat face plane from the jaw ring to the brow ring, rounded chin, crown and back); the face
+  quad covers only the flat part; the hair cap follows the new crown. Hands are closed fists (8-sided block along the arm,
+  bigger at the knuckles, finger gaps / knuckle ridge / thumb / wrist crease painted on a 40x16 patch). Loft uvs now stay
+  half a texel inside their atlas region (nearest filtering grabbed the neighbour on exact edges) and the jeans pockets
+  were drawn below the leg region (they bled into whatever sat under it). Renders: npc/average-male-head-v2.png,
+  average-male-fist.png, average-male-v2.png, hair-v2.png. dist/npc-creator.html rebuilt locally, creator artifact NOT republished.
+
+## Unreleased (2026-11-09): Goobles' paws (artifact v61)
+- diet: "make his hands thin. 4-fingered. still paw-like". The mitten hands of the Tracebench Goobles base were replaced by
+  thin paws: a wedge palm from the forearm to a flat hand, four short blunt fingers (middle two longer, outer ones splayed),
+  small dewclaw-thumb on the front edge; finger gaps use the shaded fur texel. Fur part 368 -> 480 tris, same 28 bones and
+  clips. Done by tools/tracebench/scripts/goobles-paws.cjs on both the GLB and the .tracebench.json (originals kept in
+  models/goobles-base/before-paws). src/models/goobles.glb replaced; game rebuilt, smoke + core + content tests green.
+  Renders: npc/goobles-paws.png, npc/goobles-paws-wire.png. Tunic and suit Goobles still have mittens (same script applies).
+
 ## Unreleased (2026-11-08): NPC Creator
 - New src/js/npcgen.js (art thread): parametric townspeople in the Tracebench/Legends look. One skinned mesh (~480-590 tris),
   one painted 256x256 atlas, baked front+top light in the vertex colours, unlit material, standard Tracebench skeleton

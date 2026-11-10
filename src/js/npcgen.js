@@ -117,10 +117,10 @@ function ringPts(n, pts) {
 function loft(bd, rings, n, R, opts = {}) {
   const axis = opts.axis || 'y', pts = ringPts(n, opts.pts);
   const vert = (rg, i) => {
-    const [p, q] = pts[i];
+    const [p, q] = (rg.pts || pts)[i]; // a ring may carry its own outline (same point count), e.g. a round cap turning into a square arm
     return axis === 'y' ? [rg.c[0] + p * rg.r1, rg.c[1], rg.c[2] + q * rg.r2] : [rg.c[0], rg.c[1] + p * rg.r1, rg.c[2] + q * rg.r2];
   };
-  const U = (i) => R.x + (i / n) * R.w, V = (rg) => R.y + (1 - rg.v) * R.h;
+  const U = (i) => R.x + 0.5 + (i / n) * (R.w - 1), V = (rg) => R.y + 0.5 + (1 - rg.v) * (R.h - 1); // rows stay half a texel inside the region (nearest filtering would grab the neighbour on the exact edge)
   for (let k = 0; k + 1 < rings.length; k++) {
     const A = rings[k], B = rings[k + 1];
     const inside = [(A.c[0] + B.c[0]) / 2, (A.c[1] + B.c[1]) / 2, (A.c[2] + B.c[2]) / 2];
@@ -131,7 +131,8 @@ function loft(bd, rings, n, R, opts = {}) {
   }
   const cap = (rg, dir) => {
     const inside = axis === 'y' ? [rg.c[0], rg.c[1] - dir * 0.05, rg.c[2]] : [rg.c[0] - dir * 0.05, rg.c[1], rg.c[2]];
-    for (let i = 0; i < n; i++) { const j = (i + 1) % n; bd.tri([rg.c, vert(rg, i), vert(rg, j)], [[U(i + 0.5), V(rg)], [U(i), V(rg)], [U(i + 1), V(rg)]], [rg.w, rg.w, rg.w], inside, opts.tint); }
+    const Vc = V(rg);
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; bd.tri([rg.c, vert(rg, i), vert(rg, j)], [[U(i + 0.5), Vc], [U(i), Vc], [U(i + 1), Vc]], [rg.w, rg.w, rg.w], inside, opts.tint); }
   };
   if (opts.capStart) cap(rings[0], -1);
   if (opts.capEnd) cap(rings[rings.length - 1], 1);
@@ -209,6 +210,10 @@ function measure(r) {
 
 // chamfered-box octagon (the worker's torso and head cross-section): flat faces are 0.84 of the width, corners cut at 45 deg
 const OCT = [[-0.42, -1], [-1, -0.42], [-1, 0.42], [-0.42, 1], [0.42, 1], [1, 0.42], [1, -0.42], [0.42, -1]];
+// D-shaped head outline (diet's sketch, 2026-11-09): flat face plane across the front, rounded back; front facet is still facet 3
+const D8 = [[-0.36, -1], [-0.9, -0.5], [-1, 0.3], [-0.5, 1], [0.5, 1], [1, 0.3], [0.9, -0.5], [0.36, -1]];
+// closed fist outline along x (y, z): wide flat back of the hand on top, curled fingers narrower underneath; facet 3 faces +z, facet 5 is the top
+const FIST = [[-0.6, -0.7], [-1, -0.3], [-1, 0.3], [-0.6, 0.8], [0.45, 1], [1, 0.5], [1, -0.5], [0.45, -1]];
 // box cross-section (legs): facet 1 faces +z
 const BOX4 = [[-1, -1], [-1, 1], [1, 1], [1, -1]];
 // hex prism along x (arms, neck): pointy top and bottom, flat front and back; facet 2 faces +z
@@ -224,7 +229,7 @@ export function buildNPC(input) {
   const R = {
     torso: sh.add('torso', 96, 84), head: sh.add('head', 96, 36), face: sh.add('face', 48, 48),
     armL: sh.add('armL', 48, 40), armR: sh.add('armR', 48, 40), legL: sh.add('legL', 64, 64), legR: sh.add('legR', 64, 64),
-    neck: sh.add('neck', 24, 8), hair: sh.add('hair', 24, 24), skin: sh.add('skin', 12, 12), shoe: sh.add('shoe', 24, 20), hand: sh.add('hand', 20, 20), tail: sh.add('tail', 24, 16),
+    neck: sh.add('neck', 24, 8), hair: sh.add('hair', 24, 24), skin: sh.add('skin', 12, 12), shoe: sh.add('shoe', 24, 20), hand: sh.add('hand', 40, 16), tail: sh.add('tail', 24, 16),
   };
   const bd = new Builder();
   const skirt = r.pants === 'skirt', coat = r.jacket === 'coat';
@@ -246,17 +251,19 @@ export function buildNPC(input) {
   loft(bd, tr, 8, R.torso, { pts: OCT, capStart: true, capEnd: true });
   // ---- neck: hex prism that runs up into the head
   loft(bd, [{ c: [0, M.neckY - 0.03, 0], r1: M.neckR, r2: M.neckR * 0.9, w: W1('neck'), v: 0 }, { c: [0, M.headY + 0.03, 0], r1: M.neckR, r2: M.neckR * 0.9, w: W1('head'), v: 1 }], 6, R.neck, { pts: HEX_Y });
-  // ---- head: straight octagon prism, flat top and bottom; a slight jaw taper for narrow face shapes
+  // ---- head: a D in profile (diet's sketch): flat face plane from the jaw to the brow, rounded chin, rounded crown, round back
   const hy = M.headY, H = M.headH, hw = M.headW, hd = M.headD;
   const hr = [
-    { c: [0, hy, 0], r1: hw * M.jawK, r2: hd * (0.9 + 0.1 * M.jawK), w: W1('head'), v: 0 },
-    { c: [0, hy + H * 0.45, 0], r1: hw, r2: hd, w: W1('head'), v: 0.45 },
-    { c: [0, hy + H, 0], r1: hw, r2: hd, w: W1('head'), v: 1 },
+    { c: [0, hy, -hd * 0.05], r1: hw * 0.7 * M.jawK, r2: hd * 0.78, w: W1('head'), v: 0 },           // under the chin
+    { c: [0, hy + H * 0.14, 0], r1: hw * 0.9 * M.jawK, r2: hd * 0.98, w: W1('head'), v: 0.14 },      // jaw: face plane starts
+    { c: [0, hy + H * 0.5, 0], r1: hw, r2: hd, w: W1('head'), v: 0.5 },                               // cheeks, widest
+    { c: [0, hy + H * 0.84, 0], r1: hw * 0.96, r2: hd * 0.98, w: W1('head'), v: 0.84 },               // brow: face plane ends
+    { c: [0, hy + H, -hd * 0.1], r1: hw * 0.62, r2: hd * 0.64, w: W1('head'), v: 1 },                 // crown
   ];
-  loft(bd, hr, 8, R.head, { pts: OCT, capStart: true, capEnd: true });
-  // face plane flush with the front facet (eyes, brows, mouth, blush, beard live on their own region)
+  loft(bd, hr, 8, R.head, { pts: D8, capStart: true, capEnd: true });
+  // face plane flush with the flat front between the jaw and brow rings (eyes, brows, mouth, blush, beard live on their own region)
   {
-    const yB = hy + 0.01, yT = hy + H - 0.01, zF = hd + 0.003, xw = hw * 0.42, w = W1('head');
+    const yB = hy + H * 0.14 + 0.004, yT = hy + H * 0.84 - 0.004, zF = hd + 0.003, xw = hw * 0.5, w = W1('head');
     bd.quad([[-xw, yB, zF], [xw, yB, zF], [xw, yT, zF], [-xw, yT, zF]], [[R.face.x, R.face.y + R.face.h], [R.face.x + R.face.w, R.face.y + R.face.h], [R.face.x + R.face.w, R.face.y], [R.face.x, R.face.y]], [w, w, w, w], null);
   }
   // nose: triangular prism, top edge flush with the face, bottom edge sticking out (the only modelled feature)
@@ -279,7 +286,9 @@ export function buildNPC(input) {
     const ar = M.armR, fr = M.foreR;
     loft(bd, [{ c: [s * (M.armX - 0.01), y, 0], r1: ar, r2: ar * 0.86, w: W1('arm' + L), v: 0 }, { c: [s * (M.elbowX + 0.012), y, 0], r1: ar * 0.92, r2: ar * 0.8, w: W1('arm' + L), v: 0.5 }], 6, reg, { axis: 'x', pts: HEX_X, capStart: true, capEnd: true });
     loft(bd, [{ c: [s * (M.elbowX - 0.012), y, 0], r1: fr, r2: fr * 0.86, w: W1('forearm' + L), v: 0.5 }, { c: [s * (M.wristX + 0.005), y, 0], r1: fr * 0.88, r2: fr * 0.78, w: W1('forearm' + L), v: 1 }], 6, reg, { axis: 'x', pts: HEX_X, capStart: true, capEnd: true });
-    box(bd, M.handL, M.handH, M.handD, [s * (M.wristX + M.handL / 2), y - 0.005, 0], W1('hand' + L), R.hand, { topRow: 0.25 });
+    // closed fist (Legends style): a chamfered block, bigger at the knuckles, finger lines and thumb painted on
+    const hx0 = s * (M.wristX - 0.004), hx1 = s * (M.wristX + M.handL * 0.9);
+    loft(bd, [{ c: [hx0, y - 0.008, 0], r1: M.handH * 0.42, r2: M.handD * 0.42, w: W1('hand' + L), v: 0 }, { c: [hx1, y - 0.01, 0], r1: M.handH * 0.5, r2: M.handD * 0.5, w: W1('hand' + L), v: 1 }], 8, R.hand, { axis: 'x', pts: FIST, capStart: true, capEnd: true });
   }
   // ---- legs: straight box columns with rings at the knee for bending; box boots with a sloped toe
   for (const s of [1, -1]) {
@@ -353,10 +362,12 @@ function hairGeo(bd, r, M, hr, R, w) {
   const st = r.hair; if (st === 'bald' || st === 'buzz') return;
   const hy = M.headY, H = M.headH, hw = M.headW, hd = M.headD;
   const browY = hy + H * 0.78, topY = hy + H;
+  // the cap follows the D head: brow ring out to the crown ring, slightly bigger, same rounded outline
   const cap = (k = 1.08, up = 0.015, down = 0) => loft(bd, [
     { c: [0, browY - down, 0], r1: hw * k, r2: hd * k, w, v: 0.1 },
-    { c: [0, topY + up, 0], r1: hw * k, r2: hd * k, w, v: 0.95 },
-  ], 8, R.hair, { pts: OCT, capEnd: true });
+    { c: [0, topY - 0.01, hr[4].c[2]], r1: hw * 0.8 * k, r2: hd * 0.8 * k, w, v: 0.7 },
+    { c: [0, topY + up, hr[4].c[2]], r1: hr[4].r1 * k, r2: hr[4].r2 * k, w, v: 0.95 },
+  ], 8, R.hair, { pts: D8, capEnd: true });
   const fringe = (dx = 0, wid = hw * 1.5, drop = 0.025) => box(bd, wid, drop, 0.04, [dx, browY - drop / 2 + 0.01, hd * 1.08 - 0.01], w, R.hair);
   const side = (yTop, yBot, thick = 0.045) => { for (const s of [-1, 1]) box(bd, thick, yTop - yBot, hd * 1.5, [s * (hw * 1.08 + thick / 2), (yTop + yBot) / 2, -hd * 0.2], w, R.hair); };
   const back = (yTop, yBot, thick = 0.05) => box(bd, hw * 2.16, yTop - yBot, thick, [0, (yTop + yBot) / 2, -(hd * 1.08 + thick / 2)], w, R.hair);
@@ -446,8 +457,17 @@ function paint(g, r, M, R, X) {
     // knuckle-side shading lines on the forearm (worker-style wrist crease)
     rect(Ra.x, cy(1), Ra.w, 1, dark(skin));
   }
-  // hand patch
-  rect(R.hand.x, R.hand.y, R.hand.w, R.hand.h, skin); for (let i = 0; i < 3; i++) { rect(R.hand.x + 5 + i * 5, R.hand.y + 1, 1, 3, dark(skin)); rect(R.hand.x + 5 + i * 5, R.hand.y + 8, 1, R.hand.h - 9, dark(skin)); } rect(R.hand.x, R.hand.y + 7, R.hand.w, 1, dark(skin));
+  // hand patch: closed fist (8 facets along the wrist->knuckle axis, v 0 = wrist, 1 = knuckles; facet 3 front, facet 5 top)
+  {
+    const Hh = strip(R.hand, 8), { cx, cy, fw } = Hh, Rh = R.hand;
+    rect(Rh.x, Rh.y, Rh.w, Rh.h, skin);
+    const kn = cy(1), wr = cy(0);
+    // three finger gaps on the back of the hand, from the knuckles back towards the wrist, bent at the second joint
+    for (const u of [2.0, 2.5, 3.0]) { rect(cx(u), kn, 1, 4, dark(skin)); rect(cx(u) + (u < 2.5 ? -1 : u > 2.5 ? 1 : 0), kn + 4, 1, 3, dark(skin)); }
+    rect(cx(1.5), kn, fw * 2, 1, dark(skin));                       // knuckle ridge across the top
+    rect(cx(-0.6), kn + 2, fw * 1.1, 1, dark(skin)); rect(cx(0.5), kn + 2, 1, 5, dark(skin)); // thumb lying across the front, curled down
+    rect(Rh.x, wr - 1, Rh.w, 1, dark(skin));                         // wrist crease
+  }
   rect(R.skin.x, R.skin.y, R.skin.w, R.skin.h, skin);
   // ---- legs (v 0 = hip, 1 = ankle)
   for (const Rl of [R.legL, R.legR]) {
@@ -457,7 +477,7 @@ function paint(g, r, M, R, X) {
     if (legLen > 0) {
       rect(Rl.x, cy(0), Rl.w, cy(legLen) - cy(0), pantsC);
       if (p === 'shorts') rect(Rl.x, cy(legLen) - 2, Rl.w, 2, dark(pantsC));
-      if (p === 'jeans') { rect(cx(-1), cy(0), 1, cy(legLen) - cy(0), light(pantsC)); rect(cx(1), cy(0), 1, cy(legLen) - cy(0), light(pantsC)); poly([[cx(-0.5), cy(0)], [cx(-0.1), cy(0)], [cx(-0.5), cy(0) + 9]], light(pantsC)); rect(cx(1.6), cy(0) + 5, fw * 0.45, 8, light(pantsC)); rect(cx(-2.05), cy(0) + 5, fw * 0.45, 8, light(pantsC)); rect(Rl.x, cy(1), Rl.w, 2, light(pantsC)); }
+      if (p === 'jeans') { rect(cx(-1), cy(0), 1, cy(legLen) - cy(0), light(pantsC)); rect(cx(1), cy(0), 1, cy(legLen) - cy(0), light(pantsC)); poly([[cx(-0.5), cy(0) - 1], [cx(-0.1), cy(0) - 1], [cx(-0.5), cy(0) - 10]], light(pantsC)); rect(cx(1.6), cy(0) - 13, fw * 0.45, 8, light(pantsC)); rect(cx(-2.05), cy(0) - 13, fw * 0.45, 8, light(pantsC)); rect(Rl.x, cy(1), Rl.w, 2, light(pantsC)); }
       if (p === 'slacks') { rect(cx(0), cy(0), 1, cy(1) - cy(0), dark(pantsC)); }
       if (p === 'cargo') { for (const u of [1, -1]) { rect(cx(u) - fw * 0.35, cy(0.3), fw * 0.7, 14, dark(pantsC)); rect(cx(u) - fw * 0.35, cy(0.3), fw * 0.7, 4, shade(pantsC, 0.6)); } }
       if (p === 'sweats') { rect(cx(-1), cy(0), 2, cy(1) - cy(0), '#f0f0f0'); rect(cx(1), cy(0), 2, cy(1) - cy(0), '#f0f0f0'); rect(Rl.x, cy(1), Rl.w, 3, dark(pantsC)); }
@@ -474,7 +494,7 @@ function paint(g, r, M, R, X) {
   {
     const Hd = strip(R.head, 8), { cx, cy, fw } = Hd, Rh = R.head;
     rect(Rh.x, Rh.y, Rh.w, Rh.h, skin);
-    const vBrow = 0.72, vCheek = 0.5, vJaw = 0.22;
+    const vBrow = 0.8, vCheek = 0.5, vJaw = 0.18;
     const st = r.hair;
     if (st !== 'bald') {
       // scalp under the cap / buzz cut: hair colour from the crown down to just above the brow, lower at the back
@@ -515,4 +535,111 @@ function paint(g, r, M, R, X) {
     if (fh === 'stubble') { rect(F.x, F.y + 34, F.w, F.h - 34, mix(skin, hairC, 0.3)); }
     if (['short', 'sidepart', 'bob', 'curly'].includes(r.hair) || (r.hair === 'long' && f)) rect(F.x, F.y, F.w, 2, hairC);
   }
+}
+
+// ---------------------------------------------------------------- mannequin (diet, 2026-11-09)
+// A genderless, unclothed grey base body: no chest, no hip flare. Built only from boxes, the way Legends-era figures
+// are: a chamfered-box torso that tapers to the waist and widens a touch into a pelvis block, four-sided upper arms and
+// forearms, box mitten hands with a thumb wedge, four-sided thighs and shins, oversized box boots-for-feet, the D head.
+// Same skeleton and clips as buildNPC, so it animates and exports the same way.
+const BOXC = [[-0.72, -1], [-1, -0.72], [-1, 0.72], [-0.72, 1], [0.72, 1], [1, 0.72], [1, -0.72], [0.72, -1]]; // torso: box with small chamfers
+// shoulder cap cross-section (y, z): a box with deep chamfers, so it reads round without losing the flat faces
+const CAP8 = [[-0.45, -1], [-1, -0.45], [-1, 0.45], [-0.45, 1], [0.45, 1], [1, 0.45], [1, -0.45], [0.45, -1]];
+export function buildMannequin(opts = {}) {
+  const S = opts.height ? opts.height / 1.75 : 1, grey = opts.color || '#9b9ea3';
+  const M = {
+    S, ankleY: 0.11 * S, kneeY: 0.49 * S, thighY: 0.84 * S, hipsY: 0.87 * S, spineY: 1.02 * S, chestY: 1.2 * S,
+    shoulderY: 1.375 * S, neckY: 1.41 * S, headY: 1.48 * S, headH: 0.3 * S, headW: 0.125 * S, headD: 0.13 * S,
+    armX: 0.205 * S, legX: 0.084 * S,
+  };
+  M.elbowX = M.armX + 0.27 * S; M.wristX = M.elbowX + 0.23 * S; M.handEndX = M.wristX + 0.13 * S; M.height = M.headY + M.headH;
+  const bi = {}; BONES.forEach((n, i) => (bi[n] = i));
+  const W1 = (n) => [[bi[n], 1]], W2 = (a, b, t = 0.5) => [[bi[a], 1 - t], [bi[b], t]];
+  const sh = new Shelf(); const G = sh.add('grey', 16, 16); const R = { grey: G };
+  const bd = new Builder();
+  const ring = (y, w, d, wt, v, z = 0) => ({ c: [0, y * S, z * S], r1: w * S, r2: d * S, w: wt, v });
+  // ---- torso: crotch block, pelvis, waist, ribcage, shoulders, and a sloped top into the neck
+  loft(bd, [
+    ring(0.8, 0.142, 0.096, W1('hips'), 0), ring(0.88, 0.142, 0.098, W1('hips'), 0.15), ring(0.96, 0.136, 0.094, W2('hips', 'spine'), 0.3),
+    ring(1.04, 0.124, 0.088, W1('spine'), 0.45), ring(1.22, 0.175, 0.105, W1('chest'), 0.7), ring(1.36, 0.2, 0.1, W1('chest'), 0.86),
+    ring(1.415, 0.19, 0.088, W1('chest'), 0.95), ring(1.44, 0.08, 0.062, W1('chest'), 1),
+  ], 8, G, { pts: BOXC, capStart: true, capEnd: true });
+  // ---- neck: a short square post
+  loft(bd, [ring(1.4, 0.045, 0.045, W1('neck'), 0), ring(1.53, 0.043, 0.043, W1('head'), 1)], 4, G, { pts: BOX4 });
+  // ---- head: the D profile from the average male, blank (no face painted)
+  const hy = M.headY, H = M.headH, hw = M.headW, hd = M.headD;
+  loft(bd, [
+    { c: [0, hy, hd * 0.12], r1: hw * 0.58, r2: hd * 0.6, w: W1('head'), v: 0 },                    // under the chin, pulled forward so the skull curves in at the back
+    { c: [0, hy + H * 0.07, hd * 0.05], r1: hw * 0.8, r2: hd * 0.85, w: W1('head'), v: 0.07 },
+    { c: [0, hy + H * 0.16, 0], r1: hw * 0.9, r2: hd * 0.97, w: W1('head'), v: 0.16 },
+    { c: [0, hy + H * 0.5, 0], r1: hw, r2: hd, w: W1('head'), v: 0.5 },
+    { c: [0, hy + H * 0.84, 0], r1: hw * 0.96, r2: hd * 0.98, w: W1('head'), v: 0.84 },
+    { c: [0, hy + H, -hd * 0.1], r1: hw * 0.62, r2: hd * 0.64, w: W1('head'), v: 1 },
+  ], 8, G, { pts: D8, capStart: true, capEnd: true });
+  // ---- arms (T-pose along x): square upper arm and forearm that taper to the wrist, a mitten hand and a thumb wedge
+  const xr = (x, y, h, d, wt, v) => ({ c: [x, y, 0], r1: h * S, r2: d * S, w: wt, v });
+  for (const s of [1, -1]) {
+    const L = s > 0 ? '_L' : '_R', y = M.shoulderY - 0.012 * S;
+    // upper arm in ONE piece: it starts inside the shoulder, swells into a round-ish cap (deep chamfers) right over the
+    // joint, then turns into a near-square arm (small chamfers) down to the elbow. No overlapping parts, so no slivers.
+    const cap = (x, h, d, wt, v) => ({ ...xr(x, y, h, d, wt, v), pts: CAP8 }), sq = (x, h, d, wt, v) => ({ ...xr(x, y, h, d, wt, v), pts: BOXC });
+    loft(bd, [
+      cap(s * (M.armX - 0.05 * S), 0.05, 0.06, W2('chest', 'arm' + L, 0.5), 0),
+      cap(s * (M.armX - 0.012 * S), 0.062, 0.066, W1('arm' + L), 0.08),
+      cap(s * (M.armX + 0.03 * S), 0.064, 0.065, W1('arm' + L), 0.14),
+      sq(s * (M.armX + 0.075 * S), 0.056, 0.056, W1('arm' + L), 0.22),
+      sq(s * (M.elbowX + 0.012 * S), 0.046, 0.047, W2('arm' + L, 'forearm' + L, 0.5), 0.5),
+    ], 8, G, { axis: 'x', pts: BOXC, capStart: true });
+    loft(bd, [xr(s * (M.elbowX - 0.005 * S), y, 0.045, 0.046, W2('arm' + L, 'forearm' + L, 0.5), 0.5), xr(s * (M.elbowX + 0.07 * S), y, 0.048, 0.049, W1('forearm' + L), 0.6), xr(s * (M.wristX + 0.005 * S), y, 0.035, 0.038, W1('forearm' + L), 1)], 8, G, { axis: 'x', pts: BOXC, capEnd: true });
+    // hand: a thick mitten, a little wider at the knuckles than at the wrist, the fingertips squared off
+    loft(bd, [xr(s * (M.wristX - 0.008 * S), y - 0.004 * S, 0.038, 0.048, W1('hand' + L), 0), xr(s * (M.wristX + 0.07 * S), y - 0.006 * S, 0.042, 0.058, W1('hand' + L), 0.6), xr(s * (M.handEndX), y - 0.012 * S, 0.03, 0.054, W1('hand' + L), 1)], 4, G, { axis: 'x', pts: BOX4, capStart: true, capEnd: true });
+    const tx = s * (M.wristX + 0.015 * S), w = W1('hand' + L);
+    wedge(bd, [[tx, y + 0.014 * S, 0.046 * S], [tx + s * 0.045 * S, y + 0.014 * S, 0.052 * S], [tx + s * 0.045 * S, y - 0.024 * S, 0.052 * S], [tx, y - 0.024 * S, 0.046 * S]], [tx + s * 0.06 * S, y - 0.01 * S, 0.088 * S], w, G);
+  }
+  // ---- legs: square thighs that taper to a knee block, square shins with a slight calf, rings at the knee to bend
+  for (const s of [1, -1]) {
+    const L = s > 0 ? '_L' : '_R', x = s * M.legX;
+    const yr = (y, w, d, wt, v, z = 0) => ({ c: [x, y * S, z * S], r1: w * S, r2: d * S, w: wt, v });
+    loft(bd, [
+      yr(0.86, 0.05, 0.072, W1('thigh' + L), 0), yr(0.79, 0.052, 0.074, W1('thigh' + L), 0.1), yr(0.72, 0.05, 0.07, W1('thigh' + L), 0.2), yr(0.54, 0.046, 0.056, W1('thigh' + L), 0.4),
+      yr(0.49, 0.048, 0.058, W2('thigh' + L, 'shin' + L), 0.45), yr(0.44, 0.046, 0.054, W1('shin' + L), 0.5),
+      yr(0.34, 0.05, 0.06, W1('shin' + L), 0.62, -0.008), yr(0.16, 0.042, 0.046, W1('shin' + L), 0.9), yr(0.13, 0.042, 0.046, W1('foot' + L), 1),
+    ], 4, G, { pts: BOX4, capStart: true });
+    // foot: an oversized block with the toe sloping down (Legends boots are a third of the shin's length)
+    const fw = 0.14 * S, fh = 0.15 * S, z0 = -0.09 * S, z1 = 0.25 * S, ztoe = 0.1 * S, k = 0.38, wgt = W1('foot' + L), P = G;
+    const Q = (p) => bd.quad(p, [[P.x + 1, P.y + P.h - 1], [P.x + P.w - 1, P.y + P.h - 1], [P.x + P.w - 1, P.y + 1], [P.x + 1, P.y + 1]], [wgt, wgt, wgt, wgt], [x, fh / 2, 0.05 * S]);
+    const xl = x - fw / 2, xrr = x + fw / 2;
+    Q([[xl, 0, z0], [xrr, 0, z0], [xrr, fh, z0], [xl, fh, z0]]); Q([[xl, 0, z1], [xrr, 0, z1], [xrr, fh * k, z1], [xl, fh * k, z1]]);
+    Q([[xl, fh, z0], [xrr, fh, z0], [xrr, fh, ztoe], [xl, fh, ztoe]]); Q([[xl, fh, ztoe], [xrr, fh, ztoe], [xrr, fh * k, z1], [xl, fh * k, z1]]);
+    for (const xs of [xl, xrr]) { Q([[xs, 0, z0], [xs, 0, z1], [xs, fh * k, z1], [xs, fh, ztoe]]); bd.tri([[xs, fh, ztoe], [xs, fh, z0], [xs, 0, z0]], [[P.x + 1, P.y + 1], [P.x + P.w - 1, P.y + 1], [P.x + P.w - 1, P.y + P.h - 1]], [wgt, wgt, wgt], [x, fh / 2, 0.05 * S]); }
+    Q([[xl, 0, z0], [xrr, 0, z0], [xrr, 0, z1], [xl, 0, z1]]);
+  }
+  // ---- texture: one flat grey; the baked tones in the vertex colours do the shading
+  const cv = document.createElement('canvas'); cv.width = cv.height = ATLAS; const g = cv.getContext('2d');
+  g.fillStyle = grey; g.fillRect(0, 0, ATLAS, ATLAS);
+  const tex = new THREE.CanvasTexture(cv); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true });
+  const pos = {
+    hips: [0, M.hipsY, 0], spine: [0, M.spineY, 0], chest: [0, M.chestY, 0], neck: [0, M.neckY, 0], head: [0, M.headY, 0], head_end: [0, M.height, 0],
+    thigh_L: [M.legX, M.thighY, 0], shin_L: [M.legX, M.kneeY, 0], foot_L: [M.legX, M.ankleY, 0], toe_L: [M.legX, 0.02, 0.18 * S],
+    thigh_R: [-M.legX, M.thighY, 0], shin_R: [-M.legX, M.kneeY, 0], foot_R: [-M.legX, M.ankleY, 0], toe_R: [-M.legX, 0.02, 0.18 * S],
+    shoulder_L: [0.06 * S, M.shoulderY, 0], arm_L: [M.armX, M.shoulderY, 0], forearm_L: [M.elbowX, M.shoulderY, 0], hand_L: [M.wristX, M.shoulderY, 0], hand_end_L: [M.handEndX, M.shoulderY, 0],
+    shoulder_R: [-0.06 * S, M.shoulderY, 0], arm_R: [-M.armX, M.shoulderY, 0], forearm_R: [-M.elbowX, M.shoulderY, 0], hand_R: [-M.wristX, M.shoulderY, 0], hand_end_R: [-M.handEndX, M.shoulderY, 0],
+  };
+  const bones = BONES.map((n) => { const b = new THREE.Bone(); b.name = n; return b; });
+  BONES.forEach((n, i) => { const p = PARENT[n]; const pp = p ? pos[p] : [0, 0, 0]; bones[i].position.set(pos[n][0] - pp[0], pos[n][1] - pp[1], pos[n][2] - pp[2]); if (p) bones[bi[p]].add(bones[i]); });
+  const mesh = new THREE.SkinnedMesh(bd.geometry(), mat); mesh.name = 'Mannequin'; mesh.frustumCulled = false;
+  const root = new THREE.Group(); root.name = opts.name || 'mannequin';
+  root.add(mesh); mesh.add(bones[0]); root.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton(bones));
+  const clips = makeClips(M.hipsY), mixer = new THREE.AnimationMixer(root), actions = {}; clips.forEach((c) => (actions[c.name] = mixer.clipAction(c)));
+  let cur = null;
+  const npc = {
+    root, mesh, bones, clips, mixer, texture: tex, recipe: { kind: 'mannequin', ...opts }, height: M.height, tris: bd.tris, R,
+    play(name, fade = 0.15) { const a = actions[name]; if (!a || a === cur) return; a.reset().play(); if (cur) cur.crossFadeTo(a, fade, false); else a.setEffectiveWeight(1); cur = a; },
+    update(dt) { mixer.update(dt); },
+    dispose() { mesh.geometry.dispose(); mat.dispose(); tex.dispose(); },
+  };
+  root.userData.npc = npc; npc.R = R;
+  return npc;
 }

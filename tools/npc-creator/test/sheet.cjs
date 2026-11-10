@@ -8,7 +8,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   page.on('pageerror', (e) => console.error('pageerror', e.message)); page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('console', m.text()); });
   await page.setContent('<!doctype html><body></body>');
   await page.addScriptTag({ content: bundle });
-  const res = await page.evaluate(({ what, clip, time, focus }) => {
+  const res = await page.evaluate(({ what, clip, time, focus, VIEWS }) => {
     let recipes;
     const D = window.defaultRecipe;
     if (what === 'builds') recipes = [D('male'), { ...D('male'), build: 'built', name: 'built' }, { ...D('male'), build: 'skinny', name: 'skinny' }, { ...D('male'), build: 'fat', name: 'fat' }, D('female'), { ...D('female'), build: 'skinny', name: 'f skinny' }, { ...D('female'), build: 'fat', name: 'f fat' }];
@@ -17,9 +17,9 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
     else if (what === 'faces') recipes = ['oval', 'round', 'square', 'long', 'heart'].map((f) => ({ ...D('male'), face: f, name: f, hair: 'buzz' })).concat(['button', 'small', 'pointed', 'big', 'wide', 'hooked'].map((n) => ({ ...D('female'), nose: n, name: n, hair: 'bun' })));
     else if (what === 'outfits') recipes = [['tee', 'jeans', 'none'], ['longsleeve', 'slacks', 'none'], ['polo', 'shorts', 'none'], ['tank', 'cargo', 'none'], ['buttonup', 'sweats', 'none'], ['hoodie', 'jeans', 'none'], ['tee', 'jeans', 'open'], ['tee', 'slacks', 'zip'], ['buttonup', 'slacks', 'blazer'], ['buttonup', 'jeans', 'vest'], ['tee', 'jeans', 'coat'], ['tee', 'skirt', 'none']].map(([s, p, j]) => ({ ...D(p === 'skirt' ? 'female' : 'male'), shirt: s, pants: p, jacket: j, name: s + '/' + p + '/' + j, jacketColor: '#7f6a4f' }));
     else recipes = JSON.parse(what);
-    window.renderSheet(recipes, { focus, clip, time: time ? +time : undefined, cell: 260, views: recipes.length > 6 ? [[0, 0, 1], [0.6, 0.35, 0.75]] : undefined });
+    window.renderSheet(recipes, { focus, clip, time: time ? +time : undefined, cell: 260, views: VIEWS || (recipes.length > 6 ? [[0, 0, 1], [0.6, 0.35, 0.75]] : undefined) });
     return { sheet: window.sheet, info: window.info, atlas: window.atlas };
-  }, { what, clip, time, focus });
+  }, { what, clip, time, focus, VIEWS: process.env.VIEWS ? JSON.parse(process.env.VIEWS) : null });
   fs.writeFileSync(out, Buffer.from(res.sheet.split(',')[1], 'base64'));
   fs.writeFileSync(out.replace(/\.png$/, '-atlas.png'), Buffer.from(res.atlas.split(',')[1], 'base64'));
   console.log(JSON.stringify(res.info)); await browser.close();

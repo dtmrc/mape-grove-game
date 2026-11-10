@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { buildNPC, randomRecipe, defaultRecipe } from '../../../src/js/npcgen.js';
+import { buildNPC as buildNPC0, buildMannequin, randomRecipe, defaultRecipe } from '../src/npcgen.js';
+const buildNPC = (rec) => { const n = rec && rec.kind === 'mannequin' ? buildMannequin(rec) : buildNPC0(rec); if (rec && rec.wire) n.mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(n.mesh.geometry, 10), new THREE.LineBasicMaterial({ color: 0x202428 }))); return n; };
 const r = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 document.body.style.margin = 0; document.body.appendChild(r.domElement);
 window.renderSheet = (recipes, opts = {}) => {
@@ -9,14 +10,14 @@ window.renderSheet = (recipes, opts = {}) => {
   ctx.fillStyle = '#4a5568'; ctx.fillRect(0, 0, W, Hh);
   r.setSize(cell, Hh);
   const scene = new THREE.Scene();
-  const Z = opts.focus === 'head' ? 0.28 : opts.focus === 'hips' ? 0.32 : 0.6, cy0 = opts.focus === 'head' ? 1.6 : opts.focus === 'hips' ? 0.95 : 0.9;
+  const Z = opts.focus === 'head' ? 0.28 : opts.focus === 'hips' ? 0.32 : opts.focus === 'hand' ? 0.13 : opts.focus === 'wide' ? 1.0 : opts.focus === 'shoulder' ? 0.16 : 0.6, cy0 = opts.focus === 'shoulder' ? 1.3 : opts.focus === 'head' ? 1.6 : opts.focus === 'hips' ? 0.95 : opts.focus === 'hand' ? 1.36 : 0.9, cx0 = opts.focus === 'hand' ? 0.8 : opts.focus === 'shoulder' ? 0.19 : 0;
   const cam = new THREE.OrthographicCamera(-Z, Z, Z * 1.6, -Z * 1.6, 0.1, 50);
   const info = [];
   recipes.forEach((rec, i) => {
     const npc = buildNPC(rec); scene.add(npc.root);
-    if (opts.clip) { npc.play(opts.clip); npc.update(opts.time ?? 0.4); } else if (opts.idle !== false) { npc.play('Idle'); npc.update(0.01); }
+    if (opts.clip === 'T') { /* bind pose */ } else if (opts.clip) { npc.play(opts.clip); npc.update(opts.time ?? 0.4); } else if (opts.idle !== false) { npc.play('Idle'); npc.update(0.01); }
     npc.root.updateMatrixWorld(true);
-    views.forEach((v, k) => { cam.position.set(v[0] * 10, cy0 + v[1] * 10, v[2] * 10); cam.lookAt(0, cy0, 0); r.render(scene, cam); ctx.drawImage(r.domElement, (i * views.length + k) * cell, 0); });
+    views.forEach((v, k) => { cam.position.set(cx0 + v[0] * 10, cy0 + v[1] * 10, v[2] * 10); cam.lookAt(cx0, cy0, 0); r.render(scene, cam); ctx.drawImage(r.domElement, (i * views.length + k) * cell, 0); });
     info.push({ name: rec.name || rec.sex + '/' + rec.build, tris: npc.tris, height: +npc.height.toFixed(2) });
     scene.remove(npc.root);
   });
