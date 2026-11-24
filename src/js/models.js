@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import RV_GLB from '../models/rv.glb';
+import GOOBTRUCK_BODY_GLB from '../models/goobtruck-body.glb';
+import GOOBTRUCK_WHEEL_GLB from '../models/goobtruck-wheel.glb';
 import { mat, lambert, phong, basic, faceTex } from './gfx.js';
 import { TUBE_FACE_PNG } from './tubeface.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -370,6 +372,9 @@ export const CAR_TYPES = {
   wagon: { len: 4.8, wid: 1.9, h: 0.64, hood: 1.15, trunk: 0.15, ch: 0.62, rake: 0.55, rrake: 0.12, top: 27, acc: 9, grip: 6, mass: 1.1 },
   pickup: { len: 5.0, wid: 2.0, h: 0.82, hood: 1.35, trunk: 2.1, ch: 0.7, rake: 0.45, rrake: 0.06, top: 29, acc: 10, grip: 5.5, mass: 1.3, bed: true },
   suv: { len: 4.7, wid: 2.0, h: 0.86, hood: 1.0, trunk: 0.15, ch: 0.72, rake: 0.5, rrake: 0.1, top: 35, acc: 13, grip: 6.5, mass: 1.4 },
+  // Goobles' truck: 1999 Ironside F-15 Prairie half-cab, Tracebench model (tools/tracebench/models/vehicles/goobtruck, MODE=body / MODE=wheel builds)
+  goobtruck: { len: 5.61, wid: 1.99, h: 0.9, top: 31, acc: 10.5, grip: 5.8, mass: 1.35, bed: true, glb: { wr: 0.385, wx: 0.85, axles: [1.985, -1.535], roofY: 1.84, roofZ: 0.0,
+    glows: [[0.6, 0.93, 2.95, 0xfff0c8, 1.7], [-0.6, 0.93, 2.95, 0xfff0c8, 1.7], [0.95, 1.08, -2.95, 0xff2020, 0.9], [-0.95, 1.08, -2.95, 0xff2020, 0.9]] } },
   golfcart: { len: 2.6, wid: 1.3, h: 0.5, top: 17, acc: 8, grip: 8, mass: 0.6, cart: true },
 };
 
@@ -465,6 +470,7 @@ function labelGeo(S) {
 }
 
 export function makeCar(type, color, o = {}) {
+  if (CAR_TYPES[type].glb) return makeGlbCar(type, color, o);
   const S = CAR_TYPES[type], M = carMats(), B = carBody(type);
   const root = new THREE.Group();
   const body = pivot(root, 0, 0, 0);
@@ -497,6 +503,55 @@ export function makeCar(type, color, o = {}) {
   root.userData = { body, wheels, bar, wr, spec: S, paint, glows: B.glows };
   return root;
 }
+// Tracebench vehicles: a body GLB (no wheels) + one wheel GLB (outer face +X, mirrored for the left side), both baked-light
+// unlit exports swapped to Lambert like the RV. Same userData contract as makeCar. The paint texture already carries the
+// colour, so `paint` is a white tint (a repaint multiplies into it).
+const glbCache = new Map();
+function parseGlb(bin, done) {
+  if (glbCache.has(bin)) { const c = glbCache.get(bin); if (c.scene) done(c.scene); else c.wait.push(done); return; }
+  const c = { scene: null, wait: [done] }; glbCache.set(bin, c);
+  new GLTFLoader().parse(bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength), '', (gltf) => {
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const map = o.material.map || null;
+      if (map) { map.magFilter = map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; map.needsUpdate = true; }
+      o.material = new THREE.MeshLambertMaterial({ map, color: map ? 0xffffff : o.material.color });
+      o.castShadow = o.receiveShadow = false;
+    });
+    c.scene = gltf.scene; for (const f of c.wait) f(c.scene); c.wait.length = 0;
+  }, (e) => console.warn('vehicle model failed to load', e));
+}
+const GLB_SRC = { goobtruck: [GOOBTRUCK_BODY_GLB, GOOBTRUCK_WHEEL_GLB] };
+function makeGlbCar(type, color, o = {}) {
+  const S = CAR_TYPES[type], G = S.glb, [bodyBin, wheelBin] = GLB_SRC[type];
+  const root = new THREE.Group();
+  const body = pivot(root, 0, 0, 0);
+  const paint = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  parseGlb(bodyBin, (sc) => {
+    const b = sc.clone();
+    b.traverse((m) => { if (m.isMesh && m.name === 'Paint') { paint.map = m.material.map; paint.needsUpdate = true; m.material = paint; } });
+    body.add(b); b.updateMatrixWorld(true);
+  });
+  let bar = null;
+  if (o.lightbar) {
+    if (!barGeo) { const a = box(0.45, 0.12, 0.25).toNonIndexed(), c = box(0.45, 0.12, 0.25).toNonIndexed(); a.translate(-0.25, 0, 0); c.translate(0.25, 0, 0); barGeo = mergeGeometries([a, c], true); }
+    bar = [basic({ color: 0xff8a00 }), basic({ color: 0x3070ff })];
+    m(barGeo, bar, 0, G.roofY + 0.08, G.roofZ, body);
+  }
+  const wheels = [];
+  for (const z of G.axles) for (const s of [1, -1]) {
+    const pv = pivot(root, s * G.wx, G.wr, z), spin = new THREE.Group();
+    pv.add(spin); wheels.push(pv);
+    parseGlb(wheelBin, (sc) => { const w = sc.clone(); if (s < 0) w.scale.x = -1; spin.add(w); });
+  }
+  // makeCar order: [FL, FR, RL, RR] with the first two steering
+  addShadow(root, S.wid + 1.0, S.len + 1.0);
+  { const sh = root.children[root.children.length - 1]; sh.updateMatrix(); sh.matrixAutoUpdate = false; }
+  const glows = G.glows.map(([x, y, z, c, s]) => ({ x, y, z, c, s }));
+  root.userData = { body, wheels, bar, wr: G.wr, spec: S, paint, glows };
+  return root;
+}
+
 // Goobles' travel trailer, built in Tracebench from diet's photo (tools/tracebench/models/rv, script scripts/rv-build.cjs) and
 // embedded at build time. Same footprint as the old code-built RV (2.5 x 8.5 m, origin on the ground under the middle) and the
 // entry door is still at local (+1.27, -1.8) facing +X, so the interiors/door code is unchanged. The GLB arrives unlit with the

@@ -3,7 +3,7 @@
 // (window.__G.spawnCar / districtAt / hurt / addCash come from tools/devcheats-hooks.mjs).
 // F4 toggles the panel; on touch, the CHEATS button. F2 / F3 / ` stay the world editor and time menu.
 (() => {
-  const CAR_TYPES = ['sedan', 'hatch', 'wagon', 'pickup', 'suv', 'golfcart'];
+  const CAR_TYPES = ['sedan', 'hatch', 'wagon', 'pickup', 'suv', 'golfcart', 'goobtruck'];
   const SPOTS = [
     ['RV (home)', 'spawn'], ['Nana', 'nana'], ['Gary', 'gary'], ['Quik Stop', 'quik'], ['Car wash', 'wash'], ['Donut Hole', 'donut'],
     ['Town green', 'green'], ['Park', 'park'], ['Police station', 'station'], ['Church', 'church'], ['Crypt', 'crypt'],

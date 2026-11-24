@@ -1112,6 +1112,8 @@ function buildNanaAndRV(scene) {
   lights.push({ x: lx + 2, y: 2.4, z: lz + 1.5, c: 0xffc070, i: 1.1, always: true });
   for (let k = 0; k < 7; k++) halos.push({ x: lx + 1.8 + Math.sin(k) * 0.2, y: 2.9 - Math.sin(k / 6 * Math.PI) * 0.3, z: lz - 2.5 + k * 1.0, s: 0.6, c: [0xff6060, 0xffd060, 0x60ff80, 0x60a0ff][k % 4] });
   places.spawn = { x: lx + 4, z: lz - 2 };
+  places.goobTruck = { x: lx + 2, z: lz + 5.6, yaw: Math.PI / 2 };   // Goobles' truck: parked south of the trailer, nose toward the dirt road
+
   // the HOA's notice, nailed to a post
   F.box(7, 0.8, 7, 0.1, 1.6, 0.1, 'wood', 0xffffff); F.post(7, 7, 0.1, 1.6); F.face(7, 1.3, 7.06, 0.6, 0.9, 'posterHoa', 0xffffff);
   // hand-painted sign at the trail head into the woods

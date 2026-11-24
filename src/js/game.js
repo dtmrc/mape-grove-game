@@ -261,7 +261,7 @@ if (SV && SV.x !== undefined && !SV.inside && Math.abs(+SV.x) < LIMIT && Math.ab
 const cars = [];
 const TC = makeTraffic({ scene, NODES, ADJ, cars, heightAt: TER.heightAt, G, isPath: RD.isPath, onRoads: RD.onRoads }); // driving: traffic control (traffic.js)
 const CP = makeCarPhys({ scene, puff, heightAt: TER.heightAt, nearestRoad: RD.nearestRoad, edges: () => CP_EDGES, nodes: NODES, Sfx }); // driving: GTA IV style handling (carphys.js)
-const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway' };
+const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway', goobtruck: 'F-15 Prairie' };
 const PAINT = [0xc0392b, 0x2e6fbf, 0xe8e8e8, 0x2a2a2e, 0x3a8f5a, 0xe0b030, 0x8e5bb0, 0xa04020, 0x6a8090, 0xd86a9a];
 function spawnCar(type, x, z, yaw, o = {}) {
   const color = o.color ?? PAINT[(Math.random() * PAINT.length) | 0];
@@ -357,6 +357,9 @@ for (let k = 0; k < 9; k++) {
   spawnCar(['sedan', 'hatch', 'pickup', 'wagon', 'sedan'][k % 5], d.x, d.z, d.ry, {});
 }
 spawnCar('golfcart', places.hoaLot.x - 3, places.hoaLot.z, 0, { color: 0xffffff, canopy: 0x1e2a44, lightbar: true });
+// Goobles' own truck, parked on the RV lot (role 'goob': never culled, no heat for taking it; respawns there if wrecked and you are away)
+const goobTruck = () => spawnCar('goobtruck', places.goobTruck.x, places.goobTruck.z, places.goobTruck.yaw, { color: 0xffffff, role: 'goob', fuel: 100, hp: 140 });
+goobTruck();
 for (let k = 0; k < 20; k++) spawnPed({});
 // park raccoons
 for (let k = 0; k < 4; k++) {
@@ -1439,6 +1442,7 @@ function updateCars(dt) {
   // keep traffic topped up, clear wrecks far away
   let ai = 0, walkers = 0;
   for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90) || (c.driver === 'ai' && !c.role && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
+  if (!cars.some((c) => c.role === 'goob' && !c.dead) && Math.hypot(places.goobTruck.x - px(), places.goobTruck.z - pz()) > 80 && !cars.some((c) => Math.hypot(c.x - places.goobTruck.x, c.z - places.goobTruck.z) < 4)) goobTruck();
   if (ai < 12 && Math.random() < dt) spawnTraffic(['sedan', 'hatch', 'pickup', 'wagon'][(Math.random() * 4) | 0]);
   for (let i = 0; i < peds.length; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human') walkers++; }
   if (walkers < 20 && Math.random() < dt * 0.5) spawnPed({});
