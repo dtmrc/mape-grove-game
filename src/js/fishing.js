@@ -36,6 +36,11 @@ const FISH = {
   raccoon:  { name: 'Raccoon Meat',    w: [2, 4],      food: 55, hp: 20, sell: 10, col: 0xb06a5a, meat: true },
 };
 
+// Hunger / BELLY meter switch (diet 2026-11-24: "disable the hunger system for now").
+// false = no belly drain, no starving, no food poisoning, meter hidden; food still heals HP where it did before.
+// Set true to bring the whole system back exactly as it was. Runtime override for testing: localStorage 'mg-hunger' = '1' / '0'.
+export const HUNGER_ENABLED = (() => { try { const v = localStorage.getItem('mg-hunger'); if (v === '1') return true; if (v === '0') return false; } catch (e) { /* storage blocked */ } return false; })();
+
 export function makeFishing(ctx) {
   const { scene, G, P, cat, say, toast, banner, objective, addCash, setCheck, clearCheck, hit, down, isTouch, puff, Sfx, T, mission, peds, knockedOut, $ } = ctx;
   const S = { hunger: 55, sick: 0, gear: {}, bag: [], quest: 'none', hat: false, wearHat: false, bagOpen: null, sel: 0, fish: { st: 'idle' }, cook: null, fire: { lit: false, t: 0 }, skin: null, eat: 0, starveT: 0, regenT: 0, lastObj: '', spawnT: 0 };
@@ -95,6 +100,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
   const tr = $('tr'), hp = $('hp');
   const belly = document.createElement('div'); belly.id = 'belly'; belly.innerHTML = '<div id="bellyfill"></div><span id="bellytag"></span>';
   hp.insertAdjacentElement('afterend', belly);
+  if (!HUNGER_ENABLED) belly.style.display = 'none';
   const bellyFill = belly.firstChild, bellyTag = belly.lastChild;
   const hud = $('hud');
   const ui = document.createElement('div'); ui.id = 'fishui'; hud.appendChild(ui);
@@ -225,13 +231,14 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
     const sp = FISH[f.id]; S.eat = 1.4; Sfx.pickup();
     if (f.st === 'raw') {
       feed(foodOf(f));
-      if (Math.random() < (sp.meat ? 0.9 : 0.7)) { S.sick = Math.max(S.sick, 50); toast(sp.meat ? 'Raw raccoon. Bold. You feel... wrong.' : 'Raw fish. Your stomach files a complaint.', 4); }
+      if (HUNGER_ENABLED && Math.random() < (sp.meat ? 0.9 : 0.7)) { S.sick = Math.max(S.sick, 50); toast(sp.meat ? 'Raw raccoon. Bold. You feel... wrong.' : 'Raw fish. Your stomach files a complaint.', 4); }
       else toast('Raw, slimy, technically food.');
     } else if (f.st === 'burnt') { feed(foodOf(f)); toast('Tastes like a campfire. Barely counts.'); }
     else { feed(foodOf(f)); G.hp = Math.min(100, G.hp + sp.hp); toast(`${sp.name}, cooked right. +${foodOf(f)} belly, +${sp.hp} health.`, 4); if (S.quest === 'eat') finishQuest(); }
     save();
   }
   function updateBelly(dt) {
+    if (!HUNGER_ENABLED) { S.sick = 0; return; }
     const rate = (S.sick > 0 ? 0.45 : 0.11) * dt;    // full to empty in ~15 real minutes
     S.hunger = clamp(S.hunger - rate, 0, 100);
     if (S.sick > 0) { S.sick -= dt; if (Math.random() < dt * 1.2) puff('smoke', P.x + rnd(-0.2, 0.2), 0.5, P.z + rnd(-0.2, 0.2), 0, 0.6, 0, 0.35, 0.8); if ((S.regenT += dt) > 3) { S.regenT = 0; G.hp = Math.max(1, G.hp - 2); } if (S.sick <= 0) toast('You feel better. Cook your food next time.'); }
@@ -413,7 +420,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
   }
 
   return {
-    S, give, feed, menu, closeMenu, countFish, removeFish, FISH,
+    S, give, feed, menu, HUNGER_ENABLED, closeMenu, countFish, removeFish, FISH,
     // true while the player is busy (fishing, skinning, eating, menu open): game.js skips its own movement code
     hold(dt) {
       if (S.bagOpen) { animBiped(cat, 0, 0, G.time); return true; }
