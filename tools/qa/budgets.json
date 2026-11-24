@@ -1,0 +1,11 @@
+{
+  "note": "Per-spot worst-of-4-yaws budgets for qa test perf. Measured 2026-11-22 on the 290 m town; raise only with a reason.",
+  "heapMB": 400,
+  "spots": {
+    "spawn": { "drawCalls": 900, "glTris": 900000 },
+    "green": { "drawCalls": 900, "glTris": 900000 },
+    "quik": { "drawCalls": 900, "glTris": 900000 },
+    "school": { "drawCalls": 900, "glTris": 900000 },
+    "dock": { "drawCalls": 900, "glTris": 900000 }
+  }
+}
