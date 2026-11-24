@@ -65,7 +65,7 @@ const path = require('path');
   const d5 = await ev(() => { const F = window.__G.fishing, G = window.__G.G; F.S.hunger = 10; G.hp = 50; const a = window.__G.shops.use('nana', 'casserole'); const h1 = F.S.hunger, hp1 = G.hp; const b = window.__G.shops.use('nana', 'casserole'); return { a, b, h1, hp1, h2: F.S.hunger, toast: document.getElementById('toast').textContent }; });
   check('casserole: +60 belly +30 hp once per day', d5.a && d5.b && d5.h1 === 70 && d5.hp1 === 80 && d5.h2 === 70 && /Tomorrow/.test(d5.toast), JSON.stringify(d5));
 
-  // ---------- 3. Suds N Paws repair / respray at 0 stars ----------
+  // ---------- 3. Suds N Paws repair at 0 stars ----------
   await onFoot();
   await ev(() => { const W = window.__G, G = W.G; const c = W.cars.find((q) => !q.driver && !q.dead && !q.role); W.enterCar(c, true); c.x = W.places.wash.x; c.z = W.places.wash.z; c.vx = c.vz = c.speed = 0; c.hp = 40; G.heat = 0; G.cash = 100; W.P.lock = 0; });
   await step(2);
@@ -74,13 +74,10 @@ const path = require('path');
   await page.keyboard.press('e'); await step(2);
   const w2 = await ev(() => ({ inCar: !!window.__G.P.car, hp: window.__G.P.car && window.__G.P.car.hp, cash: window.__G.G.cash }));
   check('E repairs to 100 for $30 and stays in the car', w2.inCar && w2.hp === 100 && w2.cash === 70, JSON.stringify(w2));
-  const col0 = await ev(() => window.__G.P.car.mesh.userData.paint.color.getHex());
+  // resprays were removed (2026-11-24): a healthy car gets no offer and E just gets out
   let w3 = '';
-  for (let i = 0; i < 8 && !/Respray/.test(w3); i++) { await ev(() => { window.__G.shops.S.washT = 0; }); await step(1); w3 = await ev(() => document.getElementById('toast').textContent); }
-  check('full hp offers Respray $20', /Respray \$20/.test(w3), w3);
-  await page.keyboard.press('e'); await step(2);
-  const w4 = await ev(() => ({ col: window.__G.P.car.mesh.userData.paint.color.getHex(), cash: window.__G.G.cash, inCar: !!window.__G.P.car }));
-  check('E resprays (paint colour changes) for $20', w4.inCar && w4.col !== col0 && w4.cash === 50, JSON.stringify(w4));
+  for (let i = 0; i < 4; i++) { await ev(() => { window.__G.shops.S.washT = 0; document.getElementById('toast').textContent = ''; }); await step(1); w3 += await ev(() => document.getElementById('toast').textContent); }
+  check('full hp: no Suds N Paws offer (no resprays)', !/Respray|E = Repair/.test(w3), w3);
   await ev(() => { const c = window.__G.P.car; c.x = window.__G.places.rv.x + 12; c.z = window.__G.places.rv.z + 12; });
   await step(1); await page.keyboard.press('e'); await step(2);
   check('E outside the bay exits the car', !(await ev(() => !!window.__G.P.car)));

@@ -1,13 +1,12 @@
 // Shops and food for Maple Grove: Off Leash (plan M3 + M7): things to spend cash on, every food hotspot feeds the BELLY meter.
 // Quik Stop counter and Rosie's "the usual" open a menu in the fishing shop's look (fishing.menu); the RV kibble bowl, the
 // RV bed and Nana's casserole are handled on the interiors 'interact' event (returning true replaces the flavour toast);
-// Suds N Paws repairs or resprays the car you drive in with at 0 stars (E while in the wash bay; the heat branch in
+// Suds N Paws repairs a damaged car you drive in with at 0 stars (no resprays since 2026-11-24) (E while in the wash bay; the heat branch in
 // game.js updateHeat still clears stars for free). Wired by game.js: makeShops(...) + shops.update(dt) before updatePlayer.
 // Debug: window.__G.shops.buy('quik', 'tuna'), .use('rv', 'bowl'), .S
 import * as INTR from './interiors.js';
 import { inZone } from './world.js';
 
-const PAINT = [0xc0392b, 0x2e6fbf, 0xe8e8e8, 0x2a2a2e, 0x3a8f5a, 0xe0b030, 0x8e5bb0, 0xa04020, 0x6a8090, 0xd86a9a, 0xff7a00, 0x20c0c0];
 const HOUR = 60;   // real seconds per game hour (game.js: one game hour per real minute)
 const MENUS = {
   quik: {
@@ -93,26 +92,18 @@ export function makeShops(A) {
   }
   INTR.on('interact', (room, spot) => use(room, spot));
 
-  // ---------- Suds N Paws: repair / respray at 0 stars ----------
+  // ---------- Suds N Paws: repair at 0 stars ----------
   function wash(dt) {
     const c = P.car;
     const m = A.mission && A.mission();
-    if (!c || c.dead || G.heat > 0 || (m && m.id === 'gary') || !inZone('wash', c.x, c.z)) { S.washT = 0; return; }
-    const repair = c.hp < 100, price = repair ? 30 : 20, label = repair ? 'Repair $30' : 'Respray $20';
+    if (!c || c.dead || c.hp >= 100 || G.heat > 0 || (m && m.id === 'gary') || !inZone('wash', c.x, c.z)) { S.washT = 0; return; }
+    const price = 30, label = 'Repair $30';
     if ((S.washT -= dt) <= 0) { S.washT = 2.5; toast(`Suds N Paws: E = ${label}${G.cash < price ? ' (need $' + price + ')' : ''}`, 2.6); }
     if (hit('e', 'f', 'enter') && !(P.lock > 0) && G.cash >= price) {
       pressed.delete('e'); pressed.delete('f'); pressed.delete('enter');   // not an exit
       addCash(-price); Sfx.pickup(); S.washT = 0.1;
-      if (repair) { c.hp = 100; c.fire = 0; toast('Suds N Paws: buffed, bolted, good as new. -$30', 3); }
-      else respray(c);
+      c.hp = 100; c.fire = 0; toast('Suds N Paws: buffed, bolted, good as new. -$30', 3);
     }
-  }
-  function respray(c) {
-    const pm = c.mesh.userData.paint; if (!pm || !pm.color) { toast('Suds N Paws: "We don\'t do... whatever that is."'); return false; }
-    const cur = pm.color.getHex(), i = PAINT.indexOf(cur), col = PAINT[(i + 1) % PAINT.length];
-    pm.color.setHex(col); c.paint = col;
-    for (const q of c.mesh.userData.paintMats || []) if (q && q.color) q.color.setHex(col);   // merged copies, when a build has them
-    toast('Suds N Paws: fresh coat. The HOA will never recognise it. -$20', 3); return true;
   }
 
   function update(dt) {
@@ -127,5 +118,5 @@ export function makeShops(A) {
     }
   }
 
-  return { S, update, use, buy, openShop, respray, MENUS };
+  return { S, update, use, buy, openShop, MENUS };
 }

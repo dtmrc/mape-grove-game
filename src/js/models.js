@@ -505,7 +505,7 @@ export function makeCar(type, color, o = {}) {
 }
 // Tracebench vehicles: a body GLB (no wheels) + one wheel GLB (outer face +X, mirrored for the left side), both baked-light
 // unlit exports swapped to Lambert like the RV. Same userData contract as makeCar. The paint texture already carries the
-// colour, so `paint` is a white tint (a repaint multiplies into it).
+// colour, so `paint` is a white tint.
 const glbCache = new Map();
 function parseGlb(bin, done) {
   if (glbCache.has(bin)) { const c = glbCache.get(bin); if (c.scene) done(c.scene); else c.wait.push(done); return; }

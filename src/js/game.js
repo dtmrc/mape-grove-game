@@ -1406,7 +1406,7 @@ function updateHeat(dt) {
     // patrols go home: far ones vanish, near ones turn back into traffic
     for (const c of patrolList) { if (Math.hypot(c.x - px(), c.z - pz()) > 70) removeCar(c); else if (Math.random() < dt * 0.3) retirePatrol(c); }
     patrolList = patrols();
-    // Suds N Paws repair / respray at 0 stars lives in shops.js (E in the wash bay)
+    // Suds N Paws repair at 0 stars lives in shops.js (E in the wash bay)
   }
   if (P.car && inZone('wash', P.car.x, P.car.z) && Math.random() < 0.6) puff('foam', P.car.x + (Math.random() - 0.5) * 3, 1 + Math.random() * 2, P.car.z + (Math.random() - 0.5) * 2, 0, 0.5, 0, 0.5, 0.8);
   const sk = G.heat * 2 + (G.seenT < 1.5 ? 1 : 0); // P10: rebuild the star bar only when heat or the flash state changes
