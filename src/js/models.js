@@ -373,8 +373,8 @@ export const CAR_TYPES = {
   pickup: { len: 5.0, wid: 2.0, h: 0.82, hood: 1.35, trunk: 2.1, ch: 0.7, rake: 0.45, rrake: 0.06, top: 29, acc: 10, grip: 5.5, mass: 1.3, bed: true },
   suv: { len: 4.7, wid: 2.0, h: 0.86, hood: 1.0, trunk: 0.15, ch: 0.72, rake: 0.5, rrake: 0.1, top: 35, acc: 13, grip: 6.5, mass: 1.4 },
   // Goobles' truck: 1999 Ironside F-15 Prairie half-cab, Tracebench model (tools/tracebench/models/vehicles/goobtruck, MODE=body / MODE=wheel builds)
-  goobtruck: { len: 5.61, wid: 1.99, h: 0.9, top: 31, acc: 10.5, grip: 5.8, mass: 1.35, bed: true, glb: { wr: 0.385, wx: 0.85, axles: [1.985, -1.535], roofY: 1.84, roofZ: 0.0,
-    glows: [[0.6, 0.93, 2.95, 0xfff0c8, 1.7], [-0.6, 0.93, 2.95, 0xfff0c8, 1.7], [0.95, 1.08, -2.95, 0xff2020, 0.9], [-0.95, 1.08, -2.95, 0xff2020, 0.9]] } },
+  goobtruck: { len: 5.61, wid: 1.99, h: 0.95, top: 31, acc: 10.5, grip: 5.8, mass: 1.35, bed: true, glb: { wr: 0.39, wx: 0.85, axles: [1.99, -1.62], roofY: 1.89, roofZ: 0.15,
+    glows: [[0.65, 1.02, 2.95, 0xfff0c8, 1.7], [-0.65, 1.02, 2.95, 0xfff0c8, 1.7], [0.95, 1.16, -2.95, 0xff2020, 0.9], [-0.95, 1.16, -2.95, 0xff2020, 0.9]] } },
   golfcart: { len: 2.6, wid: 1.3, h: 0.5, top: 17, acc: 8, grip: 8, mass: 0.6, cart: true },
 };
 
