@@ -2,7 +2,7 @@
 module.exports = {
   name: 'driving', desc: 'every car type spawns, drives, steers, brakes; get in/out',
   async run({ S, check, shot }) {
-    const types = ['sedan', 'hatch', 'wagon', 'pickup', 'suv', 'golfcart'];
+    const types = ['sedan', 'hatch', 'wagon', 'pickup', 'suv', 'golfcart', 'goobtruck'];
     for (const t of types) {
       const r = await S.js(async ([t]) => {
         const QA = window.QA, G = window.__G;
