@@ -930,6 +930,8 @@ function respawn(title, sub, at) {
 
 function updatePlayer(dt) {
   P.invuln -= dt; P.lock -= dt;
+  // a respawn, arrest or jail hand-off can zero P.down mid-tumble: stand the cat back up instead of leaving him flat
+  if (P.lying && !(P.down > 0)) { P.lying = false; cat.userData.body.rotation.x = 0; }
   if (police.holdPlayer(dt)) return; // police
   let mx = 0, mz = 0;
   if (down('w', 'arrowup')) mz += 1;
@@ -949,7 +951,7 @@ function updatePlayer(dt) {
     return;
   }
   if (P.down > 0) {
-    P.down -= dt;
+    P.down -= dt; P.lying = true;
     cat.userData.body.rotation.x = -Math.PI / 2 * Math.min(1, P.down * 3); cat.userData.body.position.y = 0.08;
     if (P.down <= 0) cat.userData.body.rotation.x = 0;
     return;
