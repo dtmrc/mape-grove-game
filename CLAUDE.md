@@ -33,5 +33,5 @@ Run the full test suite before pushing to main. While fixing a failure, re-run o
 
 - `src/js/` game code (`game.js` main loop, `world.js` map, one file per system), `src/models/` binary assets
 - `tools/` build hooks, QA tool (`tools/qa/`), map and model tooling
-- `world/` snapshot of the saved world documents
+- `world-old-map/` saved world documents (terrain sculpt, ground paint, editor edits) from the live game as of 2026-11-09, made on the old 290 m map. Not loaded by tests: its saved road graph gives every car a NaN position on the current map. It needs migrating before the new map ships to the live game. A current snapshot belongs in `world/` (the QA tool loads `world/*.json` when present).
 - `docs/` design notes and changelog
