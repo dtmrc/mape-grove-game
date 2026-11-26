@@ -47,6 +47,7 @@ export function registerVehicles(CAR_TYPES) {
 // the model to spawn for a requested procedural type (null = keep the procedural car)
 export function pickModel(type, o = {}) {
   if (!VEHICLES_ENABLED || o.keepType) return null;
+  if (o.model && GLB[o.model]) return o.model;          // a specific model (QA, scripted scenes)
   const pick = (a) => (a && a.length ? a[(Math.random() * a.length) | 0] : null);
   if (o.role === 'police' || o.role === 'pdParked') return pick(byCls.police);
   const pool = POOLS[type]; if (!pool) return null;

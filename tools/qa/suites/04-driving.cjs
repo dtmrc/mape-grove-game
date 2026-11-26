@@ -6,7 +6,9 @@ module.exports = {
     for (const t of types) {
       const r = await S.js(async ([t]) => {
         const QA = window.QA, G = window.__G;
+        const old = G.P.car;
         if (G.P.car) { QA.down('e'); QA.step(2, { render: false }); QA.up('e'); QA.step(4, { render: false }); }
+        if (old) { G.cars.splice(G.cars.indexOf(old), 1); G.scene.remove(old.mesh); } // the remodeled cars are full size: clear the last test car off the endzone
         await QA.tp('endzone', { settle: 2, render: false }); G.P.yaw = 0;
         const sp = await QA.spawnCar(t, { enter: true, yaw: Math.PI / 2 });
         const c = G.P.car; if (!c) return { sp, err: 'not in car' };
