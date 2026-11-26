@@ -436,6 +436,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
     },
     prompt() { if (S.bagOpen) return ''; if (F.st === 'bite') return 'E! HOOK IT!'; if (F.st !== 'idle' || S.skin) return ''; const a = action(); return a ? a.p : ''; },
     menuOpen() { return !!S.bagOpen; },
+    close() { if (S.bagOpen) closeMenu(); },   // yardcats: a menu owner closes it before its dialog
     // drop whatever the cat was doing (a respawn, an arrest): cast, fight, landing, cooking, skinning, eating, menus
     abort() {
       if (F.st !== 'idle') { endFishing(); fishMesh.visible = false; }

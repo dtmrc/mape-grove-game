@@ -123,6 +123,7 @@ const FLAVOR = {   // `${room}:${spot}` first, then `${spot}`
 };
 const ROOM_GAP = 80, ROOM_X = 3000, ROOM_Z = 3000;
 const DOOR_R = 1.6, WIN_R = 1.2, FADE = 0.35;
+const MARK_FAR = 90;   // door / window rings further than this (manhattan, m) are hidden
 
 export function makeInteriors(ctx) {
   const { scene, camera, G, P, cat } = ctx;
@@ -615,7 +616,7 @@ export function makeInteriors(ctx) {
     // markers
     if ((tick -= dt || 0.016) <= 0) { tick = 0.25; for (const e of entries) placeEntry(e); }
     const t = G.time || 0;
-    for (const e of entries) { const u = e.mesh.userData; u.arrow.position.y = u.arrowY + Math.sin(t * 3) * 0.08; u.arrow.rotation.y = t * 2; }
+    for (const e of entries) { const u = e.mesh.userData; u.arrow.position.y = u.arrowY + Math.sin(t * 3) * 0.08; u.arrow.rotation.y = t * 2; e.mesh.visible = e.cur.ok && Math.abs(e.cur.tx - camera.position.x) + Math.abs(e.cur.tz - camera.position.z) < MARK_FAR; }   // far markers cost 3 draw calls each
     ringMat.opacity = 0.42 + 0.18 * Math.sin(t * 4);
     // prompt
     let txt = '', btn = '';

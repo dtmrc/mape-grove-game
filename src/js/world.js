@@ -1414,6 +1414,7 @@ function placeHouse(id, cx, cz, ry, mirror = false, o = {}) {
   DRIVE_PTS.push(F.at(mx * dx, front), F.at(mx * H.door[0], front));
   const door = F.at(mx * H.door[0], H.door[1]), drive = F.at(mx * dx, Math.min(front - 1, dz + 3));
   homes.push({ x: cx, z: cz, ry, spec: { model: id, mirror } });
+  (places.yards || (places.yards = [])).push({ id, x: cx, z: cz, ry, mx, front }); // yardcats: front lawns
   places.doors.push(door); places.drives.push({ x: drive[0], z: drive[1], ry });
   return { door, drive, F };
 }
