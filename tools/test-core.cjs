@@ -71,8 +71,8 @@ async function boot(page) {
   r = await page.evaluate(() => { const { G, P, places } = window.__G, car = window.__tcar; return { cash1: G.cash, hp1: car.hp, inCar: P.car === car, inZone: Math.hypot(car.x - places.wash.x, car.z - places.wash.z) < 2, heat: G.heat }; });
   check('car wash repair (E in the bay) charges $30 and fixes the car', r.cash1 === 70 && r.hp1 === 100 && r.inCar, JSON.stringify(r));
   await page.keyboard.press('e'); await frames(page, 4);
-  r = await page.evaluate(() => { const { G, P } = window.__G, car = window.__tcar; return { cash2: G.cash, inCar: P.car === car, hex: car.mesh.userData.paint.color.getHex() }; });
-  check('second E in the bay resprays for $20 and stays in the car', r.cash2 === 50 && r.inCar, JSON.stringify(r));
+  r = await page.evaluate(() => { const { G, P } = window.__G, car = window.__tcar; return { cash2: G.cash, inCar: P.car === car }; });
+  check('second E in the bay (car repaired) charges nothing and gets out: no resprays', r.cash2 === 70 && !r.inCar, JSON.stringify(r));
 
   // 6. save -> reload restores position, clock and cash
   const saved = await page.evaluate(() => { const { G, P, save } = window.__G; if (P.car) { P.car.driver = null; P.car = null; } P.x = 30; P.z = -40; P.yaw = 1.2; G.clock = 9.25; G.cash = 1234; G.done = { nana: true }; save(); return JSON.parse(localStorage.getItem(window.__G.SAVE_KEY)); });

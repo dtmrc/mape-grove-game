@@ -16,7 +16,9 @@
 import * as THREE from 'three';
 
 // ---------- heightfield ----------
-export const TN = 201, TCELL = 2, TX0 = -200, TZ0 = -200;          // 201x201 samples, 2 m apart, covering ±200 m
+export const TN = 341, TCELL = 2, TX0 = -340, TZ0 = -340;          // 341x341 samples, 2 m apart, covering ±340 m (play area ±300)
+/** Grid of saved terrain docs from before the map expansion (2026-11-13): 201 samples from -200. */
+export const LEGACY_GRID = { n: 201, cell: 2, x0: -200, z0: -200 };
 export const base = new Float32Array(TN * TN);                       // procedural hills (masked)
 export const delta = new Float32Array(TN * TN);                      // hand-sculpted offsets
 export const H = new Float32Array(TN * TN);                          // base + delta (what everything uses)
@@ -74,16 +76,25 @@ function vn(x, z) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 function fb(x, z, o = 3) { let s = 0, a = 1, n = 0; for (let k = 0; k < o; k++) { s += (vn(x, z) * 2 - 1) * a; n += a; a *= 0.5; x *= 2.03; z *= 2.03; } return s / n; }
+const EDGE = 300;                                            // play area half-size (world.js LIMIT)
 const smooth = (a, b, x) => { const t = clampi((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
+let RELIEF = null;   // world.js relief (Hollow Woods hills, ravine, creek): (x, z, fb, h) -> new height; masked flat like the hills
+/** The land rolling up toward the map edge (m). */
+export function edgeRise(x, z) { return smooth(EDGE + 4, EDGE + 40, Math.max(Math.abs(x), Math.abs(z))) * 9; }
+/** The procedural rolling hills at x,z before world relief and the flat mask (world.js uses it to place things on slopes). */
+export function hillsAt(x, z) {
+  let h = 4.6 * fb(x / 95 + 3.1, z / 95 - 7.7, 3) + 0.9 * fb(x / 30 - 11.3, z / 30 + 5.9, 2);
+  if (h < 0) h *= 0.45;                                     // shallow dips, rounder rises
+  return h + edgeRise(x, z);
+}
+export { fb as noise2 };
 export function computeBase() {
   const amp = settings.amp;
   for (let j = 0; j < TN; j++) for (let i = 0; i < TN; i++) {
     const x = TX0 + i * TCELL, z = TZ0 + j * TCELL, k = j * TN + i;
-    let h = 4.6 * fb(x / 95 + 3.1, z / 95 - 7.7, 3) + 0.9 * fb(x / 30 - 11.3, z / 30 + 5.9, 2);
-    if (h < 0) h *= 0.45;                                   // shallow dips, rounder rises
-    const e = Math.max(Math.abs(x), Math.abs(z));
-    h += smooth(146, 196, e) * 7;                           // the land rolls up toward the map edge
+    let h = hillsAt(x, z);
+    if (RELIEF) h = RELIEF(x, z, fb, h);
     base[k] = h * amp * flatMask[k];
   }
 }
@@ -286,10 +297,11 @@ function bldAt(x, z) {
 }
 
 // ---------- world preparation (called by world.js before merging) ----------
-const DECALS = new Set(['shadow', 'shadowR', 'puddle', 'graffiti', 'posterCat', 'posterHoa']);
+const DECALS = new Set(['shadow', 'shadowR', 'puddle', 'creek', 'graffiti', 'posterCat', 'posterHoa']);
 export const worldInfo = { flatRects: 0, groups: 0, flatGeos: 0, hilly: 0, maxH: 0 };
 
 export function prepareWorld(buckets, ctx) {
+  RELIEF = ctx.relief || null;
   COLS = ctx.colliders; rebuildGrid = ctx.rebuildGrid || rebuildGrid; gridPatch = ctx.gridPatch || null;
   // 1. collider models + groups
   const used = new Set();
@@ -316,7 +328,7 @@ export function prepareWorld(buckets, ctx) {
     if (pts.some(([x, z]) => footprintDist(A, x, z) < 0.6) || footprintDist(B, ca.cx, ca.cz) < 0.6) root[find(bldIdx[b])] = find(bldIdx[a]);
   }
   colModel.forEach((m, i) => {
-    if (m.orig.water) return;
+    if (m.orig.water || m.orig.ng) return;   // ng: countryside scenery, terrain-anchored but not an editor group
     if (m.orig.bld && find(i) !== i) { late.push([i, find(i)]); return; }
     const p = parent(m);
     if (p >= 0) { late.push([i, find(p)]); return; }
@@ -374,7 +386,7 @@ export function prepareWorld(buckets, ctx) {
   for (const g of rects) { const p = g.attributes.position; for (let i = 0; i < p.count; i += 3) fillTri(p.getX(i), p.getZ(i), p.getX(i + 1), p.getZ(i + 1), p.getX(i + 2), p.getZ(i + 2)); }
   worldInfo.flatRects = rects.length;
   for (const m of colModel) {
-    const c = m.orig; if (thin(c) || (c.r !== undefined && c.r < 1.2 && !c.water)) continue;
+    const c = m.orig; if (thin(c) || c.nf || (c.r !== undefined && c.r < 1.2 && !c.water)) continue;   // nf: outcrops and the edge walls sit on the land, never level it
     const [a, b, d, e] = bounds(c, 0.8);
     for (let j = Math.max(0, Math.floor((d - TZ0) / TCELL)); j <= Math.min(TN - 1, Math.ceil((e - TZ0) / TCELL)); j++) for (let i = Math.max(0, Math.floor((a - TX0) / TCELL)); i <= Math.min(TN - 1, Math.ceil((b - TX0) / TCELL)); i++) {
       if (footprintDist(c, TX0 + i * TCELL, TZ0 + j * TCELL) <= 0.8) flat[j * TN + i] = 1;
@@ -413,18 +425,74 @@ export function prepareWorld(buckets, ctx) {
   worldInfo.hilly = hilly / H.length; worldInfo.maxH = mx;
 }
 
-/** The terrain ground mesh (indexed grid on the height samples). */
+/** The terrain ground mesh: indexed grids on the height samples in 8x8 tiles (~85 m) so the camera culls what it can't see,
+ *  each with three levels of detail (every sample, every 2nd, every 4th) picked by distance in beforeRender. Every level hangs
+ *  a short skirt from its border, so neighbouring tiles at different levels never show a crack. */
+const groundTiles = [];
 export function makeGroundMesh(material, uvTile = 6) {
-  const g = new THREE.PlaneGeometry(TCELL * (TN - 1), TCELL * (TN - 1), TN - 1, TN - 1);
-  g.rotateX(-Math.PI / 2); g.translate(TX0 + TCELL * (TN - 1) / 2, 0, TZ0 + TCELL * (TN - 1) / 2);
-  const p = g.attributes.position, uv = g.attributes.uv, n = p.count;
-  const col = new Float32Array(n * 3).fill(1), a = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { uv.setXY(i, p.getX(i) / uvTile, -p.getZ(i) / uvTile); a[i * 3] = p.getX(i); a[i * 3 + 1] = p.getZ(i); a[i * 3 + 2] = -1; }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setAttribute('tanc', new THREE.BufferAttribute(a, 3));
-  const m = new THREE.Mesh(g, material);
-  m.userData.noLift = true; m.userData.ground = true; m.frustumCulled = false; m.matrixAutoUpdate = false;
-  return m;
+  const root = new THREE.Group(); root.userData.noLift = true; root.userData.ground = true;
+  const T = 8, step = (TN - 1) / T;
+  groundTiles.length = 0;
+  for (let tj = 0; tj < T; tj++) for (let ti = 0; ti < T; ti++) {
+    const i0 = Math.round(ti * step), i1 = Math.round((ti + 1) * step), j0 = Math.round(tj * step), j1 = Math.round((tj + 1) * step);
+    const nx = i1 - i0, nz = j1 - j0, W = nx + 1, nv = W * (nz + 1);
+    // grid vertices, then a copy of every border vertex 2.5 m lower (the skirt)
+    const border = []; for (let i = 0; i <= nx; i++) border.push([i, 0]); for (let j = 1; j <= nz; j++) border.push([nx, j]);
+    for (let i = nx - 1; i >= 0; i--) border.push([i, nz]); for (let j = nz - 1; j >= 1; j--) border.push([0, j]);
+    const tot = nv + border.length, pos = new Float32Array(tot * 3), nor = new Float32Array(tot * 3), uv = new Float32Array(tot * 2), col = new Float32Array(tot * 3).fill(1), a = new Float32Array(tot * 3);
+    const put = (v, i, j, y) => { const x = TX0 + (i0 + i) * TCELL, z = TZ0 + (j0 + j) * TCELL; pos.set([x, y, z], v * 3); nor[v * 3 + 1] = 1; uv.set([x / uvTile, -z / uvTile], v * 2); a.set([x, z, -1], v * 3); };
+    for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) put(j * W + i, i, j, 0);
+    const skirtOf = new Map(); border.forEach(([i, j], k) => { put(nv + k, i, j, -2.5); skirtOf.set(j * W + i, nv + k); });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('tanc', new THREE.BufferAttribute(a, 3));
+    const lods = [1, 2, 4].map((sp) => {
+      const cols = [], rows = []; for (let i = 0; i < nx; i += sp) cols.push(i); cols.push(nx); for (let j = 0; j < nz; j += sp) rows.push(j); rows.push(nz);
+      const idx = [];
+      for (let r = 0; r < rows.length - 1; r++) for (let c = 0; c < cols.length - 1; c++) {
+        const A = rows[r] * W + cols[c], B = rows[r] * W + cols[c + 1], C = rows[r + 1] * W + cols[c], D = rows[r + 1] * W + cols[c + 1];
+        idx.push(A, C, B, B, C, D);
+      }
+      const ring = [];
+      for (const i of cols) ring.push(i);                                   // north edge, west -> east
+      for (const j of rows.slice(1)) ring.push(j * W + nx);                 // east edge, north -> south
+      for (const i of cols.slice(0, -1).reverse()) ring.push(nz * W + i);   // south edge, east -> west
+      for (const j of rows.slice(1, -1).reverse()) ring.push(j * W);        // west edge, south -> north
+      for (let k = 0; k < ring.length; k++) { const p = ring[k], q = ring[(k + 1) % ring.length], ps = skirtOf.get(p), qs = skirtOf.get(q); idx.push(p, q, ps, q, qs, ps); }
+      return new THREE.BufferAttribute(nv + border.length > 65535 ? new Uint32Array(idx) : new Uint16Array(idx), 1);
+    });
+    g.setIndex(lods[0]);
+    const m = new THREE.Mesh(g, material);
+    m.userData.noLift = true; m.userData.ground = true; m.matrixAutoUpdate = false;
+    cullBounds(m, 0);
+    groundTiles.push({ m, g, lods, lod: 0, cx: TX0 + (i0 + nx / 2) * TCELL, cz: TZ0 + (j0 + nz / 2) * TCELL });
+    root.add(m);
+  }
+  return root;
+}
+/** Pick each ground tile's level of detail from the camera's distance (called every frame from beforeRender). */
+function groundLod(camera) {
+  const x = camera.position.x, z = camera.position.z;
+  for (const t of groundTiles) {
+    const d = Math.max(0, Math.hypot(t.cx - x, t.cz - z) - 60);   // ~ distance to the tile's near side
+    const l = d < 45 ? 0 : d < 110 ? 1 : 2;
+    if (l !== t.lod) { t.lod = l; t.g.setIndex(t.lods[l]); }
+  }
+}
+
+// ---------- chunks: the town plus eight countryside sectors, each merged and culled on its own ----------
+/** The original town (chunk 0). Everything outside it is countryside, split into eight 45 degree sectors (chunks 1..8). */
+export const TOWN = { x0: -152, x1: 152, z0: -132, z1: 152 };
+export const inTown = (x, z) => x >= TOWN.x0 && x <= TOWN.x1 && z >= TOWN.z0 && z <= TOWN.z1;
+export function chunkOf(x, z) { return inTown(x, z) ? 0 : 1 + ((Math.round(Math.atan2(z, x) / (Math.PI / 4)) + 8) % 8); }
+/** Frustum-cull a terrain-draped world mesh: bounds from its flat vertices, padded for terrain height and editor moves. */
+export function cullBounds(mesh, pad = 14) {
+  const g = mesh.geometry; g.computeBoundingBox();
+  let lo = 0, hi = 0; for (let k = 0; k < H.length; k++) { const h = H[k]; if (h < lo) lo = h; else if (h > hi) hi = h; }
+  const b = g.boundingBox; b.min.x -= pad; b.min.z -= pad; b.max.x += pad; b.max.z += pad; b.min.y += lo - 12; b.max.y += hi + 12;   // room for sculpting
+  g.boundingSphere = b.getBoundingSphere(new THREE.Sphere());
+  mesh.frustumCulled = true;
+  return mesh;
 }
 
 /** Split triangles until no edge (in x,z) is longer than maxE. Works on non-indexed geometry. */
@@ -556,6 +624,7 @@ function liftObj(o) {
 }
 export function beforeRender(scene, camera, tx, tz) {
   saved.length = 0;
+  if (groundTiles.length) groundLod(camera);
   _tmp.length = 0; for (const c of scene.children) _tmp.push(c);
   for (const c of _tmp) liftObj(c);
   for (const c of extra) liftObj(c);
@@ -583,13 +652,20 @@ export function encodeDelta() {
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
   return btoa(s);
 }
-export function decodeDelta(str) {
+/** src = the saved doc's grid { n, cell, x0, z0 }; a different grid (an older, smaller map) is copied in place by world position. */
+export function decodeDelta(str, src) {
   delta.fill(0);
   if (!str) return;
   const s = atob(str), b = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
-  const q = new Int16Array(b.buffer, 0, Math.min(TN * TN, b.length >> 1));
-  for (let k = 0; k < q.length; k++) delta[k] = q[k] / 100;
+  const sn = (src && src.n) || TN, q = new Int16Array(b.buffer, 0, Math.min(sn * sn, b.length >> 1));
+  if (sn === TN && (!src || ((src.x0 ?? TX0) === TX0 && (src.z0 ?? TZ0) === TZ0))) { for (let k = 0; k < q.length; k++) delta[k] = q[k] / 100; return; }
+  const sc = src.cell || TCELL, sx0 = src.x0 ?? -(sn - 1) * sc / 2, sz0 = src.z0 ?? sx0;
+  for (let k = 0; k < q.length; k++) {
+    if (!q[k]) continue;
+    const i = Math.round((sx0 + (k % sn) * sc - TX0) / TCELL), j = Math.round((sz0 + Math.floor(k / sn) * sc - TZ0) / TCELL);
+    if (i >= 0 && j >= 0 && i < TN && j < TN) delta[j * TN + i] = q[k] / 100;
+  }
 }
 
-export const TERRAIN = { heightAt, slopeAt, TN, TCELL, TX0, TZ0 };
+export const TERRAIN = { heightAt, slopeAt, TN, TCELL, TX0, TZ0, inTown, chunkOf };

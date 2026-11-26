@@ -1,7 +1,8 @@
 // Engine: road network geometry, rebuilt from the road graph (world.js NODES / ADJ / EDGES) whenever it changes.
 // Roads are draped on the terrain. Edge types: paved (town / county roads), dirt (tracks), hwy (Highway 9).
 import * as THREE from 'three';
-import { patchMaterial } from './terrain.js';
+import { patchMaterial, chunkOf, cullBounds } from './terrain.js';
+import { junctionControl } from './roadflow.js';
 
 let NODES = null, ADJ = null, EDGES = null, M = null, SCENE = null;
 const group = new THREE.Group(); group.userData.noLift = true;
@@ -10,7 +11,7 @@ export const roadInfo = { meshes: 0, tris: 0 };
 
 export const etype = (e) => e.t || (e.dirt ? 'dirt' : 'paved');
 export const setType = (e, t) => { e.t = t; e.dirt = t === 'dirt'; };
-export const DEFAULT_W = { paved: 10, dirt: 7, hwy: 12, path: 2.2, walk: 2 };
+export const DEFAULT_W = { paved: 10, dirt: 8, hwy: 12, path: 2.2, walk: 2 };
 export const isPath = (t) => t === 'path' || t === 'walk';   // footpaths: no cars
 
 export function initRoads(scene, mats, nodes, adj, edges) {
@@ -25,7 +26,7 @@ export function relink() {
   for (let i = 0; i < ADJ.length; i++) ADJ[i].length = 0;
   while (ADJ.length < NODES.length) ADJ.push([]);
   for (const e of EDGES) {
-    const o = { w: e.w, dirt: etype(e) === 'dirt', nt: !!e.nt, t: etype(e) };
+    const o = { w: e.w, dirt: etype(e) === 'dirt', nt: !!e.nt, t: etype(e), ...(e.sw ? { sw: true } : {}), ...(e.county ? { county: true } : {}) };
     ADJ[e.a].push({ n: e.b, ...o }); ADJ[e.b].push({ n: e.a, ...o });
   }
 }
@@ -38,24 +39,33 @@ export function roadRescue(i) {
 export function changed() { relink(); rebuildRoads(); for (const f of onRoads) f(); }
 
 // ---------------- geometry ----------------
+// one vertex list per map chunk (town + 8 countryside sectors), so each chunk's roads are culled on their own
 class Buf {
-  constructor() { this.p = []; this.c = []; this.u = []; }
+  constructor() { this.ch = new Map(); }
   tri(a, b, c, col, uvS) {
-    for (const v of [a, b, c]) { this.p.push(v[0], v[1], v[2]); this.c.push(col.r, col.g, col.b); this.u.push(v[0] / uvS, -v[2] / uvS); }
+    const k = chunkOf((a[0] + b[0] + c[0]) / 3, (a[2] + b[2] + c[2]) / 3);
+    let q = this.ch.get(k); if (!q) this.ch.set(k, q = { p: [], c: [], u: [] });
+    for (const v of [a, b, c]) { q.p.push(v[0], v[1], v[2]); q.c.push(col.r, col.g, col.b); q.u.push(v[0] / uvS, -v[2] / uvS); }
   }
-  mesh(mat) {
-    if (!this.p.length) return null;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(this.p.length).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.u, 2));
-    const a = new Float32Array(this.p.length);
-    for (let i = 0; i < this.p.length; i += 3) { a[i] = this.p[i]; a[i + 1] = this.p[i + 2]; a[i + 2] = -1; }
-    g.setAttribute('tanc', new THREE.BufferAttribute(a, 3));
-    const m = new THREE.Mesh(g, mat); m.userData.noLift = true; m.frustumCulled = false; m.matrixAutoUpdate = false;
-    roadInfo.tris += this.p.length / 9;
-    return m;
+  meshes(mat) {
+    const out = [];
+    for (const q of this.ch.values()) {
+      if (!q.p.length) continue;
+      const g = new THREE.BufferGeometry(), nrm = new Float32Array(q.p.length);
+      for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
+      g.setAttribute('position', new THREE.Float32BufferAttribute(q.p, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(q.c, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(q.u, 2));
+      const a = new Float32Array(q.p.length);
+      for (let i = 0; i < q.p.length; i += 3) { a[i] = q.p[i]; a[i + 1] = q.p[i + 2]; a[i + 2] = -1; }
+      g.setAttribute('tanc', new THREE.BufferAttribute(a, 3));
+      const m = new THREE.Mesh(g, mat); m.userData.noLift = true; m.matrixAutoUpdate = false;
+      cullBounds(m, 2);
+      roadInfo.tris += q.p.length / 9;
+      out.push(m);
+    }
+    return out;
   }
 }
 const col = (hex) => new THREE.Color(hex);
@@ -123,7 +133,8 @@ export function rebuildRoads() {
     const L = inc[i];
     for (const a of L) {
       let t = 0;
-      if (L.length >= 2) {
+      const smooth = L.length === 2 && (() => { let p = Math.abs(L[0].ang - L[1].ang); if (p > Math.PI) p = 2 * Math.PI - p; return p > 2.6; })();
+      if (L.length >= 2 && !smooth) {   // roads 2026-11-24: a gentle bend (curve arcs) runs straight through, no pad
         t = a.e.w * 0.3;
         for (const b of L) {
           if (b === a) continue;
@@ -163,6 +174,8 @@ export function rebuildRoads() {
       // stop lines where a town road meets a junction of 3+
       for (const [ni, sgn, t] of [[e.b, 1, tb], [e.a, -1, ta]]) {
         if (inc[ni].length < 3 || T === 'hwy' || NODES[ni].cw) continue;
+        const ctl = junctionControl(NODES[ni], inc[ni].map((a) => ({ o: a.o, e: a.e })), NODES);   // main roads run free: no line
+        if (!ctl || ctl.free.has(ni === e.b ? e.a : e.b)) continue;
         const N0 = NODES[ni], ux = dx * sgn, uz = dz * sgn, ex = N0.x - ux * (t + 0.7), ez = N0.z - uz * (t + 0.7);
         strip(paint, ex - ux * 0.25, ez - uz * 0.25, ex + ux * 0.25, ez + uz * 0.25, 0.2, h - 0.6, Y.line, wht, 5);
       }
@@ -175,12 +188,33 @@ export function rebuildRoads() {
     }
     // a puddle or two
     const R = srand(Math.round(A.x * 7 + A.z * 13 + B.x * 17 + B.z * 19));
-    const np = isPath(T) ? 0 : Math.floor(R() * (T === 'dirt' ? 2.6 : 1.6));
+    const np = isPath(T) || L < 14 ? 0 : Math.floor(R() * (T === 'dirt' ? 2.6 : 1.6));   // none on short curve segments
     for (let q = 0; q < np; q++) {
       const t = ta + 2 + R() * Math.max(0, L - ta - tb - 4), l = (R() - 0.5) * e.w * 0.6, r = 0.5 + R() * (T === 'dirt' ? 1.6 : 1.1);
       const px = A.x + dx * t - dz * l, pz = A.z + dz * t + dx * l, pts = [];
       for (let s = 0; s < 9; s++) { const a = (s / 9) * Math.PI * 2, rr = r * (0.75 + 0.35 * Math.sin(s * 2.3 + t)); pts.push([px + Math.cos(a) * rr * 1.4, pz + Math.sin(a) * rr]); }
       fan(puddle, px, pz, pts, Y.puddle, 0xffffff, 5, 1);
+    }
+  });
+  // sidewalks (edges flagged sw: the Estates): a strip each side behind a grass verge, stopping short of cross streets,
+  // and a ring round a cul-de-sac bulb with a gap where its street comes in
+  const SW0 = 0.9, SW1 = 2.1;
+  EDGES.forEach((e, k) => {
+    if (!e.sw) return;
+    const A = NODES[e.a], B = NODES[e.b], L = Math.hypot(B.x - A.x, B.z - A.z); if (L < 1) return;
+    const dx = (B.x - A.x) / L, dz = (B.z - A.z) / L, h = e.w / 2;
+    const cut = (ni) => { const n = NODES[ni]; if (n.bulb) return n.bulb + SW1; let c = 0; for (const a of inc[ni]) if (a.k !== k) c = Math.max(c, a.e.w / 2 + (SHOULDER[etype(a.e)] || 0.7) + 2.4); return c; };
+    const ca = cut(e.a), cb = cut(e.b); if (ca + cb > L - 2) return;
+    for (const sd of [-1, 1]) strip(walk, A.x + dx * ca, A.z + dz * ca, B.x - dx * cb, B.z - dz * cb, sd < 0 ? -h - SW1 : h + SW0, sd < 0 ? -h - SW0 : h + SW1, Y.base, 0xe8e4dc, 3, 1);
+  });
+  NODES.forEach((n, i) => {
+    if (!n.bulb || !inc[i].some((a) => a.e.sw)) return;
+    const r = n.bulb + (SW0 + SW1) / 2, seg = 28;
+    const gaps = inc[i].map((a) => [a.ang, Math.asin(Math.min(1, (a.e.w / 2 + SW1 + 0.3) / r))]);
+    for (let s = 0; s < seg; s++) {
+      const a0 = (s / seg) * Math.PI * 2, a1 = ((s + 1) / seg) * Math.PI * 2, am = (a0 + a1) / 2;
+      if (gaps.some(([g, hw]) => { let d = Math.abs(am - g) % (Math.PI * 2); if (d > Math.PI) d = Math.PI * 2 - d; return d < hw + Math.PI / seg; })) continue;
+      strip(walk, n.x + Math.cos(a0) * r, n.z + Math.sin(a0) * r, n.x + Math.cos(a1) * r, n.z + Math.sin(a1) * r, -(SW1 - SW0) / 2, (SW1 - SW0) / 2, Y.base, 0xe8e4dc, 3, 1);
     }
   });
   // junction pads and dead-end bulbs
@@ -209,7 +243,7 @@ export function rebuildRoads() {
     const H = hull(pts);
     fan(buf, n.x, n.z, H, Y.pad, color, 5, 3);
   });
-  const add = (b, k) => { const m = b.mesh(M[k]); if (m) group.add(m); };
+  const add = (b, k) => { for (const m of b.meshes(M[k])) group.add(m); };
   add(shoulder, 'grass'); add(gravel, 'asphalt'); add(asph, 'asphalt'); add(walk, 'sidewalk'); add(dirt, 'dirt'); add(grass, 'grass'); add(paint, 'plain'); add(cross, 'plain'); add(puddle, 'puddle');
   roadInfo.meshes = group.children.length;
 }

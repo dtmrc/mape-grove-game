@@ -1,12 +1,12 @@
 // Engine: painted ground surfaces (a splat map over the terrain) and water bodies.
 // - The ground mesh blends 8 painted layers over grass: dirt, sand, gravel, mud, asphalt, concrete, forest floor, dry grass.
-//   Weights live in two RGBA textures, 1 m per texel over ±200 m. The editor paints them; they save to world/ground.
+//   Weights live in two RGBA textures, 1 m per texel over ±340 m. The editor paints them; they save to world/ground.
 // - Water bodies are polygon colliders flagged `water` (the lake, plus any the editor draws). Each one gets a flat
 //   water surface at the height of its lowest shore point, rebuilt when the shape or the terrain changes.
 import * as THREE from 'three';
 import * as TER from './terrain.js';
 
-export const SPN = 400, SX0 = -200, SCELL = 1;
+export const SPN = 680, SX0 = -340, SCELL = 1;   // matches the terrain (±340 m); docs saved before the 2026-11-13 expansion are 400 wide
 export const splA = new Uint8Array(SPN * SPN * 4), splB = new Uint8Array(SPN * SPN * 4);
 let defA = null, defB = null;
 const mkTex = (d) => { const t = new THREE.DataTexture(d, SPN, SPN, THREE.RGBAFormat, THREE.UnsignedByteType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
@@ -67,7 +67,7 @@ export function initGround(scene, m, T, ctx) {
   m.customProgramCacheKey = () => key() + '|splat2';
   m.needsUpdate = true;
   TER.patchMaterial(m);
-  makeDefault(ctx.inLake);
+  makeDefault(ctx.inLake, ctx.fields, ctx.forest, ctx.trails, ctx.paint);
   scene.add(waterGroup);
   TER.onColliders.push(() => rebuildWater());
   let wt = 0; TER.onChange.push(() => { clearTimeout(wt); wt = setTimeout(() => rebuildWater(true), 150); });
@@ -76,7 +76,44 @@ export function initGround(scene, m, T, ctx) {
 }
 
 // ---------------- painting ----------------
-function makeDefault(inLake) {
+/** fields: [{ x, z, w, d, ry, kind: 'plow' | 'wheat' | 'meadow' }] painted into the default ground (countryside farmland). */
+function paintField(f) {
+  const c = Math.cos(f.ry || 0), sn = Math.sin(f.ry || 0), R = Math.hypot(f.w, f.d) / 2 + 1;
+  const i0 = Math.max(0, Math.floor((f.x - R - SX0) / SCELL)), i1 = Math.min(SPN - 1, Math.ceil((f.x + R - SX0) / SCELL));
+  const j0 = Math.max(0, Math.floor((f.z - R - SX0) / SCELL)), j1 = Math.min(SPN - 1, Math.ceil((f.z + R - SX0) / SCELL));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const dx = SX0 + (i + 0.5) * SCELL - f.x, dz = SX0 + (j + 0.5) * SCELL - f.z;
+    const lx = dx * c - dz * sn, lz = dx * sn + dz * c;            // field-local (rows run along local x)
+    const e = Math.min(f.w / 2 - Math.abs(lx), f.d / 2 - Math.abs(lz)); if (e < 0) continue;
+    const w = Math.min(1, e / 1.6), k = (j * SPN + i) * 4, n = Math.sin(lx * 0.37 + lz * 0.11) * 0.5 + 0.5;
+    if (f.kind === 'plow') { splA[k] = Math.round(225 * w); splA[k + 3] = (Math.floor((lz + 50) / 2) & 1) ? Math.round(120 * w) : 0; }
+    else if (f.kind === 'wheat') { splB[k + 3] = Math.round((215 + n * 40) * w); splA[k + 1] = Math.round((70 + n * 50) * w); }
+    else splB[k + 3] = Math.round((95 + n * 60) * w);
+  }
+}
+function paintTrail(T) {   // a packed-dirt footpath along a polyline, soft-edged, wobbling a little in width
+  const P = T.pts, hw = T.w / 2;
+  for (let s = 0; s < P.length - 1; s++) {
+    const [ax, az] = P[s], [bx, bz] = P[s + 1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1, R = hw + 2;
+    const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R - SX0) / SCELL)), i1 = Math.min(SPN - 1, Math.ceil((Math.max(ax, bx) + R - SX0) / SCELL));
+    const j0 = Math.max(0, Math.floor((Math.min(az, bz) - R - SX0) / SCELL)), j1 = Math.min(SPN - 1, Math.ceil((Math.max(az, bz) + R - SX0) / SCELL));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = SX0 + (i + 0.5) * SCELL, z = SX0 + (j + 0.5) * SCELL, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+      const d = Math.hypot(x - ax - dx * t, z - az - dz * t), e = hw * (0.85 + 0.25 * Math.sin(x * 0.31 + z * 0.23)) - d; if (e < -1.2) continue;
+      const w = Math.min(1, (e + 1.2) / 1.8), k = (j * SPN + i) * 4;
+      const c = T.ch || 0; splA[k + c] = Math.max(splA[k + c], Math.round((T.a || 235) * w)); splB[k + 2] = Math.round(splB[k + 2] * (1 - 0.8 * w));
+    }
+  }
+}
+function makeDefault(inLake, fields, forest, trails, paintFn) {
+  if (fields) for (const f of fields) paintField(f);
+  if (forest) for (let j = 0; j < SPN; j += 1) for (let i = 0; i < SPN; i++) {   // forest floor: forest(x,z) is a 0..1 weight (feathered edge)
+    const x = SX0 + (i + 0.5) * SCELL, z = SX0 + (j + 0.5) * SCELL, w = +forest(x, z); if (!(w > 0.02)) continue;
+    const k = (j * SPN + i) * 4 + 2, v = Math.round(230 * w * (0.85 + 0.15 * Math.sin(x * 0.7 + z * 0.45)));  // a little patchiness
+    splB[k] = Math.max(splB[k], v);
+  }
+  if (trails) for (const T of trails) paintTrail(T);
+  if (paintFn) paintFn(splA, splB, SPN, SX0, SCELL);   // world.js: rock, dirt and mud by slope (Hollow Woods), creek banks
   if (inLake) {
     const S = [0.9, 0.94, 0.98, 1.02, 1.06, 1.1, 1.14, 1.18];
     for (let j = 0; j < SPN; j++) for (let i = 0; i < SPN; i++) {
@@ -127,15 +164,25 @@ export function encodePaint() {
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
   return btoa(s);
 }
-export function decodePaint(str) {
+/** n = the saved doc's grid width; an older, smaller (centred) grid is copied into the middle of this one. */
+export function decodePaint(str, n = SPN) {
   if (!str) { resetPaint(); return; }
+  n = +n || SPN;
   const s = atob(str); let p = 0;
-  const all = new Uint8Array(splA.length * 2);
+  const all = new Uint8Array(n * n * 4 * 2);
   for (let i = 0; i < s.length && p < all.length; i++) {
     const v = s.charCodeAt(i);
-    if (v === 0) { const n = s.charCodeAt(++i); p += n; } else all[p++] = v;
+    if (v === 0) { const k = s.charCodeAt(++i); p += k; } else all[p++] = v;
   }
-  splA.set(all.subarray(0, splA.length)); splB.set(all.subarray(splA.length));
+  if (n === SPN) { splA.set(all.subarray(0, splA.length)); splB.set(all.subarray(splA.length)); }
+  else {
+    resetPaint(); const o = Math.round((SPN - n) / 2), half = n * n * 4;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const I = i + o, J = j + o; if (I < 0 || J < 0 || I >= SPN || J >= SPN) continue;
+      const src = (j * n + i) * 4, dst = (J * SPN + I) * 4;
+      for (let c = 0; c < 4; c++) { splA[dst + c] = all[src + c]; splB[dst + c] = all[half + src + c]; }
+    }
+  }
   texA.needsUpdate = texB.needsUpdate = true;
 }
 export const isDefaultPaint = () => { for (let i = 0; i < splA.length; i++) if (splA[i] !== defA[i] || splB[i] !== defB[i]) return false; return true; };

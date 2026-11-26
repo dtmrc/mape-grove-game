@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { makeTextures, basic, lambert, mat, rnd, makeSky, makePost } from './gfx.js';
 import { makeGoobles } from './goobles.js';
 import { setTextures, makeCat, makeHuman, makeRaccoon, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
-import { buildWorld, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
+import { buildWorld, inTown, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
 import { Sfx } from './sfx.js';
 import { makeMeows } from './meows.js';
 import { makeFirestarter } from './firestarter.js';
@@ -22,6 +22,9 @@ import { makeDev } from './devtools.js';
 import { makeEvents } from './events.js';
 import { makeFX } from './fx.js';
 import { makePolice } from './police.js'; // police
+import { makeCarPhys } from './carphys.js'; // driving
+import { EDGES as CP_EDGES } from './world.js'; // driving
+import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
 import { makeOfficer } from './officer.js';
 import { waterPolys } from './ground.js';
 import { makeUI } from './ui.js'; // ui: pause menu, settings, full map
@@ -256,7 +259,9 @@ if (SV && SV.x !== undefined && !SV.inside && Math.abs(+SV.x) < LIMIT && Math.ab
 
 // ---------------- cars ----------------
 const cars = [];
-const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway' };
+const TC = makeTraffic({ scene, NODES, ADJ, cars, heightAt: TER.heightAt, G, isPath: RD.isPath, onRoads: RD.onRoads }); // driving: traffic control (traffic.js)
+const CP = makeCarPhys({ scene, puff, heightAt: TER.heightAt, nearestRoad: RD.nearestRoad, edges: () => CP_EDGES, nodes: NODES, Sfx }); // driving: GTA IV style handling (carphys.js)
+const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway', goobtruck: 'F-15 Prairie' };
 const PAINT = [0xc0392b, 0x2e6fbf, 0xe8e8e8, 0x2a2a2e, 0x3a8f5a, 0xe0b030, 0x8e5bb0, 0xa04020, 0x6a8090, 0xd86a9a];
 function spawnCar(type, x, z, yaw, o = {}) {
   const color = o.color ?? PAINT[(Math.random() * PAINT.length) | 0];
@@ -272,7 +277,7 @@ function removeCar(c) { scene.remove(c.mesh); cars.splice(cars.indexOf(c), 1); c
 let NN = NODES.length; RD.onRoads.push(() => { NN = NODES.length; }); // engine: roads are editable
 function nearestNode(x, z) {
   let b = 0, bd = 1e9;
-  for (let i = 0; i < NN; i++) { const d = Math.hypot(NODES[i].x - x, NODES[i].z - z); if (d < bd) { bd = d; b = i; } }
+  for (let i = 0; i < NN; i++) { if (!ADJ[i] || !ADJ[i].length) continue; const d = Math.hypot(NODES[i].x - x, NODES[i].z - z); if (d < bd) { bd = d; b = i; } }
   return b;
 }
 function roadOpts(i, from) {
@@ -290,11 +295,14 @@ function laneTarget(a, x, z, look) {
 }
 function pickNext(a) {
   const opts = roadOpts(a.to, a.from), e = opts[(Math.random() * opts.length) | 0];
-  a.from = a.to; a.to = e.n; a.w = e.w;
+  a.from = a.to; a.to = e.n; a.w = e.w; a.t = e.t; a.c = !!e.county; // roads 2026-11-24: road class sets cruise speed
   a.off = a.ped ? a.side * (e.w / 2 + 1.3) : e.w / 4;
 }
-function randomLane() {
-  const i = (Math.random() * NN) | 0, opts = roadOpts(i, -1);
+function randomLane(townOnly = false) {
+  // the map is big now (countryside, 2026-11-13): pick a road near Goobles so traffic and walkers stay where he is
+  let i = 0;
+  for (let k = 0; k < 16; k++) { i = (Math.random() * NN) | 0; const q = NODES[i]; if (!ADJ[i] || !ADJ[i].length) { k--; continue; } if ((!townOnly || inTown(q.x, q.z)) && Math.hypot(q.x - (P.car ? P.car.x : P.x), q.z - (P.car ? P.car.z : P.z)) < 170) break; }
+  const opts = roadOpts(i, -1).filter((e) => !townOnly || inTown(NODES[e.n].x, NODES[e.n].z));
   if (!opts.length) return null;
   const e = opts[(Math.random() * opts.length) | 0];
   return { from: i, to: e.n, w: e.w };
@@ -329,7 +337,7 @@ function spawnPed(o = {}) {
     r: o.r || 0.35, npc: o.npc || null, home: o.home || null, vx: 0, vz: 0, spin: 0 };
   if (o.at) { p.x = o.at.x; p.z = o.at.z; }
   else {
-    let a = null; while (!a) a = randomLane();
+    let a = null; for (let k = 0; !a; k++) a = randomLane(k < 40);   // walkers stay on town streets (no sidewalks out in the country)
     const A = NODES[a.from], B = NODES[a.to], t = Math.random();
     const L = Math.hypot(B.x - A.x, B.z - A.z) || 1, side = (Math.random() < 0.5 ? 1 : -1) * (a.w / 2 + 1.3);
     p.x = A.x + (B.x - A.x) * t - (B.z - A.z) / L * side; p.z = A.z + (B.z - A.z) * t + (B.x - A.x) / L * side;
@@ -349,6 +357,9 @@ for (let k = 0; k < 9; k++) {
   spawnCar(['sedan', 'hatch', 'pickup', 'wagon', 'sedan'][k % 5], d.x, d.z, d.ry, {});
 }
 spawnCar('golfcart', places.hoaLot.x - 3, places.hoaLot.z, 0, { color: 0xffffff, canopy: 0x1e2a44, lightbar: true });
+// Goobles' own truck, parked on the RV lot (role 'goob': never culled, no heat for taking it; respawns there if wrecked and you are away)
+const goobTruck = () => spawnCar('goobtruck', places.goobTruck.x, places.goobTruck.z, places.goobTruck.yaw, { color: 0xffffff, role: 'goob', fuel: 100, hp: 140 });
+goobTruck();
 for (let k = 0; k < 20; k++) spawnPed({});
 // park raccoons
 for (let k = 0; k < 4; k++) {
@@ -674,7 +685,7 @@ function enterCar(c, silent) {
     if (!silent) addHeat(1, 'grand theft auto-mobile');
   } else if (c.role === 'patrol') { if (!silent) addHeat(2, 'stealing HOA property'); }
   c.driver = 'player'; c.ai = null; if (c.role === 'patrol') c.role = null;
-  P.car = c; cat.visible = false;
+  P.car = c; cat.visible = false; CP.enter(c);
   hud.car.textContent = CAR_NAMES[c.type]; hud.car.classList.add('show'); setTimeout(() => hud.car.classList.remove('show'), 2500);
   if (!silent) Sfx.door();
 }
@@ -683,7 +694,7 @@ function exitCar() {
   const lx = c.x + Math.cos(c.yaw) * (c.spec.wid / 2 + 0.6), lz = c.z - Math.sin(c.yaw) * (c.spec.wid / 2 + 0.6);
   const r = collide(lx, lz, 0.25);
   P.x = r.x; P.z = r.z; P.y = 0; P.yaw = c.yaw;
-  c.driver = null; P.car = null; cat.visible = true;
+  c.driver = null; P.car = null; cat.visible = true; CP.exit(c);
   if (Math.abs(c.speed) > 8) { hurt(12); P.down = 1.2; }
   Sfx.door();
   save();
@@ -734,7 +745,7 @@ function carWorld(c, dt) {
     const imp = c.vx * hitN[0] + c.vz * hitN[1];
     if (imp < 0) {
       c.vx -= hitN[0] * imp * 1.35; c.vz -= hitN[1] * imp * 1.35;
-      c.vx *= 0.85; c.vz *= 0.85;
+      c.vx *= 0.85; c.vz *= 0.85; if (c.yr) c.yr *= 0.6; // driving
       if (-imp > 5) { damageCar(c, (-imp - 4) * 2.2); if (c.driver === 'player') { Sfx.crash(-imp); shake(Math.min(0.6, -imp / 25)); } }
     }
   }
@@ -777,11 +788,12 @@ function trafficAI(c, dt) {
   const d = steerTo(c, tx, tz);
   c.yaw += Math.max(-2.2 * dt, Math.min(2.2 * dt, d * 3 * dt));
   const blk = blockedAhead(c, 9);
-  let want = Math.abs(d) > 0.4 ? 5 : a.cruise;
+  let want = Math.abs(d) > 0.4 ? 5 : a.cruise * (a.t === 'hwy' || a.c ? 1.6 : a.t === 'dirt' ? 0.85 : 1); // roads 2026-11-24: open roads flow faster
   // two cars nose to nose in a junction: after a few seconds the one waiting longest creeps through
   c.wait = blk === 'car' ? (c.wait || 0) + dt : 0;
-  if (blk === 'car' && c.wait > 3 + (c.x * 7 + c.z * 13) % 2) want = 3;
+  if (blk === 'car' && c.wait > 3 + (c.x * 7 + c.z * 13) % 2 && !TC.queued(c, a)) want = 3; // driving: no creeping into a red-light queue
   else if (blk) { want = 0; if (blk === 'player') { c.honk += dt; if (c.honk > 1.5) { c.honk = -3; Sfx.horn(c.x, c.z); } } }
+  want = TC.limit(c, a, want, dt); // driving: stop signs + red lights
   c.speed += Math.max(-14 * dt, Math.min(6 * dt, want - c.speed));
   if (c.bumped) {
     c.bumped -= dt;
@@ -931,7 +943,7 @@ function updatePlayer(dt) {
     let thr = Math.max(-1, Math.min(1, mz)); const st = Math.max(-1, Math.min(1, mx));
     updateFuel(c, thr, dt);
     if (c.fuel <= 0) thr = 0;  // out of gas: coast
-    drive(c, thr, st, down(' ', 'b'), dt);
+    CP.drive(c, thr, st, down(' ', 'b'), dt); // driving
     if (hit('e', 'f', 'enter') && !(P.lock > 0)) exitCar();
     if (hit('h')) Sfx.horn(c.x, c.z, true);
     return;
@@ -1039,7 +1051,7 @@ function interactions(dt) {
       const vrel = (B.vx - A.vx) * nx + (B.vz - A.vz) * nz;
       if (vrel < 0) {
         const j = -1.3 * vrel / (1 / ma + 1 / mb);
-        A.vx -= j / ma * nx; A.vz -= j / ma * nz; B.vx += j / mb * nx; B.vz += j / mb * nz;
+        A.vx -= j / ma * nx; A.vz -= j / ma * nz; B.vx += j / mb * nx; B.vz += j / mb * nz; CP.spin(A, ax + nx * ra, az + nz * ra, -j / ma * nx, -j / ma * nz); CP.spin(B, bx - nx * rb, bz - nz * rb, j / mb * nx, j / mb * nz); // driving: off-centre hits spin cars
         const dmg = Math.max(0, -vrel - 3) * 2.5;
         damageCar(A, dmg); damageCar(B, dmg);
         for (const C of [A, B]) if (C.driver === 'ai' && -vrel > 3) { C.bumped = 1.5; }
@@ -1091,7 +1103,7 @@ function updateCamera(dt) {
     const c = P.car;
     tx = c.x; ty = 1.3; tz = c.z; dist = 7.2 + Math.min(3, Math.abs(c.speed) / 10);
     if (camIdle > 1.2) {
-      const want = c.yaw + (c.speed < -2 ? 0 : Math.PI);
+      const want = CP.camHeading(c) + (c.speed < -2 ? 0 : Math.PI); // driving: camera swings with the slide
       let d = want - camYaw; d = Math.atan2(Math.sin(d), Math.cos(d));
       camYaw += d * Math.min(1, dt * 3);
       camPitch += (0.2 - camPitch) * Math.min(1, dt * 2);
@@ -1238,7 +1250,7 @@ const fishing = makeFishing({ scene, G, P, cat, places, peds, spawnPed, say, toa
 
 // ---------------- minimap ----------------
 const mm = $('minimap'), mg = mm.getContext('2d');
-const MAPPX = 512, MK = MAPPX / (2 * MAP_HALF);  // minimap image pixels per metre
+const MAPPX = 1024, MK = MAPPX / (2 * MAP_HALF);  // minimap image pixels per metre (the map is ~620 m across since the countryside)
 const mapImg = document.createElement('canvas'); mapImg.width = mapImg.height = MAPPX;
 drawMap(mapImg.getContext('2d'), (v) => (v + MAP_HALF) * MK, MK);
 RD.onRoads.push(() => drawMap(mapImg.getContext('2d'), (v) => (v + MAP_HALF) * MK, MK)); // engine: redraw after road edits
@@ -1394,7 +1406,7 @@ function updateHeat(dt) {
     // patrols go home: far ones vanish, near ones turn back into traffic
     for (const c of patrolList) { if (Math.hypot(c.x - px(), c.z - pz()) > 70) removeCar(c); else if (Math.random() < dt * 0.3) retirePatrol(c); }
     patrolList = patrols();
-    // Suds N Paws repair / respray at 0 stars lives in shops.js (E in the wash bay)
+    // Suds N Paws repair at 0 stars lives in shops.js (E in the wash bay)
   }
   if (P.car && inZone('wash', P.car.x, P.car.z) && Math.random() < 0.6) puff('foam', P.car.x + (Math.random() - 0.5) * 3, 1 + Math.random() * 2, P.car.z + (Math.random() - 0.5) * 2, 0, 0.5, 0, 0.5, 0.8);
   const sk = G.heat * 2 + (G.seenT < 1.5 ? 1 : 0); // P10: rebuild the star bar only when heat or the flash state changes
@@ -1417,7 +1429,7 @@ function updateCars(dt) {
     c.mesh.position.set(c.x, 0, c.z); c.mesh.rotation.y = c.yaw;
     c.wheel += c.speed * dt / u.wr;
     u.wheels.forEach((w, i) => { w.children[0].rotation.x = c.wheel; if (i < 2) w.rotation.y = c.steer * 0.5; });
-    u.body.rotation.z = -c.steer * Math.min(1, Math.abs(c.speed) / 20) * 0.06;
+    CP.body(c, u, dt); // driving: suspension pitch / roll / heave + spin-outs
     if (u.bar) { const f = Math.floor(G.time * 6) % 2; u.bar[0].color.set(f ? 0xff8a00 : 0x302010); u.bar[1].color.set(f ? 0x302010 : 0x3070ff); }
     if (!c.dead && c.hp < 35 && Math.random() < dt * (c.hp < 15 ? 12 : 4)) puff('smoke', c.x + Math.sin(c.yaw) * c.spec.len * 0.4, 1.1, c.z + Math.cos(c.yaw) * c.spec.len * 0.4, 0, 1.4, 0, 0.6, 1.4);
     if (c.fire > 0) {
@@ -1429,7 +1441,8 @@ function updateCars(dt) {
   }
   // keep traffic topped up, clear wrecks far away
   let ai = 0, walkers = 0;
-  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i]; if (c.dead && Math.hypot(c.x - px(), c.z - pz()) > 90) removeCar(c); else if (c.driver === 'ai') ai++; }
+  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90) || (c.driver === 'ai' && !c.role && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
+  if (!cars.some((c) => c.role === 'goob' && !c.dead) && Math.hypot(places.goobTruck.x - px(), places.goobTruck.z - pz()) > 80 && !cars.some((c) => Math.hypot(c.x - places.goobTruck.x, c.z - places.goobTruck.z) < 4)) goobTruck();
   if (ai < 12 && Math.random() < dt) spawnTraffic(['sedan', 'hatch', 'pickup', 'wagon'][(Math.random() * 4) | 0]);
   for (let i = 0; i < peds.length; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human') walkers++; }
   if (walkers < 20 && Math.random() < dt * 0.5) spawnPed({});
@@ -1468,6 +1481,7 @@ function frame(now) {
     jail.update(dt);
     INT.update(dt);
     updateCars(dt);
+    TC.update(dt); // driving: signal lamps
     for (const p of peds) updatePed(p, dt);
     interactions(dt);
     if (mission) { mission.t += dt; mission.update(dt); if (mission && mission.timer !== undefined && mission.stage !== 'car') { setStyle(hud.timer, 'display', 'block'); setText(hud.timer, `${Math.floor(mission.timer / 60)}:${String(Math.floor(mission.timer % 60)).padStart(2, '0')}`); } }
@@ -1488,7 +1502,7 @@ function frame(now) {
     jobs.update(dt); // content
     police.update(dt); // police
     const cru = police.cruisers(); // police
-    Sfx.engine(P.car && !P.car.dead ? Math.abs(P.car.speed) / P.car.spec.top : -1, (G.heat > 0 || cru.length) ? Math.min(1, 25 / Math.max(5, sirenNear(cru))) : 0);
+    Sfx.engine(P.car && !P.car.dead ? CP.rev(P.car) : -1, (G.heat > 0 || cru.length) ? Math.min(1, 25 / Math.max(5, sirenNear(cru))) : 0);
   }
   cat.position.set(P.x, P.y - (P.swim ? SWIM_SINK - Math.sin(G.time * 3) * 0.03 : 0), P.z); cat.rotation.y = P.yaw;
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides

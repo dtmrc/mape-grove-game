@@ -22,6 +22,8 @@ export function mat(color, map = null, emissive = 0, shiny = 0) {
 // ---------- noise ----------
 let seed = 1234;
 export const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+/** The town's seeded sequence position (world.js keeps it where the old Estates left it, so later builders don't shift). */
+export const rndSeed = { get: () => seed, set: (v) => { seed = v; } };
 const LAT = new Float32Array(256 * 256);
 for (let i = 0; i < LAT.length; i++) LAT[i] = rnd();
 const L = (i, j, p) => LAT[(((i % p) + p) % p) + ((((j % p) + p) % p) << 8)];

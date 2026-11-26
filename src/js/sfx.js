@@ -1,6 +1,6 @@
 // Tiny synthesized sound effects (WebAudio). Everything is generated, no audio files.
 let ctx = null, master = null, on = true;
-let eng = null, sir = null;
+let eng = null, sir = null; let sk = null; // driving
 
 function tone(freq, dur, type = 'square', vol = 0.12, slide = 0, delay = 0) {
   if (!ctx || !on) return;
@@ -38,6 +38,21 @@ export const Sfx = {
   },
   toggle() { on = !on; if (master) master.gain.value = on ? 0.6 : 0; return on; },
   isOn() { return on; },
+  // driving: looping tyre screech, level 0..1 (carphys.js)
+  skid(level) {
+    if (!ctx) return;
+    if (!sk) {
+      if (level < 0.05) return;
+      const n = ctx.sampleRate, b = ctx.createBuffer(1, n, n), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      sk = { s: ctx.createBufferSource(), f: ctx.createBiquadFilter(), g: ctx.createGain() };
+      sk.s.buffer = b; sk.s.loop = true; sk.f.type = 'bandpass'; sk.f.frequency.value = 1700; sk.f.Q.value = 4; sk.g.gain.value = 0;
+      sk.s.connect(sk.f); sk.f.connect(sk.g); sk.g.connect(master); sk.s.start();
+    }
+    const t = ctx.currentTime;
+    sk.g.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.11, t, 0.05);
+    sk.f.frequency.setTargetAtTime(1400 + level * 700 + Math.sin(t * 23) * 120, t, 0.05);
+  },
   engine(level, siren) {
     if (!ctx) return;
     const t = ctx.currentTime;

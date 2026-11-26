@@ -320,15 +320,35 @@ export function makeDev(o) {
     };
   }
   // roads: the whole graph is saved when it differs from the one the map code builds
-  const snapRoads = () => ({ n: NODES.map((n) => ({ x: r2(n.x), z: r2(n.z), b: n.bulb || 0, c: n.cw ? 1 : 0, d: n.dead ? 1 : 0 })), e: EDGES.map((e) => ({ a: e.a, b: e.b, w: r2(e.w), t: RD.etype(e), nt: e.nt ? 1 : 0 })) });
+  const snapRoads = () => ({ n: NODES.map((n) => ({ x: r2(n.x), z: r2(n.z), b: n.bulb || 0, c: n.cw ? 1 : 0, d: n.dead ? 1 : 0 })), e: EDGES.map((e) => ({ a: e.a, b: e.b, w: r2(e.w), t: RD.etype(e), nt: e.nt ? 1 : 0, ...(e.sw ? { sw: 1 } : {}), ...(e.county ? { county: 1 } : {}) })) });   // roads 2026-11-24: keep sidewalk / county flags
   const ROAD0 = snapRoads(), ROAD0S = JSON.stringify(ROAD0);
   function roadsDoc() {
     const r = snapRoads(); if (JSON.stringify(r) === ROAD0S) return null;
-    return { nx: r.n.map((n) => n.x), nz: r.n.map((n) => n.z), nb: r.n.map((n) => n.b), nc: r.n.map((n) => n.c), nd: r.n.map((n) => n.d), e: r.e };
+    return { base: ROAD0.n.length, nx: r.n.map((n) => n.x), nz: r.n.map((n) => n.z), nb: r.n.map((n) => n.b), nc: r.n.map((n) => n.c), nd: r.n.map((n) => n.d), e: r.e };
+  }
+  // A saved graph covers the map code's nodes as they were when it was saved (`base`; docs from before the 2026-11-13 map
+  // expansion have no base and 29). Nodes the map code added since are spliced in after them (the editor's own nodes
+  // shift up) and the new roads are added, so saved road edits and new map roads both survive.
+  const LEGACY_BASE = 29;
+  function migrateRoads(n, e, base) {
+    const B0 = ROAD0.n.length; if (!(base < B0)) return [n, e];
+    const sh = B0 - base, re = (i) => (i < base ? i : i + sh);
+    const n2 = [...n.slice(0, base), ...ROAD0.n.slice(base), ...n.slice(base)];
+    const e2 = e.map((q) => ({ ...q, a: re(+q.a), b: re(+q.b) }));
+    if (base === LEGACY_BASE) {   // Hwy 9 used to stop at the town's closed exits; it runs on into the countryside now
+      const ix = (nm) => NODES.findIndex((q) => q.name === nm);
+      const open = [['HN', 'RAMP'], ['RAMP', 'A'], ['HE', 'HX']].map(([a, b]) => [ix(a), ix(b)]);
+      for (const q of e2) if (open.some(([a, b]) => (q.a === a && q.b === b) || (q.a === b && q.b === a))) q.nt = 0;
+    }
+    // Lake Rd's X-L1 leg was taken out (2026-11-13, "get rid of road triangle"); drop it from older saves too
+    const x = NODES.findIndex((q) => q.name === 'X'), l1 = NODES.findIndex((q) => q.name === 'L1');
+    const kept = e2.filter((q) => !((q.a === x && q.b === l1) || (q.a === l1 && q.b === x)));
+    for (const q of ROAD0.e) if (q.a >= base || q.b >= base) kept.push({ ...q });
+    return [n2, kept];
   }
   function applyRoads(d) {
     let n, e;
-    if (d && Array.isArray(d.nx)) { n = d.nx.map((x, i) => ({ x: +x, z: +d.nz[i], b: +(d.nb || [])[i] || 0, c: +(d.nc || [])[i] || 0, d: +(d.nd || [])[i] || 0 })); e = d.e || []; }
+    if (d && Array.isArray(d.nx)) { n = d.nx.map((x, i) => ({ x: +x, z: +d.nz[i], b: +(d.nb || [])[i] || 0, c: +(d.nc || [])[i] || 0, d: +(d.nd || [])[i] || 0 })); e = d.e || []; [n, e] = migrateRoads(n, e, d.base ?? LEGACY_BASE); }
     else { n = ROAD0.n; e = ROAD0.e; }
     for (let i = 0; i < Math.max(n.length, NODES.length); i++) {
       const v = n[i] || { x: 0, z: 0, b: 0, c: 0, d: 1 };
@@ -336,7 +356,7 @@ export function makeDev(o) {
       const N0 = NODES[i]; N0.x = v.d ? 1e5 + i * 10 : v.x; N0.z = v.d ? 1e5 : v.z; N0.bulb = v.b || 0; N0.cw = !!v.c; N0.dead = !!v.d;
     }
     EDGES.length = 0;
-    for (const q of e) if (NODES[q.a] && NODES[q.b] && q.a !== q.b) { const t = q.t || 'paved'; EDGES.push({ a: q.a, b: q.b, w: +q.w || RD.DEFAULT_W[t], t, dirt: t === 'dirt', nt: !!q.nt }); }
+    for (const q of e) if (NODES[q.a] && NODES[q.b] && q.a !== q.b) { const t = q.t || 'paved'; EDGES.push({ a: q.a, b: q.b, w: +q.w || RD.DEFAULT_W[t], t, dirt: t === 'dirt', nt: !!q.nt, ...(q.sw ? { sw: true } : {}), ...(q.county ? { county: true } : {}) }); }
     RD.changed();
   }
   function applyEdits(e) {
@@ -367,8 +387,9 @@ export function makeDev(o) {
   function terrainDoc() { return { v: 1, n: TER.TN, cell: TER.TCELL, x0: TER.TX0, z0: TER.TZ0, amp: r2(TER.settings.amp), delta: TER.encodeDelta(), at: lastAt }; }
   function applyTerrainDoc(t) {
     t = t || {};
-    if (t.n && t.n !== TER.TN) { toast && toast('Saved terrain has a different grid size; ignored.'); return; }
-    TER.settings.amp = t.amp ?? 1; TER.computeBase(); TER.decodeDelta(t.delta || ''); TER.recompute(); dirtyOverlay();
+    // a doc from before the map expansion has a smaller grid: decodeDelta copies it in place by world position
+    const src = t.n && (t.n !== TER.TN || (t.x0 ?? TER.TX0) !== TER.TX0) ? { n: t.n, cell: t.cell || TER.TCELL, x0: t.x0 ?? TER.LEGACY_GRID.x0, z0: t.z0 ?? TER.LEGACY_GRID.z0 } : null;
+    TER.settings.amp = t.amp ?? 1; TER.computeBase(); TER.decodeDelta(t.delta || '', src); TER.recompute(); dirtyOverlay();
   }
   function setStatus(s) { status = s; for (const el of panel.querySelectorAll('.dv-status')) el.textContent = s; }
   function markDirty(kind) { if (kind === 't') dirtyT = true; else if (kind === 'g') dirtyG = true; else dirtyE = true; setStatus('Unsaved changes...'); saveTimer = 2.5; }
@@ -393,13 +414,13 @@ export function makeDev(o) {
     saving = false;
   }
   function loadLocal() {
-    try { const loc = JSON.parse(localStorage.getItem(LOCAL) || 'null'); if (loc) { if (loc.terrain) applyTerrainDoc(loc.terrain); if (loc.ground) GR.decodePaint(loc.ground.paint); if (loc.edits) applyEdits(loc.edits); setStatus('Loaded from this browser'); return; } } catch (e) { /* ignore */ }
+    try { const loc = JSON.parse(localStorage.getItem(LOCAL) || 'null'); if (loc) { if (loc.terrain) applyTerrainDoc(loc.terrain); if (loc.ground) GR.decodePaint(loc.ground.paint, loc.ground.n); if (loc.edits) applyEdits(loc.edits); setStatus('Loaded from this browser'); return; } } catch (e) { /* ignore */ }
     setStatus('No saved world yet');
   }
   const startLoad = async () => {
     if (SHARE) {
       if (SHARE.terrain) applyTerrainDoc(SHARE.terrain);
-      if (SHARE.ground) GR.decodePaint(SHARE.ground.paint);
+      if (SHARE.ground) GR.decodePaint(SHARE.ground.paint, SHARE.ground.n);
       if (SHARE.edits) applyEdits(SHARE.edits);
       // hide the time-of-day debug menu too (its key, its clock click and its help row)
       addEventListener('keydown', (e) => { if (e.key === '`' || e.key === '~' || e.code === 'Backquote') e.stopImmediatePropagation(); }, true);
@@ -423,7 +444,7 @@ export function makeDev(o) {
     db.doc('world/ground').onSnapshot((s) => {
       if (s.metadata && s.metadata.hasPendingWrites) return;
       const d = s.exists ? s.data() : null;
-      if (!dirtyG && !saving && !(d && d.at && d.at === lastAt)) GR.decodePaint(d && d.paint);
+      if (!dirtyG && !saving && !(d && d.at && d.at === lastAt)) GR.decodePaint(d && d.paint, d && d.n);
     }, () => {});
     db.doc('world/edits').onSnapshot((s) => {
       if (s.metadata && s.metadata.hasPendingWrites) return;
@@ -452,7 +473,7 @@ export function makeDev(o) {
   function lines(mat = lineMat) { const l = new THREE.LineSegments(new THREE.BufferGeometry(), mat); l.frustumCulled = false; l.renderOrder = 10; ovl.add(l); return l; }
   const colL = lines(), selL = lines(lineMatX), entL = lines(lineMatX), roadL = lines(), lightL = lines(), ringL = lines(lineMatX);
   const gridM = (() => {
-    const g = new THREE.PlaneGeometry(400, 400, 100, 100); g.rotateX(-Math.PI / 2);
+    const sz = (TER.TN - 1) * TER.TCELL, g = new THREE.PlaneGeometry(sz, sz, sz / 4, sz / 4); g.rotateX(-Math.PI / 2);
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x7fff9f, wireframe: true, transparent: true, opacity: 0.22, depthWrite: false, fog: false }));
     g.translate(0, 0.05, 0); TER.drapeMesh(m); m.renderOrder = 9; ovl.add(m); return m;
   })();
@@ -1094,7 +1115,7 @@ export function makeDev(o) {
   function panScreen(dx, dy) {
     const k = cam.dist * 0.0022 * (900 / Math.max(400, innerHeight)), fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
     cam.x += (-fz * dx - fx * dy) * k; cam.z += (fx * dx - fz * dy) * k;
-    cam.x = Math.max(-200, Math.min(200, cam.x)); cam.z = Math.max(-200, Math.min(200, cam.z));
+    const lim = -TER.TX0; cam.x = Math.max(-lim, Math.min(lim, cam.x)); cam.z = Math.max(-lim, Math.min(lim, cam.z));
   }
   const sameSel = (a, b) => a.kind === b.kind && (a.g ?? a.m ?? a.a ?? a.p) === (b.g ?? b.m ?? b.a ?? b.p);
 

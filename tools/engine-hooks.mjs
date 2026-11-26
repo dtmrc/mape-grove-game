@@ -18,7 +18,7 @@ function hook(file, steps) {
 }
 
 hook('world.js', [
-  ["import { makeRV, makeCar } from './models.js';", "\nimport { prepareWorld, makeGroundMesh, patchMaterial, floors, setFloorProvider } from './terrain.js';"],
+  ["import { makeRV, makeCar } from './models.js';", "\nimport { prepareWorld, makeGroundMesh, patchMaterial, floors, setFloorProvider } from './terrain.js';", 'after', "import { prepareWorld, makeGroundMesh, patchMaterial, floors, setFloorProvider"],
   ["import { makeRV, makeCar } from './models.js';", "\nimport { initRoads } from './roads.js';"],
   ["import { makeRV, makeCar } from './models.js';", "\nimport { initGround } from './ground.js';"],
   ['  (buckets[key] ||= []).push(g);', '  g.userData.o = [x, z]; // engine: geometry origin (terrain anchor)\n', 'before'],
