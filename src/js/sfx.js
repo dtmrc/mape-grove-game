@@ -38,6 +38,7 @@ export const Sfx = {
   },
   toggle() { on = !on; if (master) master.gain.value = on ? 0.6 : 0; return on; },
   isOn() { return on; },
+  audio() { return ctx ? { ctx, master } : null; },   // radio.js plays through the same context and mute
   // driving: looping tyre screech, level 0..1 (carphys.js)
   skid(level) {
     if (!ctx) return;

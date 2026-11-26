@@ -7,6 +7,7 @@ import { buildWorld, inTown, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, p
 import { Sfx } from './sfx.js';
 import { makeCave } from './cave.js';
 import { makeMeows } from './meows.js';
+import { makeRadio } from './radio.js'; // radio
 import { makeFirestarter } from './firestarter.js';
 import { setText, setHTML, setStyle, setClass, setData } from './dom.js'; // P10: write-on-change HUD
 import { makeFishing } from './fishing.js';
@@ -34,6 +35,7 @@ import { makeOfficer } from './officer.js';
 import { waterPolys } from './ground.js';
 import { makeUI } from './ui.js'; // ui: pause menu, settings, full map
 import { makeGamepad } from './gamepad.js'; // ui: gamepad
+import * as PDST from './pdstation.js'; // police station interior
 
 // ---------------- renderer ----------------
 const canvas = document.getElementById('c');
@@ -1517,6 +1519,7 @@ function frame(now) {
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
   if (!dev.camera(Math.max(dt, 0.001)))   updateCamera(Math.max(dt, 0.001));
   sky.mesh.position.copy(camera.position);
+  radio.update(dt); // radio
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
   dev.frame(dt); TER.beforeRender(scene, camera, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z); // engine: lift onto terrain
   BRK.update(dt);
@@ -1570,6 +1573,7 @@ BRK.init({ scene, Sfx, toast, camera }); // engine: breakables
 const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff, hurt, addCash, peds, places, isTouch, pool, lights, hemi, $, fishing: () => fishing });
 // meows: Goobles voice (src/js/meows.js)
 const meows = makeMeows({ P, G });
+const radio = makeRadio({ P, G, hit, isTouch }); // radio: car stations + police scanner (src/js/radio.js)
 // cave: the Hollow Deep easter egg (src/js/cave.js)
 const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
 window.__G = { G, P, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
@@ -1584,6 +1588,7 @@ const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, remove
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
 PIZZA.init({ G, places, fishing, toast, addCash, Sfx }); // Pizza City interior
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
+PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
