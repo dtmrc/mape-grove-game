@@ -77,7 +77,8 @@ export const Sfx = {
   door() { tone(180, 0.05, 'square', 0.08); tone(120, 0.06, 'square', 0.08, 0, 0.06); },
   horn() { tone(392, 0.35, 'square', 0.06); tone(466, 0.35, 'square', 0.05); },
   /** Goobles' voice: a synthesized meow. kind: 'hup' (jump effort), 'mew' (double jump), 'yowl' (triple jump),
-   *  'mrrp' (hops up onto something), 'hiss' (falls into water), 'grumble' (still swimming), 'pff' (climbs out). */
+   *  'mrrp' (hops up onto something), 'hiss' (falls into water), 'grumble' (still swimming), 'pff' (climbs out),
+   *  'meow' / 'mrow' / 'chirp' (random idle chatter). */
   meow(kind = 'mew', pitch = 1, delay = 0) {
     if (!ctx || !on) return;
     const K = {   // f0 start / peak / end (Hz), duration, formant open (Hz), loudness, breathiness
@@ -88,6 +89,9 @@ export const Sfx = {
       hiss:    [430, 700, 300, 0.62, 1300, 0.12, 0.35, true],
       grumble: [300, 380, 260, 0.45, 900, 0.07, 0.3, true],
       pff:     [500, 420, 330, 0.14, 1000, 0.07, 0.6],
+      meow:    [540, 780, 430, 0.58, 1800, 0.11, 0.15],   // random idle voice: the full "meeoow"
+      mrow:    [430, 560, 720, 0.42, 1500, 0.10, 0.2],    // rising, like a question
+      chirp:   [700, 980, 820, 0.11, 2100, 0.09, 0.2, true],
     }[kind] || [620, 860, 560, 0.22, 1900, 0.11, 0.15];
     const [a, b, c, dur, open, vol, br, trill] = K;
     const t = ctx.currentTime + delay, j = pitch * (0.94 + Math.random() * 0.12), d = dur * (0.9 + Math.random() * 0.2);
