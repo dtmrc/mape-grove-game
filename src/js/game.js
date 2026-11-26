@@ -29,6 +29,7 @@ import { makeOfficer } from './officer.js';
 import { waterPolys } from './ground.js';
 import { makeUI } from './ui.js'; // ui: pause menu, settings, full map
 import { makeGamepad } from './gamepad.js'; // ui: gamepad
+import * as PDST from './pdstation.js'; // police station interior
 
 // ---------------- renderer ----------------
 const canvas = document.getElementById('c');
@@ -311,7 +312,8 @@ function spawnTraffic(type) {
   for (let tries = 0; tries < 30; tries++) {
     const a = randomLane(); if (!a) continue;
     a.off = a.w / 4;
-    const A = NODES[a.from], B = NODES[a.to], L = Math.hypot(B.x - A.x, B.z - A.z), dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
+    const A = NODES[a.from], B = NODES[a.to], L = A && B ? Math.hypot(B.x - A.x, B.z - A.z) : 0, dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
+    if (!(L > 1)) continue; // a zero-length road edge would spawn a NaN car (it then NaNs every car it touches)
     const t = 0.3 + Math.random() * 0.4;
     const x = A.x + (B.x - A.x) * t - dz * a.off, z = A.z + (B.z - A.z) * t + dx * a.off;
     if (Math.hypot(x - P.x, z - P.z) < 25 || cars.some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue;
@@ -1570,6 +1572,7 @@ if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gu
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });
 const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, removeCar, setCheck, objective, toast, banner, addCash, addHeat, places, cars, peds, P, G, NPC, giverMarks, makeMarker, say, startMission, endMission, mission: () => mission, scene, T, Sfx, INT, ahead, fishing });
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
+PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
