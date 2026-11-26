@@ -1,0 +1,27 @@
+<!doctype html><html><body style="margin:0;background:transparent"><canvas id="c"></canvas>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// orthographic side view as flat region colours (body red, glass blue, wheels green, lamps yellow) on a transparent canvas.
+// o = {W, H, s (px per metre), ox, oy (pixel of the model point z=oz, y=oyM), oz, oyM, right (1 = nose to the right)}
+window.go = async (url, o) => {
+  const R = new T.WebGLRenderer({ canvas: document.getElementById('c'), antialias: false, alpha: true, preserveDrawingBuffer: true });
+  R.setSize(o.W, o.H); R.setClearColor(0x000000, 0);
+  const s = new T.Scene(), gl = await new GLTFLoader().loadAsync(url); s.add(gl.scene); const names = new Set();
+  gl.scene.traverse((m) => { if (!m.isMesh) return; const n = (m.name + ' ' + (m.material.name || '')); names.add(m.name);
+    const c = /glass/i.test(n) ? 0x2040ff : /tire|tyre|rim|wheel|hub/i.test(n) ? 0x00c040 : /head|tail|amber|light|clear/i.test(n) ? 0xffd000 : /well|under/i.test(n) ? 0x00e0e0 : /trim|clad|gloss|grille|honeycomb|mesh|black|plastic|skin2/i.test(n) ? 0x8000ff : /chrome|steel|badge|plate/i.test(n) ? 0xff9000 : 0xff2020;
+    m.material = new T.MeshBasicMaterial({ color: c, side: T.DoubleSide }); });
+  // screen x = ox + right * (z - oz) * s ; screen y = oy - (y - oyM) * s
+  const cx = o.W / 2, cy = o.H / 2, zc = o.oz + (o.right * (cx - o.ox)) / o.s, yc = o.oyM + (o.oy - cy) / o.s;
+  const cam = new T.OrthographicCamera(-o.W / 2 / o.s, o.W / 2 / o.s, o.H / 2 / o.s, -o.H / 2 / o.s, 0.1, 100);
+  cam.position.set(-o.right * 20, yc, zc); cam.lookAt(0, yc, zc);
+  // other views (model centred): top (nose left), front, rear
+  if (o.view === 'top') { cam.up.set(1, 0, 0); cam.position.set(0, 30, 0); cam.lookAt(0, 0, 0); }
+  if (o.view === 'front') { cam.position.set(0, o.H / 2 / o.s - 0.05, 30); cam.lookAt(0, o.H / 2 / o.s - 0.05, 0); }
+  if (o.view === 'rear') { cam.position.set(0, o.H / 2 / o.s - 0.05, -30); cam.lookAt(0, o.H / 2 / o.s - 0.05, 0); }
+  if (o.shade) { s.traverse((m) => { if (m.isMesh) m.material = new T.MeshNormalMaterial({ side: T.DoubleSide }); }); R.setClearColor(0xffffff, 1); }
+  R.render(s, cam);
+  return [...names];
+};
+</script></body></html>

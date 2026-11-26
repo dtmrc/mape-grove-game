@@ -1,0 +1,23 @@
+<!doctype html><html><body style="margin:0;background:#222"><canvas id="c"></canvas>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+window.go = async (url, views) => {
+  const W = 760, H = 460;
+  const R = new T.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+  R.setSize(W * views.length, H); R.setScissorTest(true); R.outputColorSpace = T.SRGBColorSpace;
+  const s = new T.Scene(); s.background = new T.Color(0xaebfcc);
+  s.add(new T.HemisphereLight(0xffffff, 0x9a948a, 3.4)); const d = new T.DirectionalLight(0xfff4e4, 1.6); d.position.set(5, 9, 6); s.add(d);
+  const g = new T.Mesh(new T.CircleGeometry(30, 40), new T.MeshLambertMaterial({ color: 0x74777a })); g.rotation.x = -Math.PI / 2; s.add(g);
+  const gl = await new GLTFLoader().loadAsync(url); s.add(gl.scene);
+  gl.scene.traverse((o) => { if (o.isMesh) { const m = o.material; o.material = new T.MeshLambertMaterial({ map: m.map, color: m.color, side: T.DoubleSide }); } });
+  const bb = new T.Box3().setFromObject(gl.scene), sz = bb.getSize(new T.Vector3()), L = Math.max(sz.z, 4.5), cy = sz.y * 0.42;
+  views.forEach((v, i) => {
+    const cam = new T.PerspectiveCamera(24, W / H, 0.1, 200), n = new T.Vector3(...v).normalize().multiplyScalar(L * 1.52);
+    if (window.CLOSE) { const c = window.CLOSE[i], k = new T.Vector3(...(c.length > 4 ? c.slice(4) : v)).normalize().multiplyScalar(c[3]); cam.position.set(c[0] + k.x, c[1] + k.y, c[2] + k.z); cam.lookAt(c[0], c[1], c[2]); } else { cam.position.set(n.x, cy + n.y, n.z); cam.lookAt(0, cy, 0); }
+    R.setViewport(i * W, 0, W, H); R.setScissor(i * W, 0, W, H); R.render(s, cam);
+  });
+  return sz.toArray();
+};
+</script></body></html>
