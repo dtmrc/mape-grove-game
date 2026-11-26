@@ -1,0 +1,19 @@
+<!doctype html><html><body style="margin:0;background:transparent"><canvas id="c"></canvas>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// render the glb through a camera solved from photo landmarks: m = camera world matrix (column-major 16), fov vertical deg, W x H
+window.go = async (url, m, fov, W, H) => {
+  const R = new T.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true, alpha: true });
+  R.setSize(W, H); R.setClearColor(0x000000, 0); R.outputColorSpace = T.SRGBColorSpace;
+  const s = new T.Scene();
+  s.add(new T.HemisphereLight(0xffffff, 0x8a847a, 2.6)); const d = new T.DirectionalLight(0xfff4e4, 2.2); d.position.set(4, 9, 7); s.add(d);
+  const gl = await new GLTFLoader().loadAsync(url); s.add(gl.scene);
+  gl.scene.traverse((o) => { if (o.isMesh) { const mt = o.material; o.material = new T.MeshLambertMaterial({ map: mt.map, color: mt.color, side: T.DoubleSide }); } });
+  const cam = new T.PerspectiveCamera(fov, W / H, 0.05, 200);
+  cam.matrixAutoUpdate = false; cam.matrixWorld.fromArray(m); cam.matrixWorldInverse.copy(cam.matrixWorld).invert(); cam.matrix.copy(cam.matrixWorld);
+  cam.updateProjectionMatrix();
+  s.updateMatrixWorld(true); R.render(s, cam);
+};
+</script></body></html>

@@ -1,0 +1,3 @@
+#!/bin/bash
+# rebuild ids then review sheet: ./rb.sh name id...
+n=$1; shift; node build.cjs "$@" 2>&1 | grep -v "^$" | sed 's/size.*glb/glb/'; python3 rev.py /tmp/claude-0/rev/$n.png "$@"
