@@ -35,7 +35,7 @@ function persist() { try { localStorage.setItem(KEY, JSON.stringify({ track: S.t
 const mission = () => (A ? A.mission() : null);
 const catchStage = () => (A && A.fishing ? A.fishing.S.quest || 'none' : 'none');
 function status(q) {
-  if (q.status) return q.status();   // registered quests (register()) report their own state; 'hidden' keeps them out of the log
+  if (q.status) return q.status();   // quests.add(): a module's own quest
   const G = A.G, m = mission();
   if (q.id === 'catch') { const st = catchStage(); return st === 'done' ? 'done' : st === 'none' ? 'open' : 'active'; }
   if (m && m.id === q.id) return 'active';
@@ -50,7 +50,7 @@ function giverSpot(q) {
 const near = (p, r) => Math.hypot(A.px() - p.x, A.pz() - p.z) < r;
 /** What the HUD should show for quest q right now: { obj, check } (check may be null). */
 function guide(q) {
-  if (q.guide) return q.guide();
+  if (q.guide) return q.guide();   // quests.add(): a module's own quest
   const st = status(q), m = mission();
   if (q.id === 'catch' && st === 'active') {
     const f = A.fishing.QUEST && A.fishing.QUEST[catchStage()];
@@ -222,10 +222,12 @@ function close() {
 
 export const quests = {
   S, QUESTS,
+  /** A module's own quest: { id, kind, title, giver, where, reward, blurb, status() -> 'open'|'active'|'done', guide() -> { obj, check } }. */
+  add(q) { if (!BY[q.id]) { QUESTS.push(q); BY[q.id] = q; } },
   init(ctx) { A = ctx; if (A.G.objRaw === undefined) A.G.objRaw = ''; load(); S.lastMission = mission() ? mission().id : null; S.lastCatch = catchStage(); buildDom(); },
   open, close, get isOpen() { return S.open; },
   /** Add a quest owned by another module: { id, kind, title, giver, where, reward, blurb, status() -> 'hidden'|'open'|'active'|'locked'|'done', guide() -> { obj, check } }. */
-  register(def) { if (!def || BY[def.id]) return; QUESTS.push(def); BY[def.id] = def; if (S.pendingTrack === def.id) { S.track = def.id; S.pendingTrack = null; } },
+  register(def) { if (!def || BY[def.id]) return; quests.add(def); if (S.pendingTrack === def.id) { S.track = def.id; S.pendingTrack = null; } },
   track: (id) => setTrack(id, true),
   list: () => QUESTS.map((q) => ({ id: q.id, title: q.title, status: status(q), tracked: S.track === q.id, step: guide(q).obj })),
   view: () => S.view,
