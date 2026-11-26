@@ -315,6 +315,7 @@ function spawnTraffic(type) {
     const A = NODES[a.from], B = NODES[a.to], L = Math.hypot(B.x - A.x, B.z - A.z), dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
     const t = 0.3 + Math.random() * 0.4;
     const x = A.x + (B.x - A.x) * t - dz * a.off, z = A.z + (B.z - A.z) * t + dx * a.off;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) continue; // zero-length edge or edge without a width (rescued/deleted roads): NaN would spread to every car via collisions
     if (Math.hypot(x - P.x, z - P.z) < 25 || cars.some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue;
     const c = spawnCar(type, x, z, Math.atan2(dx, dz), { driver: 'ai' });
     c.ai = { ...a, cruise: 8 + Math.random() * 4 };
