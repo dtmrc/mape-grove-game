@@ -315,8 +315,7 @@ function spawnTraffic(type) {
   for (let tries = 0; tries < 30; tries++) {
     const a = randomLane(); if (!a) continue;
     a.off = a.w / 4;
-    const A = NODES[a.from], B = NODES[a.to], L = A && B ? Math.hypot(B.x - A.x, B.z - A.z) : 0, dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
-    if (!(L > 1)) continue; // a zero-length road edge would spawn a NaN car (it then NaNs every car it touches)
+    const A = NODES[a.from], B = NODES[a.to], L = Math.hypot(B.x - A.x, B.z - A.z), dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
     const t = 0.3 + Math.random() * 0.4;
     const x = A.x + (B.x - A.x) * t - dz * a.off, z = A.z + (B.z - A.z) * t + dx * a.off;
     if (!Number.isFinite(x) || !Number.isFinite(z)) continue; // zero-length edge or edge without a width (rescued/deleted roads): NaN would spread to every car via collisions
