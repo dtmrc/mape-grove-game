@@ -1970,6 +1970,10 @@ const KEEP_OUT = [];
 /** The Hollow Deep (cave.js): a cave mouth in a rock face deep in the west of Hollow Woods. yaw = the way the mouth faces. */
 export const CAVE_SPOT = { x: -272, z: 104, yaw: Math.PI / 2 };
 KEEP_OUT.push({ x0: CAVE_SPOT.x - 11, x1: CAVE_SPOT.x + 9, z0: CAVE_SPOT.z - 11, z1: CAVE_SPOT.z + 11 });   // no trees in the cave's clearing
+// haunted.js (Ghost vs. the HOA): the lane Gary's bulldozer comes down, east of the cave mouth, and his "Hollow Estates" site by the RV
+export const SITE_SPOT = { x: -128, z: 62 };
+KEEP_OUT.push({ x0: CAVE_SPOT.x + 9, x1: CAVE_SPOT.x + 52, z0: CAVE_SPOT.z - 6, z1: CAVE_SPOT.z + 6 });
+KEEP_OUT.push({ x0: SITE_SPOT.x - 11, x1: SITE_SPOT.x + 11, z0: SITE_SPOT.z - 9, z1: SITE_SPOT.z + 9 });
 
 // ---------- Maple Grove Estates, Phase II (2026-11-13, diet's markup): new streets + homes west of the Estates ----------
 function buildEstatesWest() {

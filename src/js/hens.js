@@ -547,7 +547,7 @@ export function makeHens(ctx) {
     const g = gh(); if (g) g.talking = false;
     if (how === 'deal') { SV.hens = 6; SV.weekStart = SV.day | 0; SV.bucket = 0; setStage('deal'); toast('The Missing Hens: done. John will put the hens back tonight. 3 fish a week, bucket by the torch post.', 5); }
     else { SV.onHead = 1; setStage('freed'); toast('The Missing Hens: done. Tuesday is riding on your head now.', 4.5); }
-    SV.wand = 1; store();
+    SV.wand = 1; SV.doneDay = SV.day | 0; store();
     addCash(150); Sfx.jingle && Sfx.jingle();
     S.wandToast = true;
     if (quests && quests.track) quests.track(null);

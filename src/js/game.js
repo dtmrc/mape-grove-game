@@ -7,6 +7,7 @@ import { buildWorld, inTown, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, p
 import { Sfx } from './sfx.js';
 import { makeCave } from './cave.js';
 import { makeHens } from './hens.js';
+import { makeHaunted } from './haunted.js';
 import { makeMeows } from './meows.js';
 import { makeYardCats, KEY as YARDCATS_KEY } from './yardcats.js';
 import { makeRadio } from './radio.js'; // radio
@@ -1031,7 +1032,7 @@ function updatePlayer(dt) {
   // interact
   if (hit('e', 'f', 'enter') && !(P.lock > 0)) {
     const npc = nearNpc();
-    if (hens.interact()) { /* hens: clues, coop, bucket */ } else if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
+    if (haunted.interact()) { /* haunted: note, fetch items, site, bulldozer */ } else if (hens.interact()) { /* hens: clues, coop, bucket */ } else if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
     else if (near) enterCar(near);
   }
   if (hit('e', 'f', 'enter') === false && false) {/* noop */}
@@ -1522,6 +1523,7 @@ function frame(now) {
     fires.update(dt);
     cave.update(dt);
     hens.update(dt);
+    haunted.update(dt);
     fishing.update(dt);
     jobs.update(dt); // content
     police.update(dt); // police
@@ -1546,7 +1548,7 @@ function frame(now) {
   if (P.car) setStyle(hud.carhpfill, 'width', P.car.hp + '%');
   setStyle(hud.fuel, 'display', P.car ? 'flex' : 'none');
   if (P.car) { const f = P.car.fuel ?? 100, el = hud.fuelfill; setStyle(el, 'width', f + '%'); setStyle(el, 'background', f < 20 ? '#ff4040' : f < 45 ? '#ffd23f' : '#7fe07f'); setClass(hud.fuel, 'low', f < 20); setClass(hud.fuel, 'pump', !!P.car.filling); }
-  const prompt = !P.car && !G.dialog && !G.paused ? (hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
+  const prompt = !P.car && !G.dialog && !G.paused ? (haunted.prompt() || hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
   setText(hud.prompt, prompt); setStyle(hud.prompt, 'display', prompt ? 'block' : 'none');
   if (jail.active() && !G.dialog && !G.paused) { const jp = jail.prompt(); setText(hud.prompt, jp); setStyle(hud.prompt, 'display', jp ? 'block' : 'none'); } // jailbreak
   setText(hud.usebtn, P.car ? 'EXIT' : prompt ? (prompt.includes('Talk') ? 'TALK' : prompt.includes('Get in') ? 'GET IN' : prompt.replace(/^E[:!]? ?/, '').split(' ')[0].toUpperCase().slice(0, 6)) : 'USE');
@@ -1593,7 +1595,9 @@ const radio = makeRadio({ P, G, hit, isTouch }); // radio: car stations + police
 const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
 // hens: The Missing Hens, part A of the Ghost of John quest (src/js/hens.js)
 const hens = makeHens({ scene, G, P, cat, places, NPC, fishing, quests, cave, say, toast, Sfx, addCash, isTouch });
-window.__G = { G, P, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
+// haunted: Ghost of John parts B and C (src/js/haunted.js)
+const haunted = makeHaunted({ scene, G, P, cat, places, NPC, fishing, quests, cave, hens, say, toast, Sfx, addCash, addHeat, hit, isTouch });
+window.__G = { G, P, haunted, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;

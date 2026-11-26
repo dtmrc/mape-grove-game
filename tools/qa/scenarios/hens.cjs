@@ -46,7 +46,7 @@ module.exports = async ({ S, check, shot }) => {
   const d = await S.js(async () => {
     const QA = window.QA, H = window.__HENS, C = window.__CAVE, G = window.__G, P = G.P;
     QA.time(12, { freeze: true });
-    C.lair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200); await QA.frames(5);
+    C.goLair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200); await QA.frames(5);
     const L = window.__INT.room; P.x = L.origin.x + 1.6; P.z = L.origin.z + 1.6; await QA.frames(60);
     let k = 0; while (G.G.dialog && k++ < 12) await QA.key('e');
     await QA.frames(2);
@@ -72,7 +72,7 @@ module.exports = async ({ S, check, shot }) => {
   check('battle can be won with the menu moves', e.won || e.lost, e);
   if (!e.won) await S.js(async () => { const H = window.__HENS; H.stage('cave'); });
   // force the choice screen for the shot if the fight was lost
-  await S.js(async () => { const H = window.__HENS, QA = window.QA; if (!H.S.choice) { const C = window.__CAVE; if (window.__INT.current() !== 'cavelair') { C.lair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200); } } await QA.frames(3); });
+  await S.js(async () => { const H = window.__HENS, QA = window.QA; if (!H.S.choice) { const C = window.__CAVE; if (window.__INT.current() !== 'cavelair') { C.goLair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200); } } await QA.frames(3); });
   await shot('hens-choice', { hud: true });
   const f = await S.js(async () => {
     const QA = window.QA, H = window.__HENS, G = window.__G; const cash0 = G.G.cash;

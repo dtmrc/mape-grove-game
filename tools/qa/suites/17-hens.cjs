@@ -12,7 +12,7 @@ module.exports = {
       o.start = H.state();
       H.clue('nana'); H.clue('shadow'); H.clue('trail'); await QA.frames(3); for (let i = 0; i < 4 && G.G.dialog; i++) await QA.key('e');
       o.ready = H.state().stage;
-      C.lair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200);
+      C.goLair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200);
       const L = window.__INT.room; P.x = L.origin.x + 1.6; P.z = L.origin.z + 1.6; await QA.frames(60);
       for (let i = 0; i < 12 && G.G.dialog; i++) await QA.key('e');
       o.battle = !!H.S.battle;

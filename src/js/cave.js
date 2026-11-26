@@ -6,7 +6,7 @@
 //
 // Rooms go through interiors.js (registerRoom; rendered on layer 1 far off the map), so collisions, camera, saves and
 // exits work like every other interior. The cave door is closed (no marker) until the torch is in Goobles' paw.
-// Wired into game.js by tools/cave-hooks.mjs. Debug: window.__CAVE (.tp(), .torch(), .lair(), .S, .reset()).
+// Wired into game.js by tools/cave-hooks.mjs. Debug: window.__CAVE (.tp(), .torch(), .goLair(), .S, .reset()).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lambert, basic, phong } from './gfx.js';
@@ -288,7 +288,7 @@ function catHead(parent, y, s = 1, sleepy = false, chewed = true) {
   for (const sgn of [-1, 1]) M(box(0.045, sleepy ? 0.008 : 0.022, 0.01), eye, sgn * 0.045, 0.01, 0.087, h);
   return h;
 }
-function bronzeBust(parent, x, z, ry, s = 1, plinthH = 0.9) {
+export function bronzeBust(parent, x, z, ry, s = 1, plinthH = 0.9) {
   const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; parent.add(g);
   if (plinthH > 0) { M(box(0.46 * s, plinthH, 0.46 * s), stone(), 0, plinthH / 2, 0, g); M(box(0.54 * s, 0.06, 0.54 * s), stone(), 0, plinthH, 0, g); }
   const top = plinthH + 0.03;
@@ -1018,7 +1018,7 @@ export function makeCave(ctx) {
     update, prompt, interact,
     tp() { const [x, z] = L2W(0, 4.5); P.x = x; P.z = z; P.y = 0; P.yaw = C.yaw + Math.PI; return { x, z }; },
     torch() { setHeld(true); },
-    lair() { setHeld(true); S.transit = true; try { INTM.enter('cavelair', { instant: true, returnTo: outside() }); } finally { S.transit = false; } },
+    goLair() { setHeld(true); S.transit = true; try { INTM.enter('cavelair', { instant: true, returnTo: outside() }); } finally { S.transit = false; } },   // (api.lair is the dwelling's data once it is built)
     tunnel() { setHeld(true); INTM.enter('cave', { instant: true, returnTo: outside() }); },
     reset() { SV = api.SV = { opened: {}, read: {} }; store(); },
     state: () => ({ held: S.held, room: S.room, depth: Math.round(S.depth), ghost: S.gh.state, met: !!SV.met, opened: Object.keys(SV.opened), read: Object.keys(SV.read) }),
