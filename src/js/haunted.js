@@ -491,6 +491,7 @@ export function makeHaunted(ctx) {
     if (S.battle) return;
     G.hp = Math.max(G.hp, 70);
     S.battle = { g: GARY_MAX, dist: DIST0, sel: 0, mode: 'msg', msgs: [['', 'GARY IN A BULLDOZER rumbles down the lane! 40 metres to the cave. Don\'t let him get there.']], after: 'menu', hiss: 0, lift: 0, stun: 0, cd: 0, rant: 0, flash: 0 };
+    try { const [dx, dz] = L2W(0, 27); window.__G && window.__G.setCam && window.__G.setCam(Math.atan2(P.x - dx, P.z - dz), 0.28); } catch (e) { /* camera stays */ }   // look up the lane at him
     ui.handler = { move: (d) => { const B = S.battle; if (B && B.mode === 'menu') { B.sel = (B.sel + d + 4) % 4; drawBoss(); } }, confirm: (i) => bossConfirm(i) };
     drawBoss();
   }
