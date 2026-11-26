@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
 import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex } from './houses.js';
+import { buildRoofs, roofTop } from './rooftops.js';   // walkable roofs
 import { makeRV, makeCar } from './models.js';
 import { initRoads } from './roads.js';
 import { flowRoads } from './roadflow.js';
@@ -360,7 +361,7 @@ function tree0(x, z, s, o) {
     addS(new THREE.ConeGeometry(1.3 * s, 2.2 * s, L ? 7 : 9, 1, L), 'leaves', t.clone().multiply(new THREE.Color(0xe0ffd8)), x, 4.3 * s, z);
     if (s > 1.2) addS(new THREE.ConeGeometry(0.9 * s, 1.8 * s, L ? 6 : 8, 1, L), 'leaves', t.clone().multiply(new THREE.Color(0xd8f8d0)), x, 5.4 * s, z);
   }
-  if (!o.nocol) colliders.push({ cx: x, cz: z, r: 0.4 * s, h: 6, tree: true, ...(o.ng ? { ng: true } : {}) });
+  if (!o.nocol) colliders.push({ cx: x, cz: z, r: 0.4 * s, h: 6, tree: true, top: (kind === 'round' ? 5.2 : s > 1.2 ? 5.9 : 5.1) * s, pr: (kind === 'round' ? 1.1 : 0.8) * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
 function deadTree(x, z, s = 1) {
   if (onRoad(x, z, 0.5 * s, true)) return;
@@ -377,7 +378,7 @@ function deadTree0(x, z, s, o = {}) {
     g.translate(0, len / 2, 0); g.rotateZ(tilt); g.rotateY(a);
     addS(g, 'bark', 0x8a8680, x, (2.2 + k * 0.5) * s, z);
   }
-  colliders.push({ cx: x, cz: z, r: 0.35 * s, h: 6, tree: true, ...(o.ng ? { ng: true } : {}) });
+  colliders.push({ cx: x, cz: z, r: 0.35 * s, h: 6, tree: true, top: 4.2 * s, pr: 0.6 * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
 function bush(x, z, s = 1, c = 0xb0e0a0) { addS(new THREE.IcosahedronGeometry(0.7 * s, 1), 'leaves', c, x, 0.45 * s, z, R() * 6); }
 function fence(x0, z0, x1, z1, h = 1.2, color = 0xffffff) {
@@ -764,6 +765,7 @@ export function buildWorld(scene, T) {
   // merge buckets
   // engine: terrain anchors + movable groups, then the terrain ground mesh
   const tctx = { colliders, EDGES, NODES, inLake, fields: FIELDS, forest: woodsFloor, relief: woodsRelief, paint: paintWoods, trails: [{ pts: HOLLOW_TRAIL, w: 2.6 }], waterMat: WATER_MAT, rebuildGrid: () => { GRID = null; }, gridPatch };
+  buildRoofs(colliders, buckets, cbounds);   // rooftops: real roof heights under every building collider
   prepareWorld(buckets, tctx);
   if (tctx.ground) scene.add(makeGroundMesh(initGround(scene, M[tctx.ground.key], T, tctx)));
   // one merged mesh per material per map chunk (the town + eight countryside sectors), each culled on its own
@@ -2300,21 +2302,21 @@ function nearby(x, z, r) {
 
 /** Push a circle out of all colliders. Returns {x,z,hit,nx,nz}. */
 export function collide(x, z, r, y = 0, o) {
-  let hit = false, nx = 0, nz = 0;
+  let hit = false, nx = 0, nz = 0, hc = null;
   const list = nearby(x, z, r + 1.5); // P13: iterate the shared scratch list directly (nothing below calls nearby)
   for (let it = 0; it < 2; it++) for (let i = 0; i < list.length; i++) { const c = list[i];
-    if (y >= (c.top ?? c.h ?? 5) - 0.02) continue; // engine: standing on top of it
+    if (c.rg ? y >= roofTop(c, x, z) - 0.45 : y >= (c.top ?? c.h ?? 5) - 0.02) continue; // engine: standing on top of it (rooftops: roofs step like stairs)
     if (c.water && o && o.swim) continue;  // gameplay: the player can swim, cars and peds stay out
     if (c.r !== undefined) {
       const dx = x - c.cx, dz = z - c.cz, d = Math.hypot(dx, dz), m = c.r + r;
-      if (d < m && d > 1e-6) { x = c.cx + dx / d * m; z = c.cz + dz / d * m; hit = true; nx = dx / d; nz = dz / d; }
+      if (d < m && d > 1e-6) { x = c.cx + dx / d * m; z = c.cz + dz / d * m; hit = true; hc = c; nx = dx / d; nz = dz / d; }
     } else if (c.poly) {
       if (x + r < c.x0 || x - r > c.x1 || z + r < c.z0 || z - r > c.z1) continue;
       const q = polyNear(c.poly, x, z);
       if (!q.inside && q.d >= r) continue;
       if (q.d < 1e-6) continue;
       const s = q.inside ? -1 : 1, ux = (x - q.qx) / q.d * s, uz = (z - q.qz) / q.d * s;
-      x = q.qx + ux * r; z = q.qz + uz * r; nx = ux; nz = uz; hit = true;
+      x = q.qx + ux * r; z = q.qz + uz * r; nx = ux; nz = uz; hit = true; hc = c;
     } else if (c.ob) {
       const dx = x - c.cx, dz = z - c.cz;
       let lx = dx * c.c - dz * c.s, lz = dx * c.s + dz * c.c;
@@ -2329,7 +2331,7 @@ export function collide(x, z, r, y = 0, o) {
         if (nlx) lx = nlx * (c.hw + r); else lz = nlz * (c.hd + r);
       } else { lx = qx + ex / d * r; lz = qz + ez / d * r; nlx = ex / d; nlz = ez / d; }
       x = c.cx + lx * c.c + lz * c.s; z = c.cz - lx * c.s + lz * c.c;
-      nx = nlx * c.c + nlz * c.s; nz = -nlx * c.s + nlz * c.c; hit = true;
+      nx = nlx * c.c + nlz * c.s; nz = -nlx * c.s + nlz * c.c; hit = true; hc = c;
     } else {
       if (x + r < c.x0 || x - r > c.x1 || z + r < c.z0 || z - r > c.z1) continue;
       const qx = Math.max(c.x0, Math.min(x, c.x1)), qz = Math.max(c.z0, Math.min(z, c.z1));
@@ -2340,10 +2342,10 @@ export function collide(x, z, r, y = 0, o) {
         const [pen, ox, oz] = opts[0];
         x += ox * (pen + r); z += oz * (pen + r); nx = ox; nz = oz;
       } else { x = qx + dx / d * r; z = qz + dz / d * r; nx = dx / d; nz = dz / d; }
-      hit = true;
+      hit = true; hc = c;
     }
   }
-  return { x, z, hit, nx, nz };
+  return { x, z, hit, nx, nz, hc };
 }
 
 /** engine: the top of the highest solid thing under x,z the player can stand on from height y (steps up 0.5 m).
@@ -2357,10 +2359,10 @@ export function breakablesNear(x, z, r) {
 export function colTop(x, z, y) {
   let best = 0;
   for (const c of nearby(x, z, 0.1)) {
-    const top = c.top ?? c.h ?? 5;
+    const top = c.rg ? roofTop(c, x, z) : c.top ?? c.h ?? 5;   // rooftops
     if (c.water || top <= best || top > y + 0.5) continue;
     let inside;
-    if (c.r !== undefined) inside = Math.hypot(x - c.cx, z - c.cz) < c.r;
+    if (c.r !== undefined) inside = Math.hypot(x - c.cx, z - c.cz) < (c.pr ?? c.r);   // climb: pr = a tree's canopy perch
     else if (c.poly) inside = x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1 && polyNear(c.poly, x, z).inside;
     else if (c.ob) { const dx = x - c.cx, dz = z - c.cz; inside = Math.abs(dx * c.c - dz * c.s) < c.hw && Math.abs(dx * c.s + dz * c.c) < c.hd; }
     else inside = x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1;
@@ -2372,7 +2374,7 @@ setFloorProvider(colTop);
 
 export function blocked(x, y, z) {
   for (const c of nearby(x, z, 0.1)) {
-    if (y > (c.h ?? 5) || c.water) continue;
+    if (y > (c.rg ? roofTop(c, x, z) : c.h ?? 5) || c.water) continue;
     if (c.r !== undefined) { if (Math.hypot(x - c.cx, z - c.cz) < c.r) return true; }
     else if (c.poly) { if (x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1 && polyNear(c.poly, x, z).inside) return true; }
     else if (c.ob) { const dx = x - c.cx, dz = z - c.cz; if (Math.abs(dx * c.c - dz * c.s) < c.hw && Math.abs(dx * c.s + dz * c.c) < c.hd) return true; }
