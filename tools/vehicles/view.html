@@ -1,0 +1,35 @@
+<!doctype html><html><body style="margin:0;background:#8aa">
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Check render of baked game vehicles (see bake.cjs): window.shot(id, full) renders 4 views of src/models/vehicles/<id>.glb
+// assembled like the game does (paint tinted with the stock colour, wheels on the axles); full=true renders the build.cjs
+// body + wheel GLBs instead, for side-by-side comparison.
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+const R = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); R.setSize(1600, 400); document.body.appendChild(R.domElement);
+const L = () => { const l = new GLTFLoader(); l.setMeshoptDecoder(MeshoptDecoder); return l; };
+let idx = null;
+window.shot = async (id, body, wheel, far) => {
+  idx = idx || await (await fetch('/game/index.json')).json(); const I = idx[id];
+  const S = new T.Scene(); S.background = new T.Color(0x8aa0aa); S.add(new T.HemisphereLight(0xffffff, 0x556070, 1.6)); const d = new T.DirectionalLight(0xffffff, 1.6); d.position.set(3, 6, 4); S.add(d);
+  const car = new T.Group(); S.add(car);
+  const bg = (await L().loadAsync(body)).scene, wg = (await L().loadAsync(wheel)).scene;
+  let wheelObj = wg;
+  bg.traverse((m) => { if (m.isMesh) { if (m.material.map) { m.material.map.magFilter = m.material.map.minFilter = T.NearestFilter; } m.material = new T.MeshLambertMaterial({ map: m.material.map, color: m.material.map ? 0xffffff : m.material.color }); if (m.name === 'Paint' && !I.livery) m.material.color.set(I.stock); } });
+  const drop = []; bg.traverse((m) => { if (m.isMesh && m.name.endsWith('_far') !== !!far) drop.push(m); }); for (const m of drop) m.parent.remove(m);
+  if (far) bg.traverse((m) => { if (m.isMesh) m.name = m.name.replace('_far', ''); });
+  const wn = bg.getObjectByName('Wheel'); if (wn) { wn.parent.remove(wn); wheelObj = wn; }
+  car.add(bg);
+  let tris = 0, calls = 0; bg.traverse((m) => { if (m.isMesh) { calls++; tris += m.geometry.index ? m.geometry.index.count / 3 : m.geometry.attributes.position.count / 3; } });
+  for (const z of I.axles) for (const s of [1, -1]) { const w = wheelObj.clone(); w.position.set(wn ? s * I.wx : s * I.wx, wn ? I.wr : I.wr, z); if (s < 0) w.scale.x = -1; car.add(w); }
+  const views = [[1, 0.35, 1], [0, 0.15, 1], [1, 0.2, 0], [-1, 0.45, -1]], k = 1.08 * I.len;
+  R.setScissorTest(true);
+  views.forEach(([x, y, z], i) => {
+    const c = new T.OrthographicCamera(-k / 2, k / 2, k / 2, -k / 2, 0.1, 50), v = new T.Vector3(x, y, z).normalize().multiplyScalar(12);
+    c.position.set(v.x, v.y + I.h / 2, v.z); c.lookAt(0, I.h / 2, 0); R.setViewport(i * 400, 0, 400, 400); R.setScissor(i * 400, 0, 400, 400); R.render(S, c);
+  });
+  return { tris, calls };
+};
+window.ready = true;
+</script></body></html>

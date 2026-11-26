@@ -31,6 +31,7 @@ import { makeEvents } from './events.js';
 import { makeFX } from './fx.js';
 import { makePolice } from './police.js'; // police
 import { makeCarPhys } from './carphys.js'; // driving
+import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // remodeled cars (src/models/vehicles)
 import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
 import { makeOfficer } from './officer.js';
@@ -272,13 +273,15 @@ if (SV && SV.x !== undefined && !SV.inside && Math.abs(+SV.x) < LIMIT && Math.ab
 const cars = [];
 const TC = makeTraffic({ scene, NODES, ADJ, cars, heightAt: TER.heightAt, G, isPath: RD.isPath, onRoads: RD.onRoads }); // driving: traffic control (traffic.js)
 const CP = makeCarPhys({ scene, puff, heightAt: TER.heightAt, nearestRoad: RD.nearestRoad, edges: () => CP_EDGES, nodes: NODES, Sfx }); // driving: GTA IV style handling (carphys.js)
+registerVehicles(CAR_TYPES);
 const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway', goobtruck: 'F-15 Prairie' };
 const PAINT = [0xc0392b, 0x2e6fbf, 0xe8e8e8, 0x2a2a2e, 0x3a8f5a, 0xe0b030, 0x8e5bb0, 0xa04020, 0x6a8090, 0xd86a9a];
 function spawnCar(type, x, z, yaw, o = {}) {
   const color = o.color ?? PAINT[(Math.random() * PAINT.length) | 0];
-  const mesh = makeCar(type, color, o);
+  const model = pickModel(type, o); // vehicles.js: a remodeled car of this class (c.type stays the class)
+  const mesh = model ? makeModelCar(model, color, o, CAR_TYPES) : makeCar(type, color, o);
   scene.add(mesh);
-  const c = { mesh, type, spec: CAR_TYPES[type], x, z, yaw, vx: 0, vz: 0, speed: 0, hp: o.hp ?? 100, fuel: o.fuel ?? (o.role ? 100 : 35 + Math.random() * 65), driver: o.driver || null, ai: null, wheel: 0, steer: 0, dead: false, fire: 0, role: o.role || null, stuck: 0, rev: 0, honk: 0 };
+  const c = { mesh, type, model, spec: CAR_TYPES[model || type], x, z, yaw, vx: 0, vz: 0, speed: 0, hp: o.hp ?? 100, fuel: o.fuel ?? (o.role ? 100 : 35 + Math.random() * 65), driver: o.driver || null, ai: null, wheel: 0, steer: 0, dead: false, fire: 0, role: o.role || null, stuck: 0, rev: 0, honk: 0 };
   cars.push(c);
   return c;
 }
@@ -698,7 +701,7 @@ function enterCar(c, silent) {
   } else if (c.role === 'patrol') { if (!silent) addHeat(2, 'stealing HOA property'); }
   c.driver = 'player'; c.ai = null; if (c.role === 'patrol') c.role = null;
   P.car = c; cat.visible = false; CP.enter(c);
-  hud.car.textContent = CAR_NAMES[c.type]; hud.car.classList.add('show'); setTimeout(() => hud.car.classList.remove('show'), 2500);
+  hud.car.textContent = c.spec.name || CAR_NAMES[c.type]; hud.car.classList.add('show'); setTimeout(() => hud.car.classList.remove('show'), 2500);
   if (!silent) Sfx.door();
 }
 function exitCar() {
@@ -769,7 +772,7 @@ function damageCar(c, n) {
 }
 function explode(c) {
   c.dead = true; c.fire = 0;
-  for (const m of c.mesh.userData.body.children) { if (Array.isArray(m.material)) m.material = m.material.map(() => mat(0x26221f)); else if (m.material && m.material.color) m.material = mat(0x26221f); }
+  for (const m of c.model ? (() => { const a = []; c.mesh.userData.body.traverse((q) => { if (q.isMesh) a.push(q); }); return a; })() : c.mesh.userData.body.children) { if (Array.isArray(m.material)) m.material = m.material.map(() => mat(0x26221f)); else if (m.material && m.material.color) m.material = mat(0x26221f); }
   for (let i = 0; i < 26; i++) puff(i % 2 ? 'fire' : 'smoke', c.x, 1, c.z, (Math.random() - 0.5) * 10, 3 + Math.random() * 6, (Math.random() - 0.5) * 10, 1.3, 1.2);
   Sfx.boom(); shake(0.9);
   const d = Math.hypot(px() - c.x, pz() - c.z);
