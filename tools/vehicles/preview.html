@@ -1,0 +1,37 @@
+<!doctype html><html><body style="margin:0;background:#222"><canvas id="c"></canvas>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script>
+<script type="module">
+import * as T from 'three';
+window.go = async (ids, photo) => {
+  const R = new T.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+  const W = photo ? 700 : 560, H = photo ? 380 : 360, NC = photo ? 3 : 2; R.setSize(W * NC, H * Math.ceil(ids.length * 3 / NC)); R.setScissorTest(true); R.outputColorSpace = T.SRGBColorSpace;
+  const src = await (await fetch('vkit.js')).text() + await (await fetch('common.js')).text() + await (await fetch('smooth.js')).text();
+  const info = [];
+  let slot = 0;
+  for (const id of ids) {
+    const msrc = window.ALL;
+    const K = new Function('T', src + '\nreturn makeVKit(T);')(T);
+    const P = new Function(src + '\nreturn makeVPaint();')();
+    const mats = new Function('K', 'P', src + msrc + `\nreturn build_${id}(K, P);`)(K, P);
+    const s = new T.Scene(); s.background = new T.Color(0x9fb3c4);
+    s.add(new T.HemisphereLight(0xe8eeff, 0x4a4438, 2.4)); const d = new T.DirectionalLight(0xfff2e0, 2.4); d.position.set(5, 9, 6); s.add(d);
+    const g = new T.Mesh(new T.CircleGeometry(20, 40), new T.MeshLambertMaterial({ color: 0x666865 })); g.rotation.x = -Math.PI / 2; s.add(g);
+    let tris = 0; const bb = new T.Box3();
+    for (const [k, gs] of Object.entries(K.parts)) {
+      const m = mats[k]; if (!m) throw new Error(id + ': no material ' + k);
+      const SN = new Function(src + '\nreturn smoothNormals;')();
+      for (const geo of gs) { SN(T, geo, 42); tris += geo.attributes.position.count / 3; const me = new T.Mesh(geo, new T.MeshLambertMaterial({ color: m.color, emissive: /Head|Tail|Light|Amber/.test(k) ? new T.Color(m.color).multiplyScalar(0.25) : 0 })); s.add(me); bb.expandByObject(me); }
+    }
+    const sz = bb.getSize(new T.Vector3()), L = Math.max(sz.z, 4.5), cy = sz.y * 0.42;
+    const views = photo ? [[0.62, 0.2, 1], [-0.62, 0.2, -1], [1, 0.03, 0]] : [[0.75, 0.32, 0.95], [-0.8, 0.35, -0.9], [1, 0.05, 0]];
+    for (const v of views) {
+      const x = (slot % NC) * W, y = Math.floor(slot / NC) * H; slot++;
+      const cam = new T.PerspectiveCamera(photo ? 24 : 28, W / H, 0.1, 200), n = new T.Vector3(...v).normalize().multiplyScalar(L * (photo ? 1.45 : 1.9));
+      cam.position.set(n.x, cy + n.y, n.z); cam.lookAt(0, cy, 0);
+      const Y = R.domElement.height / R.getPixelRatio() - y - H; R.setViewport(x, Y, W, H); R.setScissor(x, Y, W, H); R.render(s, cam);
+    }
+    info.push({ id, tris, size: sz.toArray().map((v) => +v.toFixed(2)) });
+  }
+  return info;
+};
+</script></body></html>
