@@ -45,9 +45,10 @@ const NAMES = JSON.parse(fs.readFileSync(path.join(__dirname, 'roster.json'), 'u
       s.renderList(); s.applyDisplay({ textured: true, wireframe: false, flat: false }); s.select(null);
       const bb = new T.Box3(); objs.forEach((o) => bb.expandByObject(o.mesh));
       const tris = objs.reduce((n, o) => n + o.mesh.geometry.getAttribute('position').count / 3, 0);
-      return { tris, bb: [bb.min.toArray(), bb.max.toArray()], json: JSON.stringify({ version: 2, name: NAME, display: tracebench.project.display, scene: s.serialize() }) };
+      const wo = K.wheelOpt; return { wheel: wo ? { r: wo.r, w: wo.w, x: wo.x, axles: wo.axles } : null, tris, bb: [bb.min.toArray(), bb.max.toArray()], json: JSON.stringify({ version: 2, name: NAME, display: tracebench.project.display, scene: s.serialize() }) };
     }, [SRC, NAME, id, MODE]);
     fs.writeFileSync(path.join(OUT, `${NAME}.tracebench.json`), info.json);
+    if (info.wheel) fs.writeFileSync(path.join(OUT, 'wheel.json'), JSON.stringify(info.wheel));   // axle layout for the game bake (bake.cjs)
     const [mn, mx] = info.bb, c = [(mn[0] + mx[0]) / 2, mx[1] * 0.45, (mn[2] + mx[2]) / 2], R = Math.hypot(mx[0] - mn[0], mx[1], mx[2] - mn[2]) / 2;
     const views = { '34': [0.72, 0.32, 0.9, 2.35], back: [-0.75, 0.34, -0.85, 2.35], side: [1, 0.06, 0, 2.3], front: [0.12, 0.1, 1, 2.6] };
     for (const [v, [dx, dy, dz, k]] of Object.entries(views)) {

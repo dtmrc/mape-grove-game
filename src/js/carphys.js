@@ -48,21 +48,21 @@ export function makeCarPhys(api) {
   // ---------------- per-type chassis ----------------
   const chassis = new Map();
   function prof(c) {
-    let k = chassis.get(c.type);
+    const key = c.model || c.type, cls = c.spec.cls || c.type; let k = chassis.get(key);
     if (k) return k;
     const S = c.spec, cart = !!S.cart;
     const m = cart ? 520 : 1400 * S.mass;
-    const L = S.len * (cart ? 0.66 : 0.6), fw = S.bed ? 0.57 : c.type === 'hatch' ? 0.6 : 0.54; // front weight share
+    const L = S.len * (cart ? 0.66 : 0.6), fw = S.bed ? 0.57 : cls === 'hatch' ? 0.6 : 0.54; // front weight share
     k = {
       m, L, a: L * (1 - fw), b: L * fw,
       h: cart ? 0.55 : 0.48 + Math.max(0, (S.h || 0.6) - 0.6) * 1.1,
       Iz: m * (S.len * S.len + S.wid * S.wid) / 12 * 1.05,
       mu: 1.12 + (S.grip || 6) * 0.015,
-      fdrive: c.type === 'hatch' ? 1 : c.type === 'suv' ? 0.4 : 0, // share of drive on the front axle
-      fmax: m * S.acc * (c.type === 'suv' ? 0.85 : 1.0), // first-gear drive force (diet: less sluggish)
+      fdrive: cls === 'hatch' ? 1 : cls === 'suv' ? 0.4 : 0, // share of drive on the front axle
+      fmax: m * S.acc * (cls === 'suv' ? 0.85 : 1.0), // first-gear drive force (diet: less sluggish)
       top: S.top, track: S.wid * 0.84, cart,
     };
-    chassis.set(c.type, k);
+    chassis.set(key, k);
     return k;
   }
 

@@ -1,0 +1,137 @@
+<!doctype html><html><body>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Game bake of one vehicle (see bake.cjs): body GLB + wheel GLB from build.cjs (MODE=body / MODE=wheel) ->
+//   one GLB with nodes Paint (paint texture, grey-normalised so the game can tint it), Body (every other material packed
+//   into one texture atlas = one draw call), BarR / BarB (roof light bar segments, untextured, flashed by the game) and Wheel
+//   (one wheel, atlas, outer face +X). Meshes are welded and simplified with meshoptimizer. Facts the game needs go in scene extras.
+import * as T from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshoptSimplifier as MS } from '/node_modules/meshoptimizer/meshopt_simplifier.module.js';
+
+const load = (u) => new GLTFLoader().loadAsync(u);
+// flatten a scene into per-material triangle soups in model space
+function soups(scene) {
+  const out = []; scene.updateMatrixWorld(true);
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    let g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); if (g.index) g = g.toNonIndexed();
+    if (!g.attributes.uv) g.setAttribute('uv', new T.BufferAttribute(new Float32Array(g.attributes.position.count * 2).fill(0.5), 2));
+    out.push({ name: o.material.name || o.name, map: o.material.map || null, color: o.material.color ? o.material.color.clone() : new T.Color(1, 1, 1), g });
+  });
+  return out;
+}
+// keep only the triangles whose centroid passes f(cx, cy, cz)
+function pick(g, f) {
+  const p = g.attributes.position.array, keep = [];
+  for (let t = 0; t < p.length / 9; t++) { const i = t * 9; if (f((p[i] + p[i + 3] + p[i + 6]) / 3, (p[i + 1] + p[i + 4] + p[i + 7]) / 3, (p[i + 2] + p[i + 5] + p[i + 8]) / 3)) keep.push(t); }
+  const r = new T.BufferGeometry();
+  for (const k of ['position', 'normal', 'uv']) { const a = g.attributes[k], n = a.itemSize, d = new Float32Array(keep.length * 3 * n); keep.forEach((t, j) => d.set(a.array.subarray(t * 3 * n, t * 3 * n + 3 * n), j * 3 * n)); r.setAttribute(k, new T.BufferAttribute(d, n)); }
+  return r;
+}
+function concat(list) {
+  const r = new T.BufferGeometry();
+  for (const k of ['position', 'normal', 'uv']) { const n = list[0].attributes[k].itemSize, tot = list.reduce((a, g) => a + g.attributes[k].array.length, 0), d = new Float32Array(tot); let o = 0; for (const g of list) { d.set(g.attributes[k].array, o); o += g.attributes[k].array.length; } r.setAttribute(k, new T.BufferAttribute(d, n)); }
+  return r;
+}
+// weld + simplify to `ratio` of the triangles (attribute aware: normals and uvs keep their seams)
+function simplify(g, ratio, err, far) {
+  g.deleteAttribute('normal'); const w = mergeVertices(g, 1e-5); w.computeVertexNormals();
+  // re-derive flat-ish normals from the source would cost size; vkit surfaces are lofted, computeVertexNormals on welded verts
+  // smooths only across faces that truly share position+uv, which is how the Tracebench export looked
+  if (ratio >= 1) return w;
+  const idx = new Uint32Array(w.index.array), pos = w.attributes.position.array, n = w.attributes.normal.array, uv = w.attributes.uv.array;
+  const vc = pos.length / 3, attr = new Float32Array(vc * 5); for (let i = 0; i < vc; i++) { attr.set(n.subarray(i * 3, i * 3 + 3), i * 5); attr[i * 5 + 3] = uv[i * 2]; attr[i * 5 + 4] = uv[i * 2 + 1]; }
+  const target = Math.max(3, Math.floor((idx.length / 3) * ratio) * 3);
+  const [ni] = MS.simplifyWithAttributes(idx, pos, 3, attr, 5, [0.5, 0.5, 0.5, 2, 2], null, target, err, ['LockBorder']);
+  w.setIndex(new T.BufferAttribute(ni, 1));
+  // far LOD: same vertex buffers, a coarser index (borders unlocked so small parts may collapse)
+  if (far) { const [fi] = MS.simplifyWithAttributes(idx, pos, 3, attr, 5, [0.5, 0.5, 0.5, 1, 1], null, Math.max(3, Math.floor((idx.length / 3) * far.ratio) * 3), far.err, []);
+    const f = new T.BufferGeometry(); for (const k in w.attributes) f.setAttribute(k, w.attributes[k]); f.setIndex(new T.BufferAttribute(fi, 1)); w.userData.far = f; }
+  return w;
+}
+// add a mesh plus its far LOD twin (<name>_far, same material) when simplify made one
+function addMesh(root, g, mat, name) { const m = new T.Mesh(g, mat); m.name = name; root.add(m); if (g.userData.far) { const f = new T.Mesh(g.userData.far, mat); f.name = name + '_far'; root.add(f); delete g.userData.far; } return m; }
+// atlas: shelf-pack the textures, 2 px clamped gutter, remap each soup's uvs
+function atlas(list, maxTex) {
+  const imgs = list.map((s) => { const im = s.map ? s.map.image : null; let w = im ? im.width : 4, h = im ? im.height : 4; const k = Math.min(1, maxTex / Math.max(w, h)); return { s, im, w: Math.max(2, Math.round(w * k)), h: Math.max(2, Math.round(h * k)) }; });
+  const P = 2; let W = 256; const order = imgs.slice().sort((a, b) => b.h - a.h);
+  const fit = (W) => { let x = 0, y = 0, rh = 0; for (const e of order) { if (x + e.w + 2 * P > W) { x = 0; y += rh; rh = 0; } e.x = x + P; e.y = y + P; x += e.w + 2 * P; rh = Math.max(rh, e.h + 2 * P); } return y + rh; };
+  let H; for (;;) { H = fit(W); if (H <= W) break; W *= 2; }
+  H = 1 << Math.ceil(Math.log2(H));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  for (const e of order) {
+    if (e.im) { c.drawImage(e.im, e.x, e.y, e.w, e.h); } else { c.fillStyle = '#' + e.s.color.getHexString(); c.fillRect(e.x, e.y, e.w, e.h); }
+    // gutters: smear the edge pixels outward
+    c.drawImage(cv, e.x, e.y, e.w, 1, e.x, e.y - P, e.w, P); c.drawImage(cv, e.x, e.y + e.h - 1, e.w, 1, e.x, e.y + e.h, e.w, P);
+    c.drawImage(cv, e.x, e.y - P, 1, e.h + 2 * P, e.x - P, e.y - P, P, e.h + 2 * P); c.drawImage(cv, e.x + e.w - 1, e.y - P, 1, e.h + 2 * P, e.x + e.w, e.y - P, P, e.h + 2 * P);
+    const uv = e.s.g.attributes.uv.array, cl = (v) => Math.min(1, Math.max(0, v));
+    for (let i = 0; i < uv.length; i += 2) { uv[i] = (e.x + cl(uv[i]) * e.w) / W; uv[i + 1] = (e.y + cl(uv[i + 1]) * e.h) / H; }
+    // a texture-less material keeps its colour through the atlas
+    if (!e.im) e.s.color.set(0xffffff);
+  }
+  return cv;
+}
+const tex = (cv) => { const t = new T.CanvasTexture(cv); t.flipY = false; t.magFilter = t.minFilter = T.NearestFilter; t.generateMipmaps = false; t.colorSpace = T.SRGBColorSpace; t.userData.mimeType = 'image/webp'; return t; };
+function canvasOf(im, maxTex) { const k = Math.min(1, maxTex / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.max(2, Math.round(im.width * k)); cv.height = Math.max(2, Math.round(im.height * k)); const c = cv.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(im, 0, 0, cv.width, cv.height); return cv; }
+
+window.bake = async (bodyUrl, wheelUrl, o) => {
+  const B = soups((await load(bodyUrl)).scene), Wh = soups((await load(wheelUrl)).scene);
+  const bb = new T.Box3(); for (const s of B) { s.g.computeBoundingBox(); bb.union(s.g.boundingBox); }
+  const paintTop = Math.max(...B.filter((s) => s.name === 'Paint').map((s) => s.g.boundingBox.max.y));
+  // roof light bar: light-coloured pieces above the roof line
+  const barR = [], barB = [], rest = [];
+  for (const s of B) {
+    if (o.police && /^Light(Red|Blue|White)$/.test(s.name)) {
+      const up = pick(s.g, (x, y) => y > paintTop - 0.02), low = pick(s.g, (x, y) => y <= paintTop - 0.02);
+      if (up.attributes.position.count) (s.name === 'LightRed' ? barR : barB).push(up);
+      if (low.attributes.position.count) rest.push({ ...s, g: low });
+    } else if (s.name !== 'Paint') rest.push(s);
+  }
+  // lamp glow points: centres of the front lamp and tail lamp pieces, one per side
+  const glowOf = (names, front) => {
+    const pts = { 1: [], [-1]: [] };
+    for (const s of B) if (names.includes(s.name)) { const p = s.g.attributes.position.array; for (let i = 0; i < p.length; i += 3) { const z = p[i + 2]; if (front ? z > bb.max.z - 0.45 : z < bb.min.z + 0.45) pts[p[i] >= 0 ? 1 : -1].push([p[i], p[i + 1], z]); } }
+    return [1, -1].filter((sd) => pts[sd].length).map((sd) => { const a = pts[sd], m = (k) => a.reduce((t, q) => t + q[k], 0) / a.length; return [m(0), m(1), front ? Math.max(...a.map((q) => q[2])) + 0.1 : Math.min(...a.map((q) => q[2])) - 0.1]; });
+  };
+  const glows = [...glowOf(['Head'], true).map((p) => [...p, 0xfff0c8, 1.6]), ...glowOf(['Tail', 'LightRed'], false).map((p) => [...p, 0xff2020, 0.9])];
+
+  const root = new T.Group();
+  // paint: grey-normalised texture (game tints it), unless the car keeps its own livery
+  const paints = B.filter((s) => s.name === 'Paint');
+  let stock = null;
+  if (paints.length) {
+    const pim = paints[0].map.image, cv = canvasOf(pim, o.maxPaint), c = cv.getContext('2d'), d = c.getImageData(0, 0, cv.width, cv.height), px = d.data;
+    const lum = []; for (let i = 0; i < px.length; i += 4) lum.push(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]);
+    const sorted = lum.slice().sort((a, b) => a - b), med = Math.max(8, sorted[sorted.length >> 1]);
+    let r = 0, gg = 0, b = 0, n = 0; for (let i = 0; i < px.length; i += 4) if (Math.abs(lum[i / 4] - med) < 12) { r += px[i]; gg += px[i + 1]; b += px[i + 2]; n++; }
+    stock = ((Math.round(r / n) << 16) | (Math.round(gg / n) << 8) | Math.round(b / n));
+    if (!o.livery) { for (let i = 0; i < px.length; i += 4) { const v = Math.min(255, Math.round((lum[i / 4] / med) * 215)); px[i] = px[i + 1] = px[i + 2] = v; } c.putImageData(d, 0, 0); }
+    const g = simplify(concat(paints.map((s) => s.g)), o.ratio, o.err, o.far);
+    addMesh(root, g, new T.MeshLambertMaterial({ map: tex(cv), name: 'Paint' }), 'Paint');
+  }
+  {
+    const cv = atlas(rest, o.maxTex), g = simplify(concat(rest.map((s) => s.g)), o.ratio, o.err, o.far);
+    addMesh(root, g, new T.MeshLambertMaterial({ map: tex(cv), name: 'Body' }), 'Body');
+  }
+  for (const [nm, list, col] of [['BarR', barR, 0xff2020], ['BarB', barB, 0x2050ff]]) if (list.length) {
+    const g = concat(list); g.deleteAttribute('uv'); g.deleteAttribute('normal'); const w = mergeVertices(g, 1e-5); w.computeVertexNormals();
+    const m = new T.Mesh(w, new T.MeshLambertMaterial({ color: col, name: nm })); m.name = nm; root.add(m);
+  }
+  {
+    const cv = atlas(Wh, 256), g = simplify(concat(Wh.map((s) => s.g)), Math.min(1, o.ratio * 1.5), o.err, o.far && { ratio: o.far.ratio * 1.5, err: o.far.err });
+    addMesh(root, g, new T.MeshLambertMaterial({ map: tex(cv), name: 'Wheel' }), 'Wheel');
+  }
+  const wbb = new T.Box3(); for (const s of Wh) { s.g.computeBoundingBox(); wbb.union(s.g.boundingBox); }
+  let tris = 0, farTris = 0; root.traverse((m) => { if (m.isMesh && m.name.endsWith('_far')) farTris += m.geometry.index.count / 3; else if (m.isMesh) tris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; });
+  root.userData = { bb: [bb.min.toArray(), bb.max.toArray()], wr: wbb.max.y, ww: wbb.max.x - wbb.min.x, roofY: paintTop, glows, stock, tris, farTris };
+  // webp copies of each texture (GLTFExporter only writes PNG): bake.cjs swaps them in and adds EXT_texture_webp
+  const webp = {}; root.traverse((m) => { if (m.isMesh && m.material.map) webp[m.name] = m.material.map.image.toDataURL('image/webp', o.webpQ ?? 0.9).split(',')[1]; });
+  const glb = await new GLTFExporter().parseAsync(root, { binary: true });
+  const b = new Uint8Array(glb); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return { glb: btoa(s), info: root.userData, webp };
+};
+window.ready = MS.ready.then(() => { MS.useExperimentalFeatures = true; return true; });
+</script></body></html>
