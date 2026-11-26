@@ -17,6 +17,7 @@ import { makeInteriors } from './interiors.js';
 import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patrons
 import { makeShops } from './shops.js'; // content: shops + belly food
 import { makeJobs } from './jobs.js'; // content: replayable missions, side jobs, post-game
+import { quests } from './questlog.js'; // quests: quest log + tracked quest (L)
 import * as RD from './roads.js';
 import * as TER from './terrain.js';
 import { makeDev } from './devtools.js';
@@ -65,7 +66,7 @@ TER.initWorld(scene, { lights, halos, flames }); // engine: link loose world obj
 // ---------------- state ----------------
 const SAVE_KEY = 'maple-grove-offleash-v1';
 // every key NEW GAME wipes: this save, fishing, weather, the sky's day counter, the dev view (not the world editor's maple-grove-world-v1, that is the map)
-const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark'];
+const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1'];
 const G = {
   cash: 0, hp: 100, heat: 0, seenT: 0, bustT: 0, clock: 21.5, done: {}, yarn: [],
   mission: null, dialog: null, paused: true, banner: null, over: false, time: 0,
@@ -156,7 +157,7 @@ function toast(t, d = 3) { hud.toast.textContent = t; hud.toast.classList.add('s
 function banner(t, sub = '', d = 3.5, cls = '') {
   hud.banner.innerHTML = `<b>${t}</b>${sub ? `<small>${sub}</small>` : ''}`; hud.banner.className = 'show ' + cls; bannerT = d;
 }
-function objective(t) { setText(hud.obj, t || ''); setStyle(hud.obj, 'display', t ? 'block' : 'none'); }
+function objective(t) { G.objRaw = t || ''; } // quests: questlog.js draws #objective for the tracked quest
 function addCash(n) { G.cash = Math.max(0, G.cash + n); }
 
 // dialog
@@ -1291,7 +1292,7 @@ function drawMinimap() {
   for (const b of police.blips()) blip(b.x, b.z, b.c, b.r); // police
   if (P.car && places.quik) blip(places.quik.x + 3, places.quik.z + 7.5, '#7fe07f', 5, 'G');
   if (G.mark) blip(G.mark.x, G.mark.z, '#c77dff', 5 + 1.5 * (0.5 + 0.5 * Math.sin(G.time * 5)), 'M');
-  if (G.check) blip(G.check.x, G.check.z, G.check.col || '#ff3b6b', 5 + 2 * (0.5 + 0.5 * Math.sin(G.time * 6)), '!');
+  const qc = quests.check(); if (qc) blip(qc.x, qc.z, qc.col || '#ff3b6b', 5 + 2 * (0.5 + 0.5 * Math.sin(G.time * 6)), '!');
   if (mission && mission.rivals) for (const r of mission.rivals) blip(r.x, r.z, '#ff4040', 3);
   // player arrow
   mg.save(); mg.translate(W / 2, W / 2);
@@ -1309,7 +1310,7 @@ for (const o of [wpMission, wpMark]) { o.arrow = o.el.querySelector('i'); o.text
 function updateWaypoint() {
   const hide = INT.inside || G.paused || G.dialog || dev.editing; // interiors
   if (G.mark && !hide && Math.hypot(G.mark.x - px(), G.mark.z - pz()) < (P.car ? 9 : 5)) { setMark(null); toast('You made it to your marker.', 2.5); Sfx.blip(880); }
-  drawPointer(wpMission, hide ? null : G.check);
+  drawPointer(wpMission, hide ? null : quests.check()); // quests: tracked quest's target
   drawPointer(wpMark, hide ? null : G.mark);
   userMark.visible = !!G.mark && !INT.inside;
   if (G.mark) { const k = (G.time * 0.7) % 1; umRing.scale.setScalar(0.6 + k * 0.9); umRing.material.opacity = 0.75 * (1 - k); umBeamMat.opacity = 0.26 + 0.08 * Math.sin(G.time * 3); }
@@ -1468,7 +1469,7 @@ function frame(now) {
   if (document.hidden) return;
   if (hit('p')) { resIdx = (resIdx + 1) % RES.length; resize(); toast(`Render height ${RES[resIdx]}p`); }
   if (hit('m')) { const on = Sfx.toggle(); window.__pdMute = !on; toast(on ? 'Sound on' : 'Sound off'); }
-  gamepad.update(dt); ui.update(dt); // ui: gamepad -> keys/touch, then pause menu / map (may set G.paused)
+  gamepad.update(dt); quests.input(); ui.update(dt); // ui: gamepad -> keys/touch, then pause menu / map (may set G.paused)
   if (!G.dialog && fishing.menuOpen()) { fishing.menuInput(); dt = 0; }
   if (G.dialog) {
     if (hit('e', 'f', 'enter', ' ', 'punch')) advanceDialog();
@@ -1513,7 +1514,7 @@ function frame(now) {
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
   dev.frame(dt); TER.beforeRender(scene, camera, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z); // engine: lift onto terrain
   BRK.update(dt);
-  post.render(scene, camera, G.time);
+  quests.swapIn(); post.render(scene, camera, G.time); quests.swapOut(); // quests: HUD + beacon follow the tracked quest
   TER.afterRender(); dev.after();
   updateWaypoint();
   // HUD
@@ -1579,6 +1580,7 @@ window.__G.shops = shops; window.__G.jobs = jobs;
 const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
+quests.init({ G, P, hit, pressed, hud, checkMark, giverMarks, fishing, jail, ui, Sfx, toast, isTouch, px, pz, mission: () => mission, dev: () => dev }); window.__G.quests = quests; // quests
 Object.assign(window.__G, { spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
 
 // P17: pre-warm the shader programs that would otherwise compile mid-game (first officer, HP bar, muzzle flash, tracer,
