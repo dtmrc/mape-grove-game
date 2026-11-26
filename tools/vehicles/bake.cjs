@@ -18,7 +18,7 @@ const GAME = {
   police: ['crownpi08', 'chaserpd18', 'tahomappv04', 'pathwaypiu23', 'blazonppv23'],
 };
 const LIVERY = new Set(GAME.police);                       // keep their own paint (black-and-white, decals)
-const RATIO = +(process.env.RATIO || 0.4), ERR = +(process.env.ERR || 0.0015), FAR = { ratio: +(process.env.FAR_RATIO || 0.12), err: +(process.env.FAR_ERR || 0.02) };
+const RATIO = +(process.env.RATIO || 0.4), ERR = +(process.env.ERR || 0.0025), FAR = { ratio: +(process.env.FAR_RATIO || 0.08), err: +(process.env.FAR_ERR || 0.08) };
 const roster = JSON.parse(fs.readFileSync(path.join(D, 'roster.json'), 'utf8'));
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.values(GAME).flat();
 const clsOf = (id) => Object.keys(GAME).find((k) => GAME[k].includes(id));
