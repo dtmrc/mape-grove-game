@@ -1256,3 +1256,5 @@ export const ROOMS = {
   church: { name: 'Chapel Hill Church', build: buildChurch },
   donut: { name: 'The Donut Hole', build: buildDonut },
 };
+// Builder kit for rooms that live in their own files (pizza.js, school.js): same helpers, same seeded random.
+export const KIT = { ctex, grime, textLines, signTex, makeBuilder, shell, framedPicture, catFigurine, bulbLamp, tubeLight, sm, rnd: () => rnd(), pick: (a) => pick(a), reseed: (s) => { seed = s; } };
