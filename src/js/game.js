@@ -14,6 +14,8 @@ import { setText, setHTML, setStyle, setClass, setData } from './dom.js'; // P10
 import { makeFishing } from './fishing.js';
 import * as BRK from './breakables.js';
 import * as DONUT from './donut.js';
+import * as PIZZA from './pizza.js'; // Pizza City interior + order counter
+import * as SCHOOL from './school.js'; // Maple Grove High interior
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
 import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patrons
@@ -1595,6 +1597,8 @@ if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gu
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });
 const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, removeCar, setCheck, objective, toast, banner, addCash, addHeat, places, cars, peds, P, G, NPC, giverMarks, makeMarker, say, startMission, endMission, mission: () => mission, scene, T, Sfx, INT, ahead, fishing });
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
+PIZZA.init({ G, places, fishing, toast, addCash, Sfx }); // Pizza City interior
+SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
