@@ -760,7 +760,7 @@ export function makePolice(A) {
     if (hiding) {
       hideT += dt; G.seenT += dt * 2;                         // stars fade faster indoors
       escD = 0;
-      if (contact && hideT > (sawIn ? 9 : 4)) giveUp('LOST THEM', sawIn ? 'They staked out the door, then gave up.' : 'Nobody thought to look inside.');
+      if (contact && hideT > (sawIn ? 9 : 4) && !(window.__ROB && window.__ROB.hot && I && window.__ROB.hot === I.current())) giveUp( /* robbery: no hiding in the store you robbed */ 'LOST THEM', sawIn ? 'They staked out the door, then gave up.' : 'Nobody thought to look inside.');
       return;
     }
     escD = contact ? d : 0;
@@ -785,6 +785,14 @@ export function makePolice(A) {
   const api = {
     update, carAI, holdPlayer, paw, pawPed, pedHook, runOver, gunInput, clear, blips, cruisers,
     armed: () => gun.equipped && !P.car, level, cops, gun, JAIL_ROOM, parked,
+    arrest(o, line) { // robbery: BUSTED by an officer that robbery.js brought into a room
+      if (bust || cuff || !o || !o.mesh) return false;
+      catCuffs.visible = true; SND.tick(2000, 6, 0.05, 0.1);
+      bust = { t: 3.2, o, fine: Math.min(G.cash, 40 + 30 * G.heat), hadGun: gun.has };
+      gun.has = false; gun.ammo = 0; gun.equipped = false;
+      A.banner('BUSTED!', `Officer ${o.name}: "${line || 'You have the right to remain fluffy.'}"`, 3.4, 'fail');
+      return true;
+    },
     giveGun(ammo = 12) { gun.has = true; gun.ammo += ammo; gun.equipped = true; },
     dropGun() { gun.has = false; gun.ammo = 0; gun.equipped = false; pawGun.visible = false; },   // any arrest or respawn strips the pistol
     get cuffing() { return !!cuff; }, get busted() { return !!bust; },
