@@ -5,6 +5,7 @@ import { makeGoobles } from './goobles.js';
 import { setTextures, makeCat, makeHuman, makeRaccoon, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
 import { buildWorld, inTown, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
 import { Sfx } from './sfx.js';
+import { makeCave } from './cave.js';
 import { makeMeows } from './meows.js';
 import { makeYardCats, KEY as YARDCATS_KEY } from './yardcats.js';
 import { makeFirestarter } from './firestarter.js';
@@ -15,6 +16,7 @@ import * as DONUT from './donut.js';
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
 import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patrons
+import './robbery.js'; // robbery: hold up the Donut Hole + Rosie's Diner
 import { makeShops } from './shops.js'; // content: shops + belly food
 import { makeJobs } from './jobs.js'; // content: replayable missions, side jobs, post-game
 import { quests } from './questlog.js'; // quests: quest log + tracked quest (L)
@@ -316,6 +318,7 @@ function spawnTraffic(type) {
     const A = NODES[a.from], B = NODES[a.to], L = Math.hypot(B.x - A.x, B.z - A.z), dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
     const t = 0.3 + Math.random() * 0.4;
     const x = A.x + (B.x - A.x) * t - dz * a.off, z = A.z + (B.z - A.z) * t + dx * a.off;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) continue; // zero-length edge or edge without a width (rescued/deleted roads): NaN would spread to every car via collisions
     if (Math.hypot(x - P.x, z - P.z) < 25 || cars.some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue;
     const c = spawnCar(type, x, z, Math.atan2(dx, dz), { driver: 'ai' });
     c.ai = { ...a, cruise: 8 + Math.random() * 4 };
@@ -1015,7 +1018,7 @@ function updatePlayer(dt) {
   // interact
   if (hit('e', 'f', 'enter') && !(P.lock > 0)) {
     const npc = nearNpc();
-    if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
+    if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
     else if (near) enterCar(near);
   }
   if (hit('e', 'f', 'enter') === false && false) {/* noop */}
@@ -1503,6 +1506,7 @@ function frame(now) {
     meows.update(dt);
     yardcats.update(dt); // yardcats
     fires.update(dt);
+    cave.update(dt);
     fishing.update(dt);
     jobs.update(dt); // content
     police.update(dt); // police
@@ -1526,7 +1530,7 @@ function frame(now) {
   if (P.car) setStyle(hud.carhpfill, 'width', P.car.hp + '%');
   setStyle(hud.fuel, 'display', P.car ? 'flex' : 'none');
   if (P.car) { const f = P.car.fuel ?? 100, el = hud.fuelfill; setStyle(el, 'width', f + '%'); setStyle(el, 'background', f < 20 ? '#ff4040' : f < 45 ? '#ffd23f' : '#7fe07f'); setClass(hud.fuel, 'low', f < 20); setClass(hud.fuel, 'pump', !!P.car.filling); }
-  const prompt = !P.car && !G.dialog && !G.paused ? (fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
+  const prompt = !P.car && !G.dialog && !G.paused ? (cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
   setText(hud.prompt, prompt); setStyle(hud.prompt, 'display', prompt ? 'block' : 'none');
   if (jail.active() && !G.dialog && !G.paused) { const jp = jail.prompt(); setText(hud.prompt, jp); setStyle(hud.prompt, 'display', jp ? 'block' : 'none'); } // jailbreak
   setText(hud.usebtn, P.car ? 'EXIT' : prompt ? (prompt.includes('Talk') ? 'TALK' : prompt.includes('Get in') ? 'GET IN' : prompt.replace(/^E[:!]? ?/, '').split(' ')[0].toUpperCase().slice(0, 6)) : 'USE');
@@ -1568,10 +1572,13 @@ const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff,
 const meows = makeMeows({ P, G });
 // yardcats: lady cats in the Estates front yards to flirt with (src/js/yardcats.js)
 const yardcats = makeYardCats({ scene, G, P, places, collide, fishing, say, toast, banner, Sfx, addCash, addHeat, light: catLight, mission: () => mission, inside: () => INT.inside, px, pz });
-window.__G = { G, P, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
+// cave: the Hollow Deep easter egg (src/js/cave.js)
+const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
+window.__G = { G, P, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
+Object.assign(window.__G, { banner, toast, addCash }); // robbery: banner/toast/addCash for robbery.js
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });
