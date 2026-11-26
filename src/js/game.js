@@ -8,6 +8,7 @@ import { Sfx } from './sfx.js';
 import { makeCave } from './cave.js';
 import { makeMeows } from './meows.js';
 import { makeYardCats, KEY as YARDCATS_KEY } from './yardcats.js';
+import { makeRadio } from './radio.js'; // radio
 import { makeFirestarter } from './firestarter.js';
 import { setText, setHTML, setStyle, setClass, setData } from './dom.js'; // P10: write-on-change HUD
 import { makeFishing } from './fishing.js';
@@ -32,6 +33,8 @@ import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lig
 import { makeOfficer } from './officer.js';
 import { waterPolys } from './ground.js';
 import { makeUI } from './ui.js'; // ui: pause menu, settings, full map
+import { makeClimb } from './climb.js'; // climb: trees, wall scrambles, ledge pull-ups
+import { colliders as W_COLS } from './world.js'; // climb: test handle
 import { makeGamepad } from './gamepad.js'; // ui: gamepad
 import * as PDST from './pdstation.js'; // police station interior
 
@@ -966,6 +969,7 @@ function updatePlayer(dt) {
   const len = Math.hypot(mx, mz);
   const sprint = down('shift') || (touch.active && len > 0.9);
   updateSwim(dt);
+  if (climb.hold(dt, mx, mz, hit(' '), sprint)) return; // climb: on a trunk or pulling up onto a ledge
   const spd = (P.swim ? (sprint ? 2.6 : 1.8) : sprint ? 6.4 : 3.4) * Math.min(1, len);
   if (len > 0.1) {
     // move relative to the camera
@@ -982,11 +986,13 @@ function updatePlayer(dt) {
   // multi-jump: Space on the ground jumps, Space again in the air does a double then a triple jump (each higher; the triple flips)
   if (hit(' ') && !P.swim) {
     if (P.y <= (P.fl || 0) + 0.001) { P.vy = 4.6; P.jumps = 1; Sfx.blip(300); }
+    else if (climb.wallJump()) { /* climb: clawed up the wall */ }
     else if ((P.jumps || 1) < 3) { P.jumps = (P.jumps || 1) + 1; P.vy = P.jumps === 2 ? 5.6 : 6.6; Sfx.blip(P.jumps === 2 ? 420 : 560); if (P.jumps === 3) P.flip = 0.55; }
   }
   P.vy -= 14 * dt; P.y = Math.max(P.fl || 0, P.y + P.vy * dt); if (P.y === (P.fl || 0) && TER.floorHit && TER.floorHit.bounce) { P.vy = Math.min(16, Math.max(4.5, -P.vy * 0.92 + (down(' ') ? 2.6 : 0))); P.jumps = 1; Sfx.blip(180 + P.vy * 20); } else if (P.y === (P.fl || 0)) { /* engine: decks + trampolines (hold Space to bounce higher) */ P.vy = Math.max(0, P.vy); P.jumps = 0; }
   if (P.flip > 0) { P.flip = P.y > 0 ? P.flip - dt : 0; cat.userData.body.rotation.x = P.flip > 0 ? -Math.PI * 2 * (1 - P.flip / 0.55) : 0; }
   const q = (INT.inside ? INT.collide : collide)(P.x, P.z, 0.22, P.y, SWIM_OK); P.x = q.x; P.z = q.z;
+  if (!INT.inside) climb.afterMove(q, mx, mz, camYaw, dt); // climb
   // car bodies are solid on foot
   for (const c of cars) for (const [cx, cz] of carCircles(c)) {
     const dx = P.x - cx, dz = P.z - cz, d = Math.hypot(dx, dz), m = c.spec.wid / 2 + 0.22;
@@ -1100,7 +1106,7 @@ function interactions(dt) {
 }
 
 // ---------------- camera ----------------
-let shakeAmt = 0;
+let shakeAmt = 0, camFl = 0;
 function shake(a) { shakeAmt = Math.max(shakeAmt, a); }
 const camPos = new THREE.Vector3(P.x, 3, P.z + 4);
 const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _w = new THREE.Vector3();
@@ -1117,7 +1123,7 @@ function updateCamera(dt) {
       camPitch += (0.2 - camPitch) * Math.min(1, dt * 2);
     }
   } else {
-    tx = P.x; ty = 0.65 + P.y * 0.6; tz = P.z; dist = 2.7;
+    camFl += ((P.fl || 0) - camFl) * Math.min(1, dt * 6); tx = P.x; ty = 0.65 + camFl + (P.y - camFl) * 0.6; tz = P.z; dist = 2.7; // climb: follow him up onto roofs
     if (camIdle > 2.5 && Math.hypot(P.vx, P.vz) > 1) {
       let d = P.yaw + Math.PI - camYaw; d = Math.atan2(Math.sin(d), Math.cos(d));
       camYaw += d * Math.min(1, dt * 1.2);
@@ -1254,6 +1260,7 @@ const events = makeEvents({ scene, camera, G, pos: () => ({ x: px(), z: pz() }),
 
 const jail = makeJail({ scene, camera, G, P, cat, T, say, toast, banner, objective, addCash, respawn, keys, touch, pressed, cam: () => [camYaw, camPitch], save }); // jailbreak quest
 
+const climb = makeClimb({ P, cat, TER, Sfx }); // climb
 const fishing = makeFishing({ scene, G, P, cat, places, peds, spawnPed, say, toast, banner, objective, addCash, setCheck, clearCheck: () => { checkMark.visible = false; G.check = null; }, hit, down, isTouch, puff, Sfx, T, mission: () => mission, knockedOut, $ });
 
 // ---------------- minimap ----------------
@@ -1518,6 +1525,7 @@ function frame(now) {
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
   if (!dev.camera(Math.max(dt, 0.001)))   updateCamera(Math.max(dt, 0.001));
   sky.mesh.position.copy(camera.position);
+  radio.update(dt); // radio
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
   dev.frame(dt); TER.beforeRender(scene, camera, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z); // engine: lift onto terrain
   BRK.update(dt);
@@ -1573,12 +1581,14 @@ const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff,
 const meows = makeMeows({ P, G });
 // yardcats: lady cats in the Estates front yards to flirt with (src/js/yardcats.js)
 const yardcats = makeYardCats({ scene, G, P, places, collide, fishing, say, toast, banner, Sfx, addCash, addHeat, light: catLight, mission: () => mission, inside: () => INT.inside, px, pz });
+const radio = makeRadio({ P, G, hit, isTouch }); // radio: car stations + police scanner (src/js/radio.js)
 // cave: the Hollow Deep easter egg (src/js/cave.js)
 const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
 window.__G = { G, P, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
+Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 Object.assign(window.__G, { banner, toast, addCash }); // robbery: banner/toast/addCash for robbery.js
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)

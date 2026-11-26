@@ -73,7 +73,8 @@ export function makeGoobles(o = {}) {
     // pick the clip
     if (emote && (speed > 0.6 || u.air || !cur || (cur === clips[emote] && cur.time >= cur.getClip().duration - 0.01))) emote = null;
     if (!emote) {
-      if (u.air) { const a = play('Jump', 0.12, true); if (a) { a.timeScale = 0; a.time = 0.62; } }
+      if (u.climb != null) { const a = play('Walk', 0.12); if (a) a.timeScale = Math.min(2.4, u.climb * 0.9); } // climb: paw over paw up the trunk
+      else if (u.air) { const a = play('Jump', 0.12, true); if (a) { a.timeScale = 0; a.time = 0.62; } }
       else if (u.swim) { const a = play('Walk'); if (a) a.timeScale = 1.6; }
       else if (speed > RUN_FROM) { const a = play('Run'); if (a) a.timeScale = Math.max(1, speed / 1.9); }
       else if (speed > 0.15) { const a = play('Walk'); if (a) a.timeScale = Math.max(0.6, speed / 0.5); }
