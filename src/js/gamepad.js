@@ -4,7 +4,7 @@
 // game.js at the end of the frame), the right stick calls the look hook. A/B/X/Y = Cross/Circle/Square/Triangle.
 export function makeGamepad(o) {
   const { keys, pressed, touch, P, ui, toast, look } = o;
-  const BTN = { 0: ' ', 2: 'punch', 3: 'e', 4: 'q', 5: 'h', 12: 'arrowup', 13: 'arrowdown', 14: 'arrowleft', 15: 'arrowright' };
+  const BTN = { 0: ' ', 2: 'punch', 3: 'e', 4: 'q', 5: 'h', 10: 'r', 11: 'r', 12: 'arrowup', 13: 'arrowdown', 14: 'arrowleft', 15: 'arrowright' };
   const DEAD = 0.18, dz = (v) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
   let seen = false, drove = false;
   const held = {}, was = [];

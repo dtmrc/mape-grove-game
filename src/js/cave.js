@@ -894,7 +894,8 @@ export function makeCave(ctx) {
   function update(dt) {
     if (!S.built) { firstT += dt; if (firstT > 0.05) { try { buildMouth(); } catch (e) { console.error('[cave] mouth failed', e); S.built = true; } } }
     const t = G.time || 0;
-    if (postTorch.visible) postTorch.userData.flick(t);
+    mouth.visible = Math.abs(P.x - C.x) < 150 && Math.abs(P.z - C.z) < 150;   // deep in the woods: no draw calls from town
+    if (postTorch.visible && mouth.visible) postTorch.userData.flick(t);
     if (handTorch.visible) handTorch.userData.flick(t);
     // the torch light rides with the cat
     if (S.held && !INTM.current()) {
