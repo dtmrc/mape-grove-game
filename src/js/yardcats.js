@@ -173,6 +173,9 @@ function load() { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'
 function persist() { try { localStorage.setItem(KEY, JSON.stringify({ aff: S.aff, wife: S.wife, met: S.met, groomDay: S.groomDay, flirts: S.flirts, rejections: S.rejections })); } catch (e) { /* ignore */ } }
 const aff = (id) => Math.round(S.aff[id] || 0);
 const pick = (a) => a[(Math.random() * a.length) | 0];
+// placement and idle wandering use their own seeded generator so the yard cats never shift the game's random sequence
+let seed = 0x9e3779b9;
+const rng = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const fill = (s, c) => s.replace(/\{n\}/g, c.name);
 
 // ---------- the quest ----------
@@ -416,7 +419,7 @@ function lawnSpot(y, collide) {
   for (const [lx, lz] of tries) {
     const [x, z] = at(mx * lx, lz);
     if (lz > y.front - 0.6) continue;
-    if (!collide(x, z, 0.45).hit) return { x, z, yaw: y.ry + (Math.random() - 0.5) * 1.2 };
+    if (!collide(x, z, 0.45).hit) return { x, z, yaw: y.ry + (rng() - 0.5) * 1.2 };
   }
   return null;
 }
@@ -446,12 +449,12 @@ export function makeYardCats(ctx) {
     const emo = new THREE.Sprite(new THREE.SpriteMaterial({ map: emoTex('warm'), transparent: true, depthWrite: false, fog: false }));
     emo.scale.set(0.42, 0.42, 1); emo.position.y = 1.25; emo.visible = false; root.add(emo);
     scene.add(root);
-    CATLIST.push({ def, root, body, emo, emoT: 0, home, yard: home, x: home.x, z: home.z, yaw: home.yaw, st: 'idle', t: 1 + Math.random() * 4, tx: 0, tz: 0, snub: 0, ready: false });
+    CATLIST.push({ def, root, body, emo, emoT: 0, home, yard: home, x: home.x, z: home.z, yaw: home.yaw, st: 'idle', t: 1 + rng() * 4, tx: 0, tz: 0, snub: 0, ready: false });
   }
   if (S.wife && BY[S.wife]) moveToRV(CATLIST.find((c) => c.def.id === S.wife));
   // load the GLB once, build the shared template, then dress each cat
   const buf = GLB.buffer.slice(GLB.byteOffset, GLB.byteOffset + GLB.byteLength);
-  new GLTFLoader().parse(buf, '', (gltf) => { try { buildTemplate(gltf); CATLIST.forEach((c, i) => makeCatModel(c, i)); } catch (e) { console.error('yardcats: model failed', e); } }, (e) => console.error('yardcats: GLB failed', e));
+  new GLTFLoader().parse(buf, '', (gltf) => { try { buildTemplate(gltf); CATLIST.forEach((c, i) => makeCatModel(c, i)); srcCanvas = null; } catch (e) { console.error('yardcats: model failed', e); } }, (e) => console.error('yardcats: GLB failed', e));
 
   function moveToRV(c) {
     if (!c || !places.rv) return;
@@ -627,16 +630,16 @@ export function makeYardCats(ctx) {
       if (pd < 5 && !P.car) { want = Math.atan2(P.x - c.x, P.z - c.z) + (c.snub > 0 ? Math.PI : 0); c.st = 'idle'; c.t = Math.max(c.t, 2); }
       else if (c.st === 'walk') {
         const dx = c.tx - c.x, dz = c.tz - c.z, dd = Math.hypot(dx, dz);
-        if (dd < 0.1 || (c.t -= dt) <= 0) { c.st = 'idle'; c.t = 3 + Math.random() * 6; }
+        if (dd < 0.1 || (c.t -= dt) <= 0) { c.st = 'idle'; c.t = 3 + rng() * 6; }
         else { const v = Math.min(dd, 0.55 * dt); c.x += dx / dd * v; c.z += dz / dd * v; want = Math.atan2(dx, dz); moving = true; }
       } else if ((c.t -= dt) <= 0) {
-        const a = Math.random() * Math.PI * 2, r = 0.5 + Math.random() * (c.wife ? 1.2 : 1.6), tx = c.home.x + Math.cos(a) * r, tz = c.home.z + Math.sin(a) * r;
+        const a = rng() * Math.PI * 2, r = 0.5 + rng() * (c.wife ? 1.2 : 1.6), tx = c.home.x + Math.cos(a) * r, tz = c.home.z + Math.sin(a) * r;
         if (!collide(tx, tz, 0.4).hit) { c.st = 'walk'; c.tx = tx; c.tz = tz; c.t = 8; } else c.t = 1;
       }
       let dy = want - c.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); c.yaw += dy * Math.min(1, dt * 4);
       if (pd < 0.55 && !P.car && pd > 1e-3) { const k = 0.55 / pd; P.x = c.x + (P.x - c.x) * k; P.z = c.z + (P.z - c.z) * k; }   // Goobles can't walk through her
       c.root.position.set(c.x, 0, c.z); c.body.rotation.y = c.yaw;
-      if (c.wife && !c.emo.visible && Math.random() < dt * 0.08) emote(c, 'wife', 2);
+      if (c.wife && !c.emo.visible && rng() < dt * 0.08) emote(c, 'wife', 2);
       if (d < ANIM_R && c.mixer) {
         if (c.cur !== c.acts.Wave || c.cur.time >= c.cur.getClip().duration - 0.02) play(c, moving ? 'Walk' : 'Idle');
         if (moving && c.cur) c.cur.timeScale = 1.1;
