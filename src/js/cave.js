@@ -256,7 +256,7 @@ export function makeGhost() {
   root.traverse((o) => { o.userData.noLift = true; });
   return root;
 }
-function animGhost(g, t, mood = 'float') {
+export function animGhost(g, t, mood = 'float') {
   const u = g.userData;
   u.body.position.y = 0.32 + Math.sin(t * 1.7) * 0.07;
   u.tail1.rotation.z = Math.sin(t * 2.1) * 0.25; u.tail1.rotation.x = Math.sin(t * 1.3) * 0.18 + 0.12;
@@ -267,7 +267,7 @@ function animGhost(g, t, mood = 'float') {
   u.head.rotation.z = Math.sin(t * 0.9) * 0.08; u.head.rotation.x = mood === 'sad' ? 0.3 : 0;
   u.glow.material.opacity = (0.32 + Math.sin(t * 2.3) * 0.08) * u.alpha;
 }
-function ghostAlpha(g, k) {
+export function ghostAlpha(g, k) {
   const u = g.userData; u.alpha = k;
   for (const m of u.mats) m.opacity = m.userData.op * k;
   g.visible = k > 0.01;
@@ -687,7 +687,7 @@ function buildLair(api) {
       const hh = new THREE.Group(); hh.position.set(0.15, 0.3, 0); hen.add(hh);
       M(box(0.08, 0.1, 0.08), lambert({ color: 0x9a5a28 }), 0, 0, 0, hh); M(box(0.02, 0.05, 0.05), lambert({ color: 0xd02020 }), 0, 0.07, 0, hh); M(new THREE.ConeGeometry(0.02, 0.05, 4).rotateZ(-Math.PI / 2), lambert({ color: 0xe8b020 }), 0.06, 0, 0, hh);
       hen.userData.head = hh;
-      interact.push({ id: 'hen', x: -7.0, z: 6.3, r: 1.1, label: 'Look at the hen', onUse: () => api.say([['', 'A brown hen in a crate. She has a name tag: "TUESDAY". She looks at you like you\'re her last hope.'], ['', 'The latch is held shut with a lot of very confident knots.']]) }); }
+      interact.push({ id: 'hen', x: -7.0, z: 6.3, r: 1.1, label: 'Look at the hen', onUse: () => (api.quest && api.quest.hen && api.quest.hen()) || api.say([['', 'A brown hen in a crate. She has a name tag: "TUESDAY". She looks at you like you\'re her last hope.'], ['', 'The latch is held shut with a lot of very confident knots.']]) }); }
     { const bones = [], bm = []; for (let k = 0; k < 16; k++) { const a = rnd(0, 6.28), r = rnd(1.4, 2.4); bones.push(tint(placed(cyl(0.015, 0.02, rnd(0.1, 0.22), 4), FX + 1.6 + Math.cos(a) * r * 0.4, 0.02, FZ + 2.2 + Math.sin(a) * r * 0.3, rnd(0, 6), Math.PI / 2), 0xe8e0c8)); }
       for (let k = 0; k < 60; k++) { const f = new THREE.PlaneGeometry(0.06, 0.16); f.rotateX(-Math.PI / 2); f.rotateY(rnd(0, 6)); const a = rnd(0, 6.28), r = rnd(1.2, 4.5); f.translate(FX + Math.cos(a) * r, 0.01 + rr() * 0.01, FZ + Math.sin(a) * r); bm.push(tint(f, [0xf4f0e8, 0xa0683a, 0xe8e0d0, 0x5a3a20][(rr() * 4) | 0])); }
       root.add(merged(bones, lambert({ vertexColors: true }))); root.add(merged(bm, basic({ vertexColors: true, side: THREE.DoubleSide })));
@@ -844,16 +844,17 @@ export function makeCave(ctx) {
   });
   INTM.addPrompt((id) => {
     if (id !== 'cavelair') return null;
-    const g = S.gh; if (g.state !== 'haunt' || g.a < 0.6) return null;
+    const g = S.gh; if (g.state !== 'haunt' || g.a < 0.6 || g.talking) return null;
     const R = window.__INT && window.__INT.room; if (!R) return null;
     const d = Math.hypot(P.x - (R.origin.x + g.x), P.z - (R.origin.z + g.z));
-    return d < 3.4 ? { text: 'Talk to the ghost', btn: 'TALK' } : null;
+    return d < 3.4 ? { text: (api.quest && api.quest.talkLabel && api.quest.talkLabel()) || 'Talk to the ghost', btn: 'TALK' } : null;
   });
   INTM.addUse((id) => {
     if (id !== 'cavelair') return false;
     const g = S.gh; if (g.state !== 'haunt' || g.a < 0.6) return false;
     const R = window.__INT.room, d = Math.hypot(P.x - (R.origin.x + g.x), P.z - (R.origin.z + g.z));
     if (d >= 3.4) return false;
+    if (api.quest && api.quest.talk && api.quest.talk()) return true;
     g.talking = true;
     const lines = TALK[S.talkN++ % TALK.length];
     say(lines, () => { g.talking = false; });
@@ -961,7 +962,8 @@ export function makeCave(ctx) {
       g.a = clamp(g.t / 1.4, 0, 1);
       if (g.t > 1.5 && !G.dialog) {
         g.state = 'talk'; const first = !SV.met; SV.met = 1; SV.visits = (SV.visits | 0) + 1; store();
-        say(first ? INTRO : AGAIN, () => { g.state = 'haunt'; g.t = 0; });
+        const qq = api.quest && api.quest.reveal ? api.quest.reveal(first) : null;   // hens.js: the Missing Hens confrontation
+        say(qq ? qq.lines : first ? INTRO : AGAIN, () => { g.state = 'haunt'; g.t = 0; if (qq && qq.then) qq.then(); });
       }
     } else if (g.state === 'talk') {
       g.a = 1;

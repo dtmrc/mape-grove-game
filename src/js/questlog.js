@@ -29,12 +29,13 @@ const GROUPS = [['active', 'IN PROGRESS'], ['open', 'AVAILABLE'], ['locked', 'LO
 const S = { track: null, prev: null, open: false, sel: 0, rows: [], lastMission: null, lastCatch: null, view: null, swapped: null };
 let A = null;   // the context from init()
 
-function load() { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && (s.track === null || BY[s.track])) S.track = s.track; } catch (e) { /* storage blocked */ } }
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && (s.track === null || BY[s.track])) S.track = s.track; else if (s && s.track) S.pendingTrack = s.track; } catch (e) { /* storage blocked */ } }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify({ track: S.track })); } catch (e) { /* ignore */ } }
 
 const mission = () => (A ? A.mission() : null);
 const catchStage = () => (A && A.fishing ? A.fishing.S.quest || 'none' : 'none');
 function status(q) {
+  if (q.status) return q.status();   // registered quests (register()) report their own state; 'hidden' keeps them out of the log
   const G = A.G, m = mission();
   if (q.id === 'catch') { const st = catchStage(); return st === 'done' ? 'done' : st === 'none' ? 'open' : 'active'; }
   if (m && m.id === q.id) return 'active';
@@ -49,6 +50,7 @@ function giverSpot(q) {
 const near = (p, r) => Math.hypot(A.px() - p.x, A.pz() - p.z) < r;
 /** What the HUD should show for quest q right now: { obj, check } (check may be null). */
 function guide(q) {
+  if (q.guide) return q.guide();
   const st = status(q), m = mission();
   if (q.id === 'catch' && st === 'active') {
     const f = A.fishing.QUEST && A.fishing.QUEST[catchStage()];
@@ -222,6 +224,8 @@ export const quests = {
   S, QUESTS,
   init(ctx) { A = ctx; if (A.G.objRaw === undefined) A.G.objRaw = ''; load(); S.lastMission = mission() ? mission().id : null; S.lastCatch = catchStage(); buildDom(); },
   open, close, get isOpen() { return S.open; },
+  /** Add a quest owned by another module: { id, kind, title, giver, where, reward, blurb, status() -> 'hidden'|'open'|'active'|'locked'|'done', guide() -> { obj, check } }. */
+  register(def) { if (!def || BY[def.id]) return; QUESTS.push(def); BY[def.id] = def; if (S.pendingTrack === def.id) { S.track = def.id; S.pendingTrack = null; } },
   track: (id) => setTrack(id, true),
   list: () => QUESTS.map((q) => ({ id: q.id, title: q.title, status: status(q), tracked: S.track === q.id, step: guide(q).obj })),
   view: () => S.view,
