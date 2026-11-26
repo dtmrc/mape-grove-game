@@ -264,7 +264,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
     const q = QUEST[S.quest]; if (!q || mission()) return;
     const far = !q.at || Math.hypot(px() - q.at.x, pz() - q.at.z) > 6;   // the beacon switches off once you're there
     const key = S.quest + (far ? '' : '!');
-    if ($('objective').textContent !== q.obj || S.lastObj !== key) { S.lastObj = key; objective(q.obj); if (q.at && far) setCheck(q.at.x, q.at.z, 2.5, q.label); else clearCheck(); }
+    if ((G.objRaw ?? $('objective').textContent) !== q.obj || S.lastObj !== key) { S.lastObj = key; objective(q.obj); if (q.at && far) setCheck(q.at.x, q.at.z, 2.5, q.label); else clearCheck(); }
   }
   function talkEarl() {
     if (S.quest === 'none') return say([['Earl', 'Afternoon, cat. Or whatever. You look like you live on tuna cans.'], ['Earl', "Lake Juniper's full of fish nobody catches. Buy a rod, drown some worms off the dock."], ['Earl', 'Cook what you catch at my firepit on the shore. Raw fish will put you flat on your back.'], ['Earl', "Eat a proper meal and I'll pay you for the story. Shop's open."]], () => { setQuest('buy'); openMenu('shop'); });
@@ -420,7 +420,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
   }
 
   return {
-    S, give, feed, menu, HUNGER_ENABLED, closeMenu, countFish, removeFish, FISH,
+    S, QUEST, SHOP, give, feed, menu, HUNGER_ENABLED, closeMenu, countFish, removeFish, FISH,
     // true while the player is busy (fishing, skinning, eating, menu open): game.js skips its own movement code
     hold(dt) {
       if (S.bagOpen) { animBiped(cat, 0, 0, G.time); return true; }
