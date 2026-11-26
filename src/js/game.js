@@ -14,6 +14,7 @@ import * as DONUT from './donut.js';
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
 import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patrons
+import './robbery.js'; // robbery: hold up the Donut Hole + Rosie's Diner
 import { makeShops } from './shops.js'; // content: shops + belly food
 import { makeJobs } from './jobs.js'; // content: replayable missions, side jobs, post-game
 import * as RD from './roads.js';
@@ -1565,6 +1566,7 @@ window.__G = { G, P, fires, fishing, jail, enterCar, waterAt, events, fx, cars, 
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat;
+Object.assign(window.__G, { banner, toast, addCash }); // robbery: banner/toast/addCash for robbery.js
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });
