@@ -350,8 +350,8 @@ export function makeRadio({ P, G, hit, isTouch }) {
   cap.style.cssText = `position:fixed;left:50%;bottom:${isTouch ? 210 : 70}px;transform:translateX(-50%);max-width:min(620px,86vw);white-space:normal;font-size:21px;color:#f4f4dc;background:rgba(0,0,0,.45);padding:3px 10px;display:none;`;
   el.append(nm, sub); (document.getElementById('hud') || document.body).append(el, cap);
   // touch: tapping the station name switches; a small RADIO tag stays while driving
-  const btn = document.createElement('button'); btn.textContent = 'RADIO';
-  btn.style.cssText = 'position:fixed;right:12px;top:46%;z-index:5;font:18px VT323,monospace;color:#fff;background:rgba(0,0,0,.45);border:2px solid #556;padding:4px 8px;display:none;pointer-events:auto;';
+  const btn = document.createElement('button'); btn.id = 'radiobtn'; btn.textContent = 'RADIO'; // placed by the touch layout in style.css
+  btn.style.cssText = 'position:fixed;z-index:5;font:18px VT323,monospace;color:#fff;background:rgba(0,0,0,.45);border:2px solid #556;padding:4px 8px;display:none;pointer-events:auto;';
   btn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); Sfx.unlock(); want = true; });
   if (isTouch) document.body.append(btn);
   let want = false;

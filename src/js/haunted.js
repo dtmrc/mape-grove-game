@@ -664,9 +664,9 @@ export function makeHaunted(ctx) {
     S.boo = { t: 0 }; G.heat = 0; G.hoaTruce = Math.max(G.hoaTruce || 0, (G.time || 0) + 90);
     toast('John: "BOO." Every HOA cart in a mile decides it has somewhere else to be. Heat cleared.', 4.5); [300, 240, 200, 160].forEach((f) => Sfx.blip(f));
   }
-  const btnCss = 'position:fixed;left:14px;z-index:32;display:none;font:22px inherit;font-family:inherit;padding:4px 12px;background:rgba(10,14,30,0.85);color:#ffd23f;border:3px solid #c8c0a0;';
-  const harmBtn = document.createElement('button'); harmBtn.textContent = '♪'; harmBtn.style.cssText = btnCss + 'top:42%;'; document.body.appendChild(harmBtn);
-  const booBtn = document.createElement('button'); booBtn.textContent = 'BOO'; booBtn.style.cssText = btnCss + 'top:52%;'; document.body.appendChild(booBtn);
+  const btnCss = 'position:fixed;z-index:32;display:none;font:22px inherit;font-family:inherit;padding:4px 12px;background:rgba(10,14,30,0.85);color:#ffd23f;border:3px solid #c8c0a0;';
+  const harmBtn = document.createElement('button'); harmBtn.id = 'harmbtn'; harmBtn.textContent = '♪'; harmBtn.style.cssText = btnCss; document.body.appendChild(harmBtn);
+  const booBtn = document.createElement('button'); booBtn.id = 'boobtn'; booBtn.textContent = 'BOO'; booBtn.style.cssText = btnCss; document.body.appendChild(booBtn);
   harmBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); playHarmonica(); });
   booBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); summon(); });
 
