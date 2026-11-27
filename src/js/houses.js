@@ -84,7 +84,7 @@ export function houseGeo(id, mirror = false) {
 // swapped in (one at a time), and dropped again past FAR. Beyond NEAR the GPU samples the smaller mip levels anyway,
 // which are the same pixels as the half-size atlas, so the picture doesn't change.
 const NEAR = 85, FAR = 110;
-const LOD = {};   // id -> { t, lo (Source), hi (Source | null), state: 'lo' | 'loading' | 'hi', spots: [[x, z]] }
+const LOD = {};   // id -> { t (half atlas, always loaded), hi (full atlas Texture | null), mats, state: 'lo' | 'loading' | 'hi', spots: [[x, z]] }
 /** world.js: a house of this model stands at (x, z). */
 export function houseSpot(id, x, z) { (LOD[id] || (LOD[id] = { spots: [] })).spots.push([x, z]); }
 /** The model's atlas as a texture (decodes async; three uploads it once the image is in). */
@@ -93,13 +93,20 @@ export function houseTex(id, aniso = 4) {
   img.onload = () => { t.needsUpdate = true; };
   img.src = HALF[id];
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso;
-  Object.assign(LOD[id] || (LOD[id] = { spots: [] }), { t, lo: t.source, hi: null, state: 'lo' });
+  Object.assign(LOD[id] || (LOD[id] = { spots: [] }), { t, hi: null, mats: [], state: 'lo' });
   return t;
 }
+/** world.js: `m` draws this model, so its map is the one switched between the half and the full atlas. */
+export function houseMat(id, m) { if (LOD[id] && LOD[id].mats) LOD[id].mats.push(m); return m; }
+// The full atlas is its own Texture and the materials' `map` is switched between the two. (Changing `source` on one
+// Texture does not work: three keeps one fixed-size GPU texture per Texture, the 2048 upload into the 1024 one fails.)
+// The half atlas stays on the GPU the whole time, so going back to it costs nothing.
 let busy = false;
-function toLow(L) { if (L.state === 'lo') return; L.t.onUpdate = null; if (L.hi && L.hi.data) L.hi.data.src = ''; L.hi = null; L.state = 'lo'; L.t.source = L.lo; L.t.needsUpdate = true; }
+const setMap = (L, tex) => { for (const m of L.mats) m.map = tex; };
+const drop = (tex) => { tex.onUpdate = null; tex.dispose(); const d = tex.image; if (d) { if (d.close) d.close(); else d.src = ''; } };
+function toLow(L) { if (L.state === 'lo') return; setMap(L, L.t); if (L.hi) drop(L.hi); L.hi = null; L.state = 'lo'; }
 /** Tests / photo mode: MODE.force = 'full' | 'half' pins every model to one atlas, null = by distance. */
-export const MODE = { force: null, near: NEAR, far: FAR };
+export const MODE = { force: null, near: NEAR, far: FAR, bitmap: true };
 /** Call a few times a second with the player's position: swaps full / half atlases by distance. */
 export function updateHouseTex(x, z) {
   for (const id in LOD) {
@@ -109,9 +116,19 @@ export function updateHouseTex(x, z) {
     if (L.state === 'lo' && d < MODE.near && !busy) {
       busy = true; L.state = 'loading';
       const img = new Image(); img.src = TEX[id];
-      const done = (ok) => { busy = false; if (L.state !== 'loading') return; if (!ok) { L.state = 'lo'; return; } L.hi = new THREE.Source(img); L.t.source = L.hi; L.t.needsUpdate = true; L.state = 'hi';
-        L.t.onUpdate = () => { L.t.onUpdate = null; if (L.state === 'hi' && L.hi && L.hi.data === img) img.src = ''; }; };   // uploaded: the decoded copy (16 MB) can go, the GPU has it
-      if (img.decode) img.decode().then(() => done(true), () => done(false)); else { img.onload = () => done(true); img.onerror = () => done(false); }
+      const done = (data) => {
+        busy = false;
+        if (L.state !== 'loading' || !data) { if (L.state === 'loading') L.state = 'lo'; if (data && data.close) data.close(); return; }
+        const h = new THREE.Texture(data); h.colorSpace = L.t.colorSpace; h.anisotropy = L.t.anisotropy; h.flipY = data === img;   // a bitmap is flipped when it is made
+        h.onUpdate = () => { h.onUpdate = null; if (data.close) data.close(); else data.src = ''; };   // uploaded: the decoded copy (16 MB) can go, the GPU has it
+        h.needsUpdate = true; L.hi = h; L.state = 'hi'; setMap(L, h);
+      };
+      // Decode off the main thread, then make an ImageBitmap: its upload is a plain copy, while uploading an <img>
+      // can decode or convert again inside the frame (a visible hitch for 2048 x 2048).
+      const viaBitmap = () => (MODE.bitmap && typeof createImageBitmap === 'function'
+        ? createImageBitmap(img, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }).then((b) => { img.src = ''; return b; }, () => img)
+        : img);
+      if (img.decode) img.decode().then(viaBitmap).then(done, () => done(null)); else { img.onload = () => done(img); img.onerror = () => done(null); }
     } else if (L.state !== 'lo' && d > MODE.far) toLow(L);
   }
 }

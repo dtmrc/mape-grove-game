@@ -39,6 +39,7 @@ import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // re
 import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeDynGrid } from './dyngrid.js'; // broad phase for cars + peds
 import { makePrewarm } from './prewarm.js'; // shaders + textures ready behind the title screen
+import { vfreeGuard } from './vfree.js';
 import { updateHouseTex, houseTexReset, houseTexState, MODE as HOUSE_TEX } from './houses.js'; // full-size house atlases only near the player
 import { makeSceneCull } from './scenecull.js'; // skip hidden / far objects in the per-frame scene walk
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
@@ -365,6 +366,7 @@ function dynSync() { CARG.fill(cars); PEDG.fill(peds); }
 const SCULL = makeSceneCull({ scene, camera });
 const PW = makePrewarm({ renderer, scene, camera });
 canvas.addEventListener('webglcontextrestored', houseTexReset);
+vfreeGuard({ canvas, renderer, save });   // vfree: world chunk arrays are freed after upload, so a lost context saves and reloads
 let houseTexT = 0;
 TC.api.carsNear = (x, z, r) => CARG.near(x, z, r, _bTC);
 function attachPed(p) {
