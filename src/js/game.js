@@ -18,6 +18,7 @@ import { makeFishing } from './fishing.js';
 import * as BRK from './breakables.js';
 import * as DONUT from './donut.js';
 import * as PIZZA from './pizza.js'; // Pizza City interior + order counter
+import * as STORES from './storerooms.js'; // Bev's Threads + Hank's Hardware interiors
 import * as SCHOOL from './school.js'; // Maple Grove High interior
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
@@ -1616,6 +1617,7 @@ window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
+window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block
 Object.assign(window.__G, { banner, toast, addCash }); // robbery: banner/toast/addCash for robbery.js
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)
@@ -1623,6 +1625,7 @@ const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pr
 const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, removeCar, setCheck, objective, toast, banner, addCash, addHeat, places, cars, peds, P, G, NPC, giverMarks, makeMarker, say, startMission, endMission, mission: () => mission, scene, T, Sfx, INT, ahead, fishing });
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
 PIZZA.init({ G, places, fishing, toast, addCash, Sfx }); // Pizza City interior
+STORES.init({ G, places, fishing, toast, addCash, Sfx }); // Bev's Threads + Hank's Hardware interiors
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;

@@ -23,6 +23,7 @@ import chaserpd18 from './chaserpd18.glb';
 import tahomappv04 from './tahomappv04.glb';
 import pathwaypiu23 from './pathwaypiu23.glb';
 import blazonppv23 from './blazonppv23.glb';
+import hoacart from './hoacart.glb';
 import INDEX from './index.json';
-export const GLB = { escalon24, kamden97, crown03, accolade14, chaser18, kamden25, modele24, stallion99, comet17, corsair24, pathway97, tahoma04, grand16, crest12, rambla24, k15_95, f15_04, rampart16, f15_24, crownpi08, chaserpd18, tahomappv04, pathwaypiu23, blazonppv23 };
+export const GLB = { escalon24, kamden97, crown03, accolade14, chaser18, kamden25, modele24, stallion99, comet17, corsair24, pathway97, tahoma04, grand16, crest12, rambla24, k15_95, f15_04, rampart16, f15_24, crownpi08, chaserpd18, tahomappv04, pathwaypiu23, blazonppv23, hoacart };
 export { INDEX };
