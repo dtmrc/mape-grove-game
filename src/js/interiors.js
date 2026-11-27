@@ -216,6 +216,7 @@ export function makeInteriors(ctx) {
       group.position.set(origin.x, 0, origin.z); group.rotation.set(0, 0, 0);
       group.userData.noLift = true; group.visible = false;
       group.traverse((o) => { o.layers.set(1); o.userData.noLift = true; });
+      if (out.halos !== false) addHalos(group, out.lights || []);
       if (BAKE_ON) { try { rec.bake = bakeRoom(THREE, group, out); } catch (e) { console.error(`[interiors] room "${id}" light bake failed`, e); rec.bake = { error: String(e) }; } }
       // exit ring inside
       const exitM = marker(1); exitM.userData.arrow.visible = false; group.add(exitM);
@@ -248,6 +249,23 @@ export function makeInteriors(ctx) {
       rec.broken = true; S.errors.push(`${id}: ${e && e.message}`);
       for (const e of entries) if (e.id === id) placeEntry(e);
       return null;
+    }
+  }
+
+  // soft additive halos round ceiling / wall fixtures (static lights above 1.5 m), one sprite each
+  let haloTex = null;
+  function addHalos(group, lights) {
+    if (!haloTex) {
+      const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+      const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.18, 'rgba(255,255,255,0.35)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.08)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64); haloTex = new THREE.CanvasTexture(c); haloTex.colorSpace = THREE.SRGBColorSpace;
+    }
+    for (const L of lights) {
+      if (!L || L.dyn || L.halo === false || !((+L.y || 2.4) > 1.5)) continue;
+      const m = new THREE.SpriteMaterial({ map: haloTex, color: L.c ?? 0xfff0d8, transparent: true, opacity: 0.32 * Math.min(1.4, L.i ?? 1), blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const sp = new THREE.Sprite(m); sp.position.set(+L.x || 0, (+L.y || 2.4) - 0.05, +L.z || 0); const k = 0.9 + 0.5 * Math.min(1.5, L.i ?? 1); sp.scale.set(k, k, 1);
+      sp.layers.set(1); sp.userData.noLift = true; group.add(sp);
+      (group.userData.halos ||= []).push({ sp, L, i0: L.i ?? 1, o0: m.opacity });
     }
   }
 
@@ -606,6 +624,7 @@ export function makeInteriors(ctx) {
       if (n) BAKE_UNIFORMS.uBakeTint.value.setRGB(tr / n, tg / n, tb / n); else BAKE_UNIFORMS.uBakeTint.value.setRGB(1, 1, 1);
     }
     W.fill(1);
+    for (const h of R.group.userData.halos || []) h.sp.material.opacity = h.o0 * Math.max(0, (h.L.i ?? 1) / (h.i0 || 1)) * (BAKE_UNIFORMS.uBakeTint.value ? (BAKE_UNIFORMS.uBakeTint.value.r + BAKE_UNIFORMS.uBakeTint.value.g) / 2 : 1);
     // daylight: window panes show a day view, and the room gets a touch brighter and cooler at noon
     const day = setDaylight(G.clock ?? 12) || 0;
     if (baked && BAKE_UNIFORMS.uBakeTint.value) BAKE_UNIFORMS.uBakeTint.value.multiply(_dayTint.setRGB(1 + 0.06 * day, 1 + 0.08 * day, 1 + 0.12 * day));
