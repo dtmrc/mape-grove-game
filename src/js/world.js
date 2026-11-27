@@ -27,6 +27,7 @@ import { makeRV, makeCar } from './models.js';
 import { initRoads } from './roads.js';
 import { flowRoads } from './roadflow.js';
 import { initGround } from './ground.js';
+import { packGeo } from './geopack.js';
 import { prepareWorld, makeGroundMesh, patchMaterial, floors, setFloorProvider, chunkOf, cullBounds, inTown, hillsAt, edgeRise, noise2, heightAt as terH, slopeAt as terSlope } from './terrain.js';
 export { inTown };
 
@@ -853,7 +854,7 @@ export function buildWorld(scene, T) {
     const by = new Map();
     for (const g of list) { const c = g.userData.ck ?? 0; (by.get(c) || by.set(c, []).get(c)).push(g); }
     for (const [c, l] of by) {
-      const mesh = new THREE.Mesh(mergeGeometries(l, false), M[k]);
+      const mesh = new THREE.Mesh(packGeo(mergeGeometries(l, false)), M[k]);   // geopack: 16-bit normals and colours
       patchMaterial(M[k]); mesh.userData.noLift = true; mesh.userData.chunk = c; // engine
       cullBounds(mesh, c === 0 ? 30 : 14);   // generous pad: editor moves and the terrain lift happen in the shader
       mesh.matrixAutoUpdate = false;

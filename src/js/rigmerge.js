@@ -74,25 +74,26 @@ export function rigMergeList(frame, list, min = 2) {
   }
   if (pieces.length < min) return [];
   // 2. per material class: the shape (shared between every figure built the same way) + this figure's colours
-  const byClass = new Map();
-  let sig = '';
-  for (const b of bones) sig += f4(_m.multiplyMatrices(_inv, b.matrixWorld).elements) + ';';
+  // The shape of a class depends only on its own pieces (which geometry, on which pivot, where), not on the rest of the
+  // figure or on which texture it wears: every walker shares one copy of the legs, shoes and head however it is dressed.
+  const byClass = new Map(), boneSig = bones.map((b) => f4(_m.multiplyMatrices(_inv, b.matrixWorld).elements));
   for (const p of pieces) {
     const groups = p.g.groups.length ? p.g.groups : [{ start: 0, count: p.g.index ? p.g.index.count : p.g.attributes.position.count, materialIndex: 0 }];
-    sig += p.g.uuid + '@' + p.b + ':' + f4(p.o.matrix.elements) + '[' + groups.map((gr) => p.keys[Array.isArray(p.o.material) ? gr.materialIndex : 0]).join('/') + ']';
+    const at = p.g.uuid + '@' + p.b + ':' + boneSig[p.b] + ':' + f4(p.o.matrix.elements);
     for (const gr of groups) {
       const mi = Array.isArray(p.o.material) ? gr.materialIndex : 0, key = p.keys[mi];
-      let C = byClass.get(key); if (!C) byClass.set(key, C = { key, mat: p.mats[mi], parts: [] });
+      let C = byClass.get(key); if (!C) byClass.set(key, C = { key, mat: p.mats[mi], parts: [], sig: '' });
       C.parts.push({ p, gr, mat: p.mats[mi] });
+      C.sig += at + '/' + gr.start + '+' + gr.count + (p.mats[mi].vertexColors ? 'v' : '') + ';';
     }
   }
   const made = [];
   for (const C of byClass.values()) {
-    const shapeKey = C.key + '#' + sig;
+    const shapeKey = C.sig;
     let S = shapes.get(shapeKey);
     if (!S) {
       let n = 0; for (const q of C.parts) n += q.gr.count;
-      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), si = new Uint8Array(n * 4), sw = new Uint8Array(n * 4), base = new Float32Array(n * 3);
+      const pos = new Float32Array(n * 3), nor = new Int16Array(n * 3), uv = new Float32Array(n * 2), si = new Uint8Array(n * 4), sw = new Uint8Array(n * 4), base = new Float32Array(n * 3);
       const ranges = []; let d = 0, r2 = 0;
       for (const q of C.parts) {
         const g = q.p.g, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, K = g.attributes.color, ix = g.index;
@@ -103,13 +104,17 @@ export function rigMergeList(frame, list, min = 2) {
           const j = flip && i % 3 ? (i % 3 === 1 ? i + 1 : i - 1) : i;
           const s = ix ? ix.getX(q.gr.start + j) : q.gr.start + j;
           _v.fromBufferAttribute(P, s).applyMatrix4(_m); pos[d * 3] = _v.x; pos[d * 3 + 1] = _v.y; pos[d * 3 + 2] = _v.z; r2 = Math.max(r2, _v.lengthSq());
-          _v.fromBufferAttribute(N, s).applyMatrix3(_n).normalize(); nor[d * 3] = _v.x; nor[d * 3 + 1] = _v.y; nor[d * 3 + 2] = _v.z;
+          _v.fromBufferAttribute(N, s).applyMatrix3(_n).normalize(); nor[d * 3] = Math.round(_v.x * 32767); nor[d * 3 + 1] = Math.round(_v.y * 32767); nor[d * 3 + 2] = Math.round(_v.z * 32767);
           if (U) { uv[d * 2] = U.getX(s); uv[d * 2 + 1] = U.getY(s); }
           if (K && q.mat.vertexColors) { base[d * 3] = K.getX(s); base[d * 3 + 1] = K.getY(s); base[d * 3 + 2] = K.getZ(s); } else { base[d * 3] = base[d * 3 + 1] = base[d * 3 + 2] = 1; }
           si[d * 4] = q.p.b; sw[d * 4] = 255;
         }
       }
-      S = { n, ranges, base, radius: Math.sqrt(r2), attrs: { position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), uv: new THREE.BufferAttribute(uv, 2),
+      // compact formats (every figure of this build shares these buffers): normals 16-bit, pivot index and weight bytes.
+      // Positions stay floats: 16-bit positions moved a few edge pixels in the comparison test.
+      let allOne = true; for (let i = 0; i < base.length && allOne; i++) if (base[i] !== 1) allOne = false;
+      let maxBase = 0; for (let i = 0; i < base.length; i++) if (base[i] > maxBase) maxBase = base[i];
+      S = { n, ranges, base: allOne ? null : base, maxBase, radius: Math.sqrt(r2), attrs: { position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3, true), uv: new THREE.BufferAttribute(uv, 2),
         skinIndex: new THREE.BufferAttribute(si, 4), skinWeight: new THREE.BufferAttribute(sw, 4, true) } };   // bytes: one pivot per vertex, weight 255/255
       shapes.set(shapeKey, S);
     }
@@ -117,14 +122,17 @@ export function rigMergeList(frame, list, min = 2) {
     let colKey = shapeKey + '~'; for (const q of C.parts) colKey += q.mat.color.getHex() + ',';
     let geo = geos.get(colKey);
     if (!geo) {
-      const col = new Float32Array(S.n * 3);
+      // 16-bit colours (1/65535 steps, far below what the screen can show), floats only if something is brighter than 1
+      let hi = S.maxBase; { let m = 0; for (const q of C.parts) m = Math.max(m, q.mat.color.r, q.mat.color.g, q.mat.color.b); hi *= m; }
+      const k16 = hi <= 1 ? 65535 : 0, col = k16 ? new Uint16Array(S.n * 3) : new Float32Array(S.n * 3);
       C.parts.forEach((q, k) => {
         _c.copy(q.mat.color); const a = S.ranges[k * 2], cnt = S.ranges[k * 2 + 1];
-        for (let i = a; i < a + cnt; i++) { col[i * 3] = S.base[i * 3] * _c.r; col[i * 3 + 1] = S.base[i * 3 + 1] * _c.g; col[i * 3 + 2] = S.base[i * 3 + 2] * _c.b; }
+        const B = S.base, m = k16 || 1;
+        for (let i = a; i < a + cnt; i++) { const r = (B ? B[i * 3] : 1) * _c.r * m, g = (B ? B[i * 3 + 1] : 1) * _c.g * m, b = (B ? B[i * 3 + 2] : 1) * _c.b * m; col[i * 3] = k16 ? Math.round(r) : r; col[i * 3 + 1] = k16 ? Math.round(g) : g; col[i * 3 + 2] = k16 ? Math.round(b) : b; }
       });
       geo = new THREE.BufferGeometry();
       for (const k in S.attrs) geo.setAttribute(k, S.attrs[k]);   // shared buffers: one copy on the GPU for every figure of this build
-      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3, !!k16));
       geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), S.radius * 1.6);   // room for swinging limbs
       geos.set(colKey, geo);
     }
