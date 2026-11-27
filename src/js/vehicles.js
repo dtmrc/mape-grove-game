@@ -16,9 +16,9 @@ import { GLB, INDEX } from '../models/vehicles/index.js';
 export const VEHICLES_ENABLED = !(typeof location !== 'undefined' && /[?&]cars=old\b/.test(location.search));
 const LOD_FAR = 38;
 // game class of each roster class: the procedural type whose handling numbers it starts from
-const BASE = { sedan: 'sedan', sport: 'hatch', suv: 'suv', pickup: 'pickup' };
+const BASE = { sedan: 'sedan', sport: 'hatch', suv: 'suv', pickup: 'pickup', cart: 'golfcart' };
 // which models a requested procedural type turns into
-const POOLS = { sedan: ['sedan', 'sedan', 'sport'], hatch: ['sedan', 'sport'], wagon: ['suv'], suv: ['suv'], pickup: ['pickup'] };
+const POOLS = { sedan: ['sedan', 'sedan', 'sport'], hatch: ['sedan', 'sport'], wagon: ['suv'], suv: ['suv'], pickup: ['pickup'], golfcart: ['cart'] };
 const byCls = {};
 for (const [id, I] of Object.entries(INDEX)) if (GLB[id]) (byCls[I.cls] ||= []).push(id);
 
@@ -29,15 +29,16 @@ export function registerVehicles(CAR_TYPES) {
   const mean = (ids, f) => ids.reduce((t, id) => t + f(INDEX[id]), 0) / ids.length;
   for (const [id, I] of Object.entries(INDEX)) {
     if (!GLB[id]) continue;
-    const police = I.cls === 'police', fam = police ? (I.roofY > 1.55 ? 'suv' : 'sedan') : I.cls;
+    const police = I.cls === 'police', cart = I.cls === 'cart', fam = police ? (I.roofY > 1.55 ? 'suv' : 'sedan') : I.cls;
     const B = CAR_TYPES[BASE[fam]], peers = byCls[I.cls];
     const k = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
     const top = B.top * k(I.top / mean(peers, (q) => q.top), 0.88, 1.2) * (police ? 1.12 : 1);
     const acc = B.acc * k(mean(peers, (q) => secs(q.acc)) / secs(I.acc), 0.85, 1.25) * (police ? 1.1 : 1);
     CAR_TYPES[id] = {
       len: I.len, wid: +(I.wid * 0.9).toFixed(2), h: +(I.roofY * 0.5).toFixed(2), top, acc, grip: B.grip + (police ? 0.5 : 0),
-      mass: +(B.mass * k((I.len * I.wid) / (4.9 * 2.1), 0.85, 1.25)).toFixed(2), bed: !!B.bed, cls: fam, name: I.name, model: id,
-      glb: { wr: I.wr, wx: I.wx, axles: I.axles, roofY: I.roofY, roofZ: I.roofZ, glows: I.glows, livery: I.livery, bar: police },
+      mass: +(B.mass * k((I.len * I.wid) / (4.9 * 2.1), 0.85, 1.25)).toFixed(2), bed: !!B.bed, cart: !!B.cart, cls: fam, name: I.name, model: id,
+      glb: { wr: I.wr, wx: I.wx, axles: I.axles, roofY: I.roofY, roofZ: I.roofZ, glows: I.glows, livery: I.livery, bar: police || cart,
+        label: cart ? { x: 0.612, y: 0.44, z: -0.8, w: 0.6, h: 0.15 } : { x: +(I.wid * 0.45 - 0.02).toFixed(3), y: +(I.roofY * 0.48).toFixed(3), z: 0, w: 1.4, h: 0.35 } },
     };
   }
   // decode every model up front (meshopt decode is async) so cars spawned at start do not pop in a few frames late
@@ -74,6 +75,8 @@ function load(id, done, fail) {
   }
   if (c.scene) done(c.scene); else if (c.err) fail(); else c.wait.push([done, fail]);
 }
+let barGeo = null;
+const labelMats = new Map();
 // a LOD node from the named meshes (near) and their _far twins
 function lodOf(sc, names, mats) {
   const lod = new THREE.LOD(), near = new THREE.Group(), far = new THREE.Group();
@@ -93,7 +96,7 @@ export function makeModelCar(type, color, o, CAR_TYPES) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   // grey paint texture (median ~215): lift the tint so the car reads as the chosen colour; police keep their livery
   const paint = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!G.livery) paint.color.set(color).multiplyScalar(1.45);
+  if (!G.livery) { paint.color.set(color); const hi = Math.max(paint.color.r, paint.color.g, paint.color.b); paint.color.multiplyScalar(Math.min(1.45, 1.15 / Math.max(hi, 0.01))); } // whites would blow out
   const bar = [basic({ color: 0xff2020 }), basic({ color: 0x2050ff })];
   const wheels = [], spins = [];
   for (const z of G.axles) for (const s of [1, -1]) {
@@ -108,11 +111,21 @@ export function makeModelCar(type, color, o, CAR_TYPES) {
     for (const [spin, s] of spins) { const w = lodOf(sc, ['Wheel'], {}); if (s < 0) w.scale.x = -1; spin.add(w); }
   }, () => {
     // decoder unavailable: fall back to the procedural car of the same family so the game still has cars
-    const P = makeCar(S.cls === 'sport' ? 'sedan' : S.cls, color, o), u = P.userData;
+    const P = makeCar(S.cls === 'sport' ? 'sedan' : S.cls === 'cart' ? 'golfcart' : S.cls, color, o), u = P.userData;
     for (const ch of u.body.children.slice()) body.add(ch);
     u.wheels.forEach((w, i) => { for (const ch of w.children.slice()) { ch.position.set(0, 0, 0); spins[i][0].add(ch); } });
   });
+  // a civilian model asked for a light bar (HOA patrol SUV): the game's two-block bar on the roof
+  if (o.lightbar && !G.bar) {
+    barGeo ||= (() => { const a = new THREE.BoxGeometry(0.45, 0.12, 0.25), b = a.clone(); a.translate(-0.25, 0, 0); b.translate(0.25, 0, 0); return [a, b]; })();
+    barGeo.forEach((g, i) => { const m = new THREE.Mesh(g, bar[i]); m.position.set(0, G.roofY + 0.06, G.roofZ); body.add(m); });
+  }
+  // door lettering (HOA patrol): a plane on each side
+  if (o.label) {
+    const L = G.label; if (!labelMats.has(o.label)) labelMats.set(o.label, basic({ map: o.label }));
+    for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(L.w, L.h), labelMats.get(o.label)); m.rotation.y = s * Math.PI / 2; m.position.set(s * L.x, L.y, L.z); body.add(m); }
+  }
   const glows = G.glows.map(([x, y, z, c, s]) => ({ x, y, z, c, s }));
-  root.userData = { body, wheels, bar: G.bar ? bar : null, wr: G.wr, spec: S, paint, glows };
+  root.userData = { body, wheels, bar: G.bar || o.lightbar ? bar : null, wr: G.wr, spec: S, paint, glows };
   return root;
 }
