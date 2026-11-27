@@ -432,10 +432,13 @@ function deadTree0(x, z, s, o = {}) {
 function bush(x, z, s = 1, c = 0xb0e0a0) { addS(bushCrown(x, z, s, R() * 6), 'leaves', c, x, 0, z); }
 function fence(x0, z0, x1, z1, h = 1.2, color = 0xffffff) {
   const len = Math.hypot(x1 - x0, z1 - z0), ry = Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2;
+  // breakables: long lines are cut into <= 7.2 m sections, each its own breakable group (a car knocks down one section)
+  const n = Math.ceil(len / 7.2 - 1e-6);
+  if (n > 1) { for (let k = 0; k < n; k++) fence(x0 + (x1 - x0) * k / n, z0 + (z1 - z0) * k / n, x0 + (x1 - x0) * (k + 1) / n, z0 + (z1 - z0) * (k + 1) / n, h, color); return; }
   const g = new THREE.BoxGeometry(len, h, 0.1);
   const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * len / 3);
   addS(g, 'fence', color, (x0 + x1) / 2, h / 2, (z0 + z1) / 2, ry);
-  colBox((x0 + x1) / 2, (z0 + z1) / 2, len + 0.2, 0.3, h, ry);
+  colBox((x0 + x1) / 2, (z0 + z1) / 2, len + 0.2, 0.3, h, ry, { brk: 'fence', fk: 'board', fc: color, seg: [x0, z0, x1, z1] });
 }
 function streetLamp(x, z, ry) {
   addS(new THREE.CylinderGeometry(0.32, 0.38, 0.5, 8), 'plain', 0x8a8a86, x, 0.25, z);
@@ -1928,7 +1931,7 @@ function buildMainStreet() {
     for (const x of [2.6, -3.4]) { F.box(x, 1.6, 6.7, 0.14, 3.2, 0.14, 'metal', 0xa8acb2); F.post(x, 6.7, 0.1, 3.2); }
     F.box(-0.4, 3.1, 6.7, 6.2, 0.1, 0.1, 'metal', 0xa8acb2);
     F.sign("HANK'S LUMBER", '#2a6a3a', '#fff4c0', 4.4, 0.7, 3.6, 6.72, { tw: 512, th: 64, lx: -0.4, double: true });
-    { const [a, b] = F.at(-3.6, 7.1), [c, d] = F.at(-8.4, 7.1); fenceRun(a, b, c, d, 'chain'); }     // the rolled-back gate
+    { const [a, b] = F.at(-3.6, 7.1), [c, d] = F.at(-8.4, 7.1); fenceRun(a, b, c, d, 'chain', undefined, { gate: true }); }     // the rolled-back gate
     // open lumber shed along the back: steel posts, a sloped roof, board racks underneath
     for (const x of [-7.8, -2.6, 2.6, 7.8]) for (const z of [-1.4, -6.1]) { F.box(x, 2.1, z, 0.16, 4.2, 0.16, 'metal', 0x8a9098); F.post(x, z, 0.12, 4.2); }
     F.geo(new THREE.BoxGeometry(16.6, 0.1, 5.8).rotateX(-0.12), 'metal', 0x9aa8b0, 0, 4.35, -3.75);
@@ -1999,8 +2002,10 @@ const FENCE = {
   privacy: { h: 1.8, box: true, col: 0xf0e8d8 },
   rail: { h: 1.05, rail: true, col: 0xc8b090, pw: 0.15 },
 };
-function fenceRun(x0, z0, x1, z1, kind, col) {
+function fenceRun(x0, z0, x1, z1, kind, col, o = {}) {
   const K = FENCE[kind], len = Math.hypot(x1 - x0, z1 - z0); if (!K || len < 0.4) return;
+  const n0 = Math.ceil(len / 7.2 - 1e-6);   // breakables: one breakable group per <= 7.2 m section
+  if (n0 > 1) { for (let k = 0; k < n0; k++) fenceRun(x0 + (x1 - x0) * k / n0, z0 + (z1 - z0) * k / n0, x0 + (x1 - x0) * (k + 1) / n0, z0 + (z1 - z0) * (k + 1) / n0, kind, col, { ...o, skip0: k > 0 }); return; }
   const ry = Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, h = K.h, c = col ?? K.col;
   if (K.box) {
     const g = new THREE.BoxGeometry(len, h, 0.08), uv = g.attributes.uv;
@@ -2014,11 +2019,11 @@ function fenceRun(x0, z0, x1, z1, kind, col) {
     addS(g, K.key, c, mx, h / 2, mz, ry);
   }
   const n = Math.max(1, Math.round(len / (K.every || 2.4))), pw = K.pw || 0.11, ph = h + (K.cap || 0.05);
-  for (let k = 0; k <= n; k++) {
+  for (let k = o.skip0 ? 1 : 0; k <= n; k++) {
     const t = k / n;
     addS(new THREE.BoxGeometry(pw, ph, pw), K.post || 'wood', K.postCol ?? c, x0 + (x1 - x0) * t, ph / 2, z0 + (z1 - z0) * t, ry);
   }
-  colBox(mx, mz, len + 0.1, 0.24, h, ry, { fence: kind });
+  colBox(mx, mz, len + 0.1, 0.24, h, ry, { fence: kind, brk: o.gate ? 'gate' : 'fence', fk: kind, fc: c, seg: [x0, z0, x1, z1] });
 }
 const lots = [];
 const NO_FENCE = [{ x0: -115, x1: -93, z0: 30, z1: 50 }];   // the RV lot
@@ -2094,6 +2099,15 @@ function buildFences() {
         const [x0, z0] = F.at(ax + (qx - ax) * k / n, az + (qz - az) * k / n), [x1, z1] = F.at(ax + (qx - ax) * (e + 1) / n, az + (qz - az) * (e + 1) / n);
         fenceRun(x0, z0, x1, z1, kind, S.col);
         k = e + 1;
+      }
+      // breakables (2026-11-27): a picket front gets a little gate at the front walk, left standing open into the yard
+      if (front && kind === 'picket') {
+        let kl = -1, kr = -1;
+        for (let j = 0; j < n; j++) { const c0 = ax + (qx - ax) * (j + 0.5) / n; if (keep[j] && c0 < L.doorX) kl = j; if (keep[j] && c0 > L.doorX && kr < 0) kr = j; }
+        if (kl >= 0 && kr >= 0) {
+          const xl = ax + (qx - ax) * (kl + 1) / n, xr = ax + (qx - ax) * kr / n, leaf = Math.min(1.1, (xr - xl) * 0.45);
+          if (xr - xl > 1.2 && xr - xl < 10) {   // the walk + driveway gaps usually merge: hinge on the walk's side const [x0, z0] = F.at(xl + 0.06, az - 0.06), [x1, z1] = F.at(xl + 0.06, az - 0.06 - leaf); fenceRun(x0, z0, x1, z1, 'picket', S.col, { gate: true }); }
+        }
       }
     }
   });
@@ -2544,21 +2558,42 @@ function buildCountry() {
     }
   }
   // split-rail fences along the fields that face a road, with a gate gap; hay bales on the cut fields
+  // breakables (2026-11-27): each rail line is cut into two-span sections, each its own breakable group; `own` keeps every
+  // piece anchored on the ground under itself (the fields roll), so the sections still follow the hills
+  const RAILC = { brk: 'fence', fk: 'farmrail', fc: 0xd8c4a8, own: true };
   const rail = (ax, az, bx, bz) => {
     const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(L / 3.2)), ry = Math.atan2(bx - ax, bz - az);
     for (let k = 0; k <= n; k++) { const x = ax + (bx - ax) * k / n, z = az + (bz - az) * k / n; if (!onRoad(x, z, 0.4)) addS(new THREE.BoxGeometry(0.16, 1.25, 0.16), 'wood', 0xc8b49a, x, 0.62, z, ry); }
-    for (const y of [0.55, 1.05]) addS(new THREE.BoxGeometry(0.09, 0.12, L), 'wood', 0xd8c4a8, (ax + bx) / 2, y, (az + bz) / 2, ry);
-    colBox((ax + bx) / 2, (az + bz) / 2, 0.3, L, 1.2, ry, NG);
+    for (let k = 0; k < n; k += 2) {
+      const e = Math.min(n, k + 2), sx = ax + (bx - ax) * k / n, sz = az + (bz - az) * k / n, ex = ax + (bx - ax) * e / n, ez = az + (bz - az) * e / n, l = L * (e - k) / n;
+      for (const y of [0.55, 1.05]) addS(new THREE.BoxGeometry(0.09, 0.12, l), 'wood', 0xd8c4a8, (sx + ex) / 2, y, (sz + ez) / 2, ry);
+      colBox((sx + ex) / 2, (sz + ez) / 2, 0.3, l, 1.2, ry, { ...RAILC, seg: [sx, sz, ex, ez] });
+    }
+  };
+  // a galvanised five-bar farm gate, shut, hung between two stout posts
+  const farmGate = (ax, az, bx, bz) => {
+    const L = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), mx = (ax + bx) / 2, mz = (az + bz) / 2, ux = (bx - ax) / L, uz = (bz - az) / L;
+    for (const [x, z] of [[ax, az], [bx, bz]]) addS(new THREE.BoxGeometry(0.2, 1.4, 0.2), 'wood', 0xb8a488, x, 0.7, z, ry);
+    const leaf = L - 0.3;
+    for (let k = 0; k < 5; k++) addS(new THREE.BoxGeometry(0.05, 0.05, leaf), 'metal', 0xc4c8cc, mx, 0.28 + k * 0.2, mz, ry);
+    for (const t of [-leaf / 2, leaf / 2]) addS(new THREE.BoxGeometry(0.06, 0.9, 0.06), 'metal', 0xc4c8cc, mx + ux * t, 0.66, mz + uz * t, ry);
+    addS(new THREE.BoxGeometry(0.04, 0.04, Math.hypot(leaf, 0.8)).rotateX(-Math.atan2(0.8, leaf)), 'metal', 0xc4c8cc, mx, 0.68, mz, ry);
+    colBox(mx, mz, 0.3, L, 1.2, ry, { brk: 'gate', fk: 'farmgate', fc: 0xc4c8cc, own: true, seg: [ax, az, bx, bz] });
   };
   for (const f of FIELDS) {
     const c = Math.cos(f.ry), s = Math.sin(f.ry), P = (lx, lz) => [f.x + lx * c + lz * s, f.z - lx * s + lz * c];
     const hw = f.w / 2 + 1.2, hd = f.d / 2 + 1.2;
     // the two long sides, each in 3 runs; skip any run that touches a road
-    for (const sd of [-1, 1]) for (let q = 0; q < 3; q++) {
-      const x0 = -hw + q * (2 * hw / 3) + (q ? 2 : 0), x1 = -hw + (q + 1) * (2 * hw / 3) - (q < 2 ? 2 : 0);
-      const [ax, az] = P(x0, sd * hd), [bx, bz] = P(x1, sd * hd);
-      if (onRoad(ax, az, 1) || onRoad(bx, bz, 1) || onRoad((ax + bx) / 2, (az + bz) / 2, 1)) continue;
-      rail(ax, az, bx, bz);
+    for (const sd of [-1, 1]) {
+      const built = [];
+      for (let q = 0; q < 3; q++) {
+        const x0 = -hw + q * (2 * hw / 3) + (q ? 2 : 0), x1 = -hw + (q + 1) * (2 * hw / 3) - (q < 2 ? 2 : 0);
+        const [ax, az] = P(x0, sd * hd), [bx, bz] = P(x1, sd * hd);
+        if (onRoad(ax, az, 1) || onRoad(bx, bz, 1) || onRoad((ax + bx) / 2, (az + bz) / 2, 1)) continue;
+        rail(ax, az, bx, bz); built[q] = true;
+      }
+      // the first gap gets a gate (shut); the second stays open
+      if (built[0] && built[1]) { const g0 = -hw + 2 * hw / 3 - 2, [ax, az] = P(g0, sd * hd), [bx, bz] = P(g0 + 4, sd * hd); if (!onRoad((ax + bx) / 2, (az + bz) / 2, 1)) farmGate(ax, az, bx, bz); }
     }
     if (f.kind !== 'plow') for (let k = 0; k < 5 + ((R() * 4) | 0); k++) { const [x, z] = P(r(-f.w / 2 + 4, f.w / 2 - 4), r(-f.d / 2 + 4, f.d / 2 - 4)); hay(x, z, r(0, 3.1)); colliders[colliders.length - 1].ng = true; }
     MAP.push({ t: 'rect', x: f.x, z: f.z, w: f.w, d: f.d, ry: f.ry, col: f.kind === 'plow' ? '#7a6248' : f.kind === 'wheat' ? '#a8a058' : '#6f8a46' });
@@ -2729,10 +2764,19 @@ export function collide(x, z, r, y = 0, o) {
 
 /** engine: the top of the highest solid thing under x,z the player can stand on from height y (steps up 0.5 m).
  *  Every collider is standable (benches, slides, cars of stone, roofs if you can jump that high); water is not. */
-/** engine: breakable props (street lamps, hydrants) whose collider overlaps a circle. Returns engine colliders. */
+/** engine: breakable props (street lamps, hydrants, fence sections, gates) whose collider overlaps a circle. Returns engine colliders. */
 export function breakablesNear(x, z, r) {
   const out = [];
-  for (const c of nearby(x, z, r + 0.5)) { if ((c.brk || (c._m && c._m.orig.brk)) && c.r !== undefined && Math.hypot(x - c.cx, z - c.cz) < c.r + r) out.push(c); }
+  for (const c of nearby(x, z, r + 0.5)) {
+    if (!(c.brk || (c._m && c._m.orig.brk))) continue;
+    if (c.r !== undefined) { if (Math.hypot(x - c.cx, z - c.cz) < c.r + r) out.push(c); continue; }
+    // fence sections + gates (boxes, axis-aligned or rotated)
+    let d;
+    if (c.ob) { const dx = x - c.cx, dz = z - c.cz, lx = dx * c.c - dz * c.s, lz = dx * c.s + dz * c.c; d = Math.hypot(Math.max(0, Math.abs(lx) - c.hw), Math.max(0, Math.abs(lz) - c.hd)); }
+    else if (c.x0 !== undefined) d = Math.hypot(Math.max(0, c.x0 - x, x - c.x1), Math.max(0, c.z0 - z, z - c.z1));
+    else continue;
+    if (d < r) out.push(c);
+  }
   return out;
 }
 export function colTop(x, z, y) {

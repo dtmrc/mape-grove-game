@@ -41,7 +41,7 @@ export function makeLightFX({ scene, camera, lights }) {
     for (const L of cones) {
       const top = L.y + 0.4, g = new THREE.CylinderGeometry(0.22, 2.3, top, 10, 1, true);
       g.translate(L.x, top / 2 + heightAt(L.x, L.z), L.z);
-      const n = g.attributes.position.count, col = new Float32Array(n * 3), t = new Float32Array(n), on = new Float32Array(n).fill(1);
+      const n = g.attributes.position.count, col = new Float32Array(n * 3), t = new Float32Array(n), on = new Float32Array(n).fill(L.i > 0 ? 1 : 0);
       const c = new THREE.Color(L.c).multiplyScalar(0.42 * (L.i || 1));
       for (let i = 0; i < n; i++) { col.set([c.r, c.g, c.b], i * 3); t[i] = 0.5 + (g.attributes.position.getY(i) - top / 2 - heightAt(L.x, L.z)) / top; }
       g.setAttribute('aCol', new THREE.BufferAttribute(col, 3)); g.setAttribute('aT', new THREE.BufferAttribute(t, 1)); g.setAttribute('aOn', new THREE.BufferAttribute(on, 1));
@@ -65,7 +65,7 @@ export function makeLightFX({ scene, camera, lights }) {
   }
   build();
   let chk = 0;
-  return {
+  const api = {
     mesh,
     update(dt, nightK) {
       mat.uniforms.uNight.value = nightK;
@@ -73,13 +73,20 @@ export function makeLightFX({ scene, camera, lights }) {
       if (!mesh.visible || (chk -= dt) > 0) return;
       chk = 0.5;
       if (lampSig() !== sig) { build(); return; }
-      const on = mesh.geometry.attributes.aOn; if (!on) return;
-      let dirty = false;
-      for (const L of cones) {
-        const v = L.i > 0 ? 1 : 0, [o, m] = L._cone;
-        if (on.array[o] !== v) { on.array.fill(v, o, o + m); dirty = true; }
-      }
-      if (dirty) on.needsUpdate = true;
+      sync();
     },
+    /** A lamp went out or came back (breakables): switch its cone right now instead of at the next 0.5 s check. */
+    refresh: () => sync(),
   };
+  function sync() {
+    const on = mesh.geometry.attributes.aOn; if (!on) return;
+    let dirty = false;
+    for (const L of cones) {
+      if (!L._cone) continue;
+      const v = L.i > 0 ? 1 : 0, [o, m] = L._cone;
+      if (on.array[o] !== v) { on.array.fill(v, o, o + m); dirty = true; }
+    }
+    if (dirty) on.needsUpdate = true;
+  }
+  return api;
 }

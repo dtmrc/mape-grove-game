@@ -1217,7 +1217,7 @@ function updateLights(dt) {
   if (poolT <= 0) {
     poolT = 0.25;
     const cx = camera.position.x, cz = camera.position.z;
-    const list = lights.filter((L) => L.always || nightK > 0.05).map((L) => [L, (L.x - cx) ** 2 + (L.z - cz) ** 2]).sort((a, b) => a[1] - b[1]);
+    const list = lights.filter((L) => (L.always || nightK > 0.05) && L.i > 0).map((L) => [L, (L.x - cx) ** 2 + (L.z - cz) ** 2]).sort((a, b) => a[1] - b[1]);
     for (let i = 0; i < POOL; i++) {
       const l = pool[i], e = list[i];
       if (!e) { l.intensity = 0; l.userData.src = null; continue; }
@@ -1625,7 +1625,7 @@ sky.mesh.userData.noLift = true; TER.track(haloGroup.children); TER.link(flameSp
 const dev = makeDev({ scene, camera, canvas, renderer, G, P, cars, peds, pickups, WM, lights, haloSprites: haloGroup.children, pools, toast, marks: () => [...Object.values(giverMarks), saveMark, checkMark], setClock: (h) => { G.clock = h; updateSky(0); fx.update(0, nightK, G.time); } });
 // interiors: enterable buildings (src/js/interiors.js)
 const INT = makeInteriors({ scene, camera, camPos, G, P, cat, pool, hemi, sun, moon, post, WM, T, places, NPC, giverMarks, nearNpc, mission: () => mission, collide, exitCar, toast, save, Sfx, isTouch, mm, mg, getDev: () => dev, setCam: (y, p) => { camYaw = y; if (p !== undefined) camPitch = p; camIdle = 0; } });
-BRK.init({ scene, Sfx, toast, camera }); // engine: breakables
+BRK.init({ scene, Sfx, toast, camera, T, lights, pools, lightfx }); // engine: breakables
 // firestarter: house fires (src/js/firestarter.js)
 const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff, hurt, addCash, peds, places, isTouch, pool, lights, hemi, $, fishing: () => fishing });
 // meows: Goobles voice (src/js/meows.js)

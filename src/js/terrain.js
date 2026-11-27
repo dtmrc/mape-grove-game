@@ -282,7 +282,7 @@ export function groupAt(x, z, margins = true) {
   let best = 0, bd = 1e9, ba = 1e9;
   for (const ci of l) {
     const c = colModel[ci].orig, bld = !!c.bld;
-    const margin = !margins ? 0.3 : bld ? 3 : c.r !== undefined ? Math.max(c.r * 0.6, 1.2) : 0.7;
+    const margin = !margins ? 0.3 : bld ? 3 : c.r !== undefined ? Math.max(c.r * 0.6, 1.2) : c.brk ? 0.15 : 0.7;   // breakable fences: only their own panels + posts
     const d = footprintDist(c, x, z); if (d > margin) continue;
     const pri = d - (bld ? 0.5 : 0), a = area(c);
     if (pri < bd - 1e-6 || (Math.abs(pri - bd) < 1e-6 && a < ba)) { best = colModel[ci].grp; bd = pri; ba = a; }
@@ -309,7 +309,7 @@ export function prepareWorld(buckets, ctx) {
   const bldIdx = [];
   colModel.forEach((m, i) => { if (m.orig.bld) bldIdx.push(i); });
   const parent = (m) => {   // small colliders hugging a building join it
-    if (m.orig.bld || m.orig.water) return -1;
+    if (m.orig.bld || m.orig.water || m.orig.brk) return -1;   // breakables always own their group (breaking one never hides a building)
     let best = -1, bd = 1.01;
     for (const i of bldIdx) {
       const b = colModel[i].orig, [cx, cz] = m.orig.r !== undefined || m.orig.ob ? [m.orig.cx, m.orig.cz] : [(m.orig.x0 + m.orig.x1) / 2, (m.orig.z0 + m.orig.z1) / 2];
@@ -333,7 +333,7 @@ export function prepareWorld(buckets, ctx) {
     const p = parent(m);
     if (p >= 0) { late.push([i, find(p)]); return; }
     const c = canon(m.orig);
-    groups.push({ id: m.id, anchor: { x: c.cx, z: c.cz }, cols: [i], dx: 0, dz: 0, r: 0, s: 1, hide: false, label: m.orig.bld ? 'building' : m.orig.tree ? 'tree' : c.kind === 'circle' ? 'post / round prop' : 'prop' });
+    groups.push({ id: m.id, anchor: { x: c.cx, z: c.cz }, cols: [i], dx: 0, dz: 0, r: 0, s: 1, hide: false, label: m.orig.bld ? 'building' : m.orig.tree ? 'tree' : m.orig.brk === 'fence' || m.orig.brk === 'gate' ? m.orig.brk : c.kind === 'circle' ? 'post / round prop' : 'prop' });
     m.grp = groups.length - 1;
   });
   for (const [i, p] of late) { const g = colModel[p].grp; if (!g) continue; colModel[i].grp = g; groups[g].cols.push(i); }
@@ -361,8 +361,8 @@ export function prepareWorld(buckets, ctx) {
         worldInfo.flatGeos++;
       } else {
         const [ox, oz] = g.userData.o || [(x0 + x1) / 2, (z0 + z1) / 2];
-        const gi = groupAt(ox, oz);
-        const ax = gi ? groups[gi].anchor.x : ox, az = gi ? groups[gi].anchor.z : oz;
+        const gi = groupAt(ox, oz), own = gi && colModel[groups[gi].cols[0]].orig.own;   // own: pieces keep their own ground anchor (field fences on hills)
+        const ax = gi && !own ? groups[gi].anchor.x : ox, az = gi && !own ? groups[gi].anchor.z : oz;
         const a = new Float32Array(n * 3);
         for (let i = 0; i < n; i++) { a[i * 3] = ax; a[i * 3 + 1] = az; a[i * 3 + 2] = gi; }
         g.setAttribute('tanc', new THREE.BufferAttribute(a, 3));
