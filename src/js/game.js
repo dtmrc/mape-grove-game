@@ -1508,6 +1508,23 @@ function updateDistrict(dt) {
   if (d !== district) { const first = !district; district = d; if (!first) toast(d, 2.2); hud.district && (hud.district.textContent = d); }
 }
 
+// optional frame-rate readout (Settings > Show FPS): average fps, the slowest frame of the last second, render height
+const FPS = { on: false, el: null, t0: 0, n: 0, worst: 0, last: 0 };
+function setFpsHud(on) {
+  FPS.on = !!on;
+  if (on && !FPS.el) { FPS.el = document.createElement('div'); FPS.el.style.cssText = 'position:fixed;left:50%;top:2px;transform:translateX(-50%);z-index:70;font:16px VT323,monospace;color:#9f9;background:rgba(0,0,0,.55);padding:0 6px;pointer-events:none'; document.body.appendChild(FPS.el); }
+  if (FPS.el) FPS.el.style.display = on ? 'block' : 'none';
+  FPS.t0 = 0;
+}
+function fpsHud() {
+  if (!FPS.on) return;
+  const t = performance.now();
+  if (!FPS.t0) { FPS.t0 = FPS.last = t; FPS.n = 0; FPS.worst = 0; return; }
+  FPS.n++; FPS.worst = Math.max(FPS.worst, t - FPS.last); FPS.last = t;
+  if (t - FPS.t0 < 1000) return;
+  FPS.el.textContent = `${Math.round(FPS.n * 1000 / (t - FPS.t0))} fps · worst ${Math.round(FPS.worst)} ms · ${RES[resIdx]}p`;
+  FPS.t0 = t; FPS.n = 0; FPS.worst = 0;
+}
 // auto resolution: three slow 2-second windows in a row (under ~40 fps) drop the render height one step, down to 480p
 const AR = { t0: 0, n: 0, slow: 0 };
 function autoRes() {
@@ -1526,7 +1543,7 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (document.hidden) return;
   if (hit('p')) { resIdx = (resIdx + 1) % RES.length; resManual = true; resize(); toast(`Render height ${RES[resIdx]}p`); }
-  autoRes(now);
+  autoRes(now); fpsHud();
   if (hit('m')) { const on = Sfx.toggle(); window.__pdMute = !on; toast(on ? 'Sound on' : 'Sound off'); }
   gamepad.update(dt); quests.input(); ui.update(dt); // ui: gamepad -> keys/touch, then pause menu / map (may set G.paused)
   if (!G.dialog && fishing.menuOpen()) { fishing.menuInput(); dt = 0; }
@@ -1661,7 +1678,7 @@ window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 window.__G.setRes = (i) => { resIdx = Math.max(0, Math.min(RES.length - 1, i)); resize(); return RES[resIdx]; }; // qa: render height for comparison shots
 window.__G.gfx = { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b) }; // qa: picture options
-const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i, manual) => { resIdx = i; if (manual) resManual = true; resize(); }, gfx: { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b) }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
+const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i, manual) => { resIdx = i; if (manual) resManual = true; resize(); }, gfx: { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b), fps: setFpsHud }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
 quests.init({ G, P, hit, pressed, hud, checkMark, giverMarks, fishing, jail, ui, Sfx, toast, isTouch, px, pz, mission: () => mission, dev: () => dev }); window.__G.quests = quests; // quests
