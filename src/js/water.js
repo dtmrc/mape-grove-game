@@ -19,6 +19,7 @@ const U = {
   uAmb: { value: new THREE.Color(0.8, 0.85, 0.9) },
   uLP: { value: Array.from({ length: NL }, () => new THREE.Vector3(0, -999, 0)) },
   uLC: { value: Array.from({ length: NL }, () => new THREE.Color(0, 0, 0)) },
+  uNL: { value: 0 },   // lamps actually lit (the first uNL entries): by day the loop does no work
 };
 
 const VS = `
@@ -38,6 +39,7 @@ const FS = `
   uniform vec3 uTop, uHor, uSunDir, uSunCol, uMoonDir, uMoonCol, uAmb;
   uniform vec3 uLP[${NL}];
   uniform vec3 uLC[${NL}];
+  uniform int uNL;
   varying vec3 vW;
   #include <fog_pars_fragment>
   void main(){
@@ -60,9 +62,12 @@ const FS = `
     // glints: sun, moon, nearby lamps
     float sd = max(dot(R, uSunDir), 0.0);
     col += uSunCol * (pow(sd, 380.0) * 6.0 + pow(sd, 40.0) * 0.18);
-    float md = max(dot(R, uMoonDir), 0.0);
-    col += uMoonCol * (pow(md, 300.0) * 4.0 + pow(md, 30.0) * 0.2);
+    if (uMoonCol != vec3(0.0)) {   // uniform branch: by day the moon glint costs nothing (it would add exactly 0)
+      float md = max(dot(R, uMoonDir), 0.0);
+      col += uMoonCol * (pow(md, 300.0) * 4.0 + pow(md, 30.0) * 0.2);
+    }
     for (int i = 0; i < ${NL}; i++) {
+      if (i >= uNL) break;         // unlit lamps add exactly 0, so skipping them leaves the picture unchanged
       vec3 L = uLP[i] - vW; float d = length(L);
       float s = max(dot(R, L / d), 0.0);
       col += uLC[i] * (pow(s, 90.0) * 2.2 + pow(s, 12.0) * 0.12) / (1.0 + d * 0.05);
@@ -168,6 +173,7 @@ export function updateWater(dt, nightK, time) {
       const L = e[1];
       U.uLP.value[i].set(L.x, L.y, L.z); U.uLC.value[i].set(L.c).multiplyScalar(L.i * (L.always ? Math.max(0.35, nightK) : nightK));
     }
+    U.uNL.value = Math.min(NL, near.length);
   }
 }
 
