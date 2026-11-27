@@ -63,11 +63,11 @@ body.touch #objective { bottom: auto; top: 12px; max-width: calc(100% - 200px); 
 body.touch #timer { top: 60px; }
 body.touch #carname { bottom: 190px; }
 #pad {
-  position: fixed; left: 24px; bottom: 28px; width: 130px; height: 130px; border-radius: 50%;
+  position: fixed; left: var(--pad-l); bottom: var(--pad-b); width: 130px; height: 130px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.3); touch-action: none;
 }
 #knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); transform: translate(-50%, -50%); }
-#tbtns { position: fixed; right: 16px; bottom: 24px; display: grid; grid-template-columns: 70px 70px; gap: 10px; }
+#tbtns { position: fixed; right: var(--btn-r); bottom: var(--btn-b); display: grid; grid-template-columns: 70px 70px; gap: 10px; }
 #tbtns button {
   width: 70px; height: 70px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5); background: rgba(20, 24, 40, 0.55);
   color: var(--ink); font-family: inherit; font-size: 18px; touch-action: none;
@@ -152,10 +152,10 @@ body.menu #dialog, body.menu #prompt, body.menu #waypoint, body.menu #markpoint,
 #pause .cols { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 0 20px; }
 #pause .cols table { font-size: 19px; }
 #pause .cols td:last-child { max-width: 260px; }
-/* touch: pause + map buttons, bottom centre between the stick and the action buttons */
-#menubtns { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; gap: 12px; }
+/* touch: PAUSE / MAP / QUEST. Phones in portrait: a row above the stick. Landscape and tablets: bottom centre. See the touch layout block below. */
+#menubtns { position: fixed; left: var(--pad-l); bottom: calc(var(--pad-b) + 154px); display: flex; gap: 10px; }
 #menubtns button {
-  width: 54px; height: 54px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5); background: rgba(20, 24, 40, 0.55);
+  width: 52px; height: 52px; padding: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5); background: rgba(20, 24, 40, 0.55);
   color: var(--ink); font-family: inherit; font-size: 15px; touch-action: none;
 }
 #menubtns button:active { background: rgba(255, 210, 63, 0.6); }
@@ -166,3 +166,33 @@ body.menu #dialog, body.menu #prompt, body.menu #waypoint, body.menu #markpoint,
 #bigmap .mkhint { font-size: 20px; color: #c77dff; margin-top: 6px; }
 #minimap { pointer-events: auto; cursor: pointer; }
 #bigmap canvas { cursor: crosshair; }
+
+/* ---- touch layout: every on-screen control is placed here so none overlap (2026-11-27) ----
+   Safe areas (iPhone notch, home bar) come from env(); tools/qa/suites/21-touchui.cjs checks the layout
+   at phone sizes by overriding --sa-*. Portrait: stick bottom left with PAUSE/MAP/QUEST above it,
+   JUMP/PAW/USE bottom right with BAG and GUN stacked above them.
+   Wide (landscape phones, tablets): PAUSE/MAP/QUEST bottom centre between the stick and BAG/GUN, which sit left of JUMP/PAW. */
+:root {
+  --sa-t: env(safe-area-inset-top, 0px); --sa-r: env(safe-area-inset-right, 0px);
+  --sa-b: env(safe-area-inset-bottom, 0px); --sa-l: env(safe-area-inset-left, 0px);
+  --pad-l: calc(20px + var(--sa-l)); --pad-b: calc(22px + var(--sa-b));
+  --btn-r: calc(14px + var(--sa-r)); --btn-b: calc(22px + var(--sa-b));
+}
+body.touch #bagbtn, body.touch #pdgunbtn { right: calc(var(--btn-r) + 5px); width: 60px; height: 60px; }
+body.touch #bagbtn { bottom: calc(var(--btn-b) + 162px); }
+body.touch #pdgunbtn { bottom: calc(var(--btn-b) + 232px); }
+body.touch #harmbtn, body.touch #boobtn { position: fixed; left: var(--pad-l); }
+body.touch #radiobtn { right: var(--btn-r); bottom: calc(var(--btn-b) + 304px); }
+body.touch #harmbtn { bottom: calc(var(--pad-b) + 268px); }
+body.touch #boobtn { bottom: calc(var(--pad-b) + 214px); }
+body.touch #minimap { left: calc(16px + var(--sa-l)); top: calc(12px + var(--sa-t)); }
+body.touch #tr { right: calc(16px + var(--sa-r)); top: calc(12px + var(--sa-t)); }
+@media (min-width: 600px) {
+  #menubtns { left: calc(var(--pad-l) + 130px); right: calc(var(--btn-r) + 222px); bottom: var(--btn-b); justify-content: center; }
+  body.touch #bagbtn, body.touch #pdgunbtn { right: calc(var(--btn-r) + 162px); }
+  body.touch #bagbtn { bottom: var(--btn-b); }
+  body.touch #pdgunbtn { bottom: calc(var(--btn-b) + 72px); }
+  body.touch #radiobtn { right: calc(var(--btn-r) + 162px); bottom: calc(var(--btn-b) + 144px); }
+  body.touch #harmbtn { bottom: calc(var(--pad-b) + 184px); }
+  body.touch #boobtn { bottom: calc(var(--pad-b) + 140px); }
+}
