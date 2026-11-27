@@ -410,7 +410,7 @@ function tree0(x, z, s, o) {
     const r0 = R() * 6, r1 = R() * 6;   // the two rolls the old crown used: keep the seeded sequence in step
     for (const p of roundCrown(x, z, s, L, r0, r1)) addS(p.g, 'leaves', tint.clone().multiply(new THREE.Color(p.tint)), x, 0, z);
   } else addS(pineCrown(x, z, s, L), 'leaves', tint.clone().multiply(new THREE.Color(0xdcf4d4)), x, 0, z);
-  if (!o.nocol) colliders.push({ cx: x, cz: z, r: 0.4 * s, h: 6, tree: true, top: (kind === 'round' ? 5.2 : s > 1.2 ? 5.9 : 5.1) * s, pr: (kind === 'round' ? 1.1 : 0.8) * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
+  if (!o.nocol) colliders.push({ cx: x, cz: z, r: 0.4 * s, h: 6, tree: true, top: (kind === 'round' ? 5.2 : s > 1.2 ? 6.1 : 5.3) * s, pr: (kind === 'round' ? 1.1 : 0.8) * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
 function deadTree(x, z, s = 1) {
   if (onRoad(x, z, 0.5 * s, true)) return;

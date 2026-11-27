@@ -4,6 +4,7 @@
 //    canopy perch (the tree collider's `top`, world.js) and can stand there, look around and jump to a roof.
 //  - Walls: in mid-air against a wall, Space claws up it (two scrambles per jump), and pushing into a ledge that is
 //    within paw reach pulls him up onto it: fences, sheds, porches, house roofs (rooftops.js gives the real roof height).
+//  - Up high (roofs, fences, sheds, treetops) he drops onto all fours like a real cat (cat.userData.quad, goobles.js).
 // All state lives on P (P.climb, P.mantle, P.scr, P.wallT); updatePlayer in game.js calls hold / afterMove / wallJump.
 
 const REACH = 1.4;           // m above his feet a ledge can be and still be grabbed
@@ -35,7 +36,7 @@ export function makeClimb({ P, cat, TER, Sfx }) {
       const k = Math.min(1, M.k), up = Math.min(1, k * 1.7), fw = Math.max(0, (k - 0.35) / 0.65);
       P.y = M.y0 + (M.y1 - M.y0) * (1 - (1 - up) * (1 - up));
       P.x = M.x0 + (M.x1 - M.x0) * fw; P.z = M.z0 + (M.z1 - M.z0) * fw;
-      P.fl = P.y; cat.userData.air = true; cat.userData.climb = null;
+      P.fl = P.y; cat.userData.air = true; cat.userData.climb = null; cat.userData.quad = true;   // pulls himself up on all fours
       if (k >= 1) { P.mantle = null; P.y = M.y1; P.vy = 0; P.jumps = 0; P.scr = 0; P.perch = M.perch; }
       return true;
     }
@@ -59,14 +60,17 @@ export function makeClimb({ P, cat, TER, Sfx }) {
     P.yaw = Math.atan2(c.cx - P.x, c.cz - P.z);
     P.vx = P.vz = P.vy = 0; P.fl = P.y;
     const top = c.top ?? c.h ?? 5;
-    cat.userData.air = false; cat.userData.climb = Math.abs(v) + Math.abs(mx) * 1.2;
+    cat.userData.air = false; cat.userData.climb = Math.abs(v) + Math.abs(mx) * 1.2; cat.userData.quad = false;
     if (P.y >= top - 0.7) { stop(); mantle(c.cx, top, c.cz, 0.3); P.mantle.perch = true; }      // over the top onto the perch
     else if (P.y <= 0 && v <= 0) { P.y = 0; stop(); }                     // back on the ground
     return true;
   }
 
   /** After the on-foot collide: start a climb on a tree, a pull-up onto a ledge, remember wall contact for scrambles. */
-  function afterMove(q, mx, mz, camYaw, dt) {
+  function afterMove(q, mx, mz, camYaw, dt, inside) {
+    // up on a roof, a fence, a shed or a treetop (a collider top 0.9 m+, not a deck or porch floor) he goes on all fours
+    cat.userData.quad = !inside && !P.swim && (P.fl || 0) >= 0.9 && !TER.floorHit;
+    if (inside) return;
     P.wallT = (P.wallT || 0) - dt;
     const air = P.y > (P.fl || 0) + 0.01;
     if (!air) P.scr = 0;
