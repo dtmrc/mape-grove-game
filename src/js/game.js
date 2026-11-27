@@ -1033,6 +1033,7 @@ function updatePlayer(dt) {
   climb.afterMove(q, mx, mz, camYaw, dt, INT.inside); // climb (+ four-legged up high)
   // car bodies are solid on foot
   // (an oriented box, 2026-11-27: the two end circles left a gap in the middle of a long car's side he could run through)
+  if (!INT.inside) { TC.footBlock(P, 0.22); BRK.footBlock(P, 0.22); } // signal/stop poles + knocked-but-standing lamps and signs
   if (P.y < 1.1) for (const c of cars) {
     const dx = P.x - c.x, dz = P.z - c.z, hl = c.spec.len / 2 + 0.22, hw = c.spec.wid / 2 + 0.22;
     if (dx * dx + dz * dz > hl * hl + hw * hw) continue;
