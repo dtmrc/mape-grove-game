@@ -45,15 +45,21 @@ import { makeGamepad } from './gamepad.js'; // ui: gamepad
 import * as PDST from './pdstation.js'; // police station interior
 import { bindWater, updateWater } from './water.js'; // lake water shader
 import { makeLightFX } from './lightfx.js'; // lamp light cones + glows
+import { makeSunShadow } from './sunshadow.js'; // cached sun/moon shadow map
+import { worldChunks as W_CHUNKS } from './world.js'; // sun shadows: casters
 
 // ---------------- renderer ----------------
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-const RES = [360, 480, 720];
-let resIdx = matchMedia('(pointer: coarse)').matches ? 0 : 1;
+const RES = [360, 480, 720, 1080];
+// sharp by default: 720p on phones, up to 1080p on a big screen. If the device can't hold the frame rate the game
+// steps the height down by itself (see autoRes in the frame loop) unless the player picked a height by hand.
+let resIdx = window.QA ? 1 : matchMedia('(pointer: coarse)').matches || innerHeight * devicePixelRatio < 1000 ? 2 : 3;   // (the headless test tool stays at 480p: software GL)
+let resManual = false;
 const post = makePost(renderer);
+post.setAA(true);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 190);
 scene.fog = new THREE.Fog(0x3a2a5a, 30, 165);
@@ -426,6 +432,12 @@ YARN.forEach(([x, z], i) => { if (!G.yarn.includes(i)) addPickup('yarn', x, z, {
 // mission markers
 const markerGeo = new THREE.CylinderGeometry(1.1, 1.1, 2.2, 10, 1, true), icoGeo = new THREE.OctahedronGeometry(0.35, 0), icoMats = {};
 const markMats = { mission: basic({ color: 0xffd23f, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }), check: basic({ color: 0xff3b6b, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }), save: basic({ color: 0x5fd0ff, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide }) };
+// markers and beams fade out close to the camera, so standing inside one no longer tints the whole screen
+function nearFade(m, a = 2, b = 6.5) {
+  m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `diffuseColor.a *= smoothstep(${a.toFixed(1)}, ${b.toFixed(1)}, 1.0 / gl_FragCoord.w);\n#include <opaque_fragment>`); };
+  return m;
+}
+for (const m of Object.values(markMats)) nearFade(m);
 function makeMarker(kind, x, z, r = 1.1) {
   const g = new THREE.Group();
   const c = new THREE.Mesh(markerGeo, markMats[kind]); c.position.y = 1.1; c.scale.set(r / 1.1, 1, r / 1.1); g.add(c);
@@ -444,6 +456,7 @@ const saveMark = makeMarker('save', places.rv.x - 3.2, places.rv.z + 4.5, 0.8); 
 let checkMark = makeMarker('check', 0, 0, 2.5); checkMark.visible = false;
 // waypoint beacon: a tall glowing column + pulsing ground ring so the drop-off reads from across town
 const beamMat = new THREE.MeshBasicMaterial({ color: 0xff3b6b, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+nearFade(beamMat);
 const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.9, 60, 12, 1, true), beamMat); beam.position.y = 30; beam.renderOrder = 5; checkMark.add(beam);
 const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3b6b, transparent: true, opacity: 0.7, depthWrite: false, fog: false, side: THREE.DoubleSide });
 const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 2.5, 32), ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; checkMark.add(ring);
@@ -452,6 +465,7 @@ checkMark.userData.ring = ring;
 const MARK_KEY = 'maple-grove-offleash-mark', MARK_COL = 0xc77dff;
 const userMark = new THREE.Group(); userMark.visible = false; scene.add(userMark);
 const umBeamMat = new THREE.MeshBasicMaterial({ color: MARK_COL, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+nearFade(umBeamMat);
 { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.75, 60, 12, 1, true), umBeamMat); b.position.y = 30; b.renderOrder = 5; userMark.add(b); }
 const umRing = new THREE.Mesh(new THREE.RingGeometry(1.8, 2.1, 32), new THREE.MeshBasicMaterial({ color: MARK_COL, transparent: true, opacity: 0.7, depthWrite: false, fog: false, side: THREE.DoubleSide }));
 umRing.rotation.x = -Math.PI / 2; umRing.position.y = 0.12; userMark.add(umRing);
@@ -1267,6 +1281,7 @@ function updateSky(dt) {
 const fx = makeFX({ scene, camera, sky, hemi, sun, moon, M: WM, lights, T, G, renderHeight: () => RES[resIdx] });
 bindWater({ sky, sun, moon, hemi, camera, lights });
 const lightfx = makeLightFX({ scene, camera, lights, T });
+const sunShadow = makeSunShadow({ renderer, scene, sun, moon, chunks: W_CHUNKS });
 
 const events = makeEvents({ scene, camera, G, pos: () => ({ x: px(), z: pz() }), onFoot: () => !P.car });
 
@@ -1487,12 +1502,25 @@ function updateDistrict(dt) {
   if (d !== district) { const first = !district; district = d; if (!first) toast(d, 2.2); hud.district && (hud.district.textContent = d); }
 }
 
+// auto resolution: three slow 2-second windows in a row (under ~40 fps) drop the render height one step, down to 480p
+const AR = { t0: 0, n: 0, slow: 0 };
+function autoRes() {
+  if (window.QA || resManual || resIdx <= 1 || G.paused) { AR.n = 0; AR.t0 = 0; return; }
+  const t = performance.now();
+  if (!AR.t0) { AR.t0 = t; AR.n = 0; return; }
+  AR.n++;
+  if (t - AR.t0 < 2000) return;
+  const ms = (t - AR.t0) / AR.n; AR.t0 = t; AR.n = 0;
+  AR.slow = ms > 25 && ms < 250 ? AR.slow + 1 : 0;   // (a huge gap is a stall or a hidden tab, not a slow GPU)
+  if (AR.slow >= 3) { AR.slow = 0; resIdx--; resize(); toast(`Render height lowered to ${RES[resIdx]}p to keep it smooth`, 3); }
+}
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (document.hidden) return;
-  if (hit('p')) { resIdx = (resIdx + 1) % RES.length; resize(); toast(`Render height ${RES[resIdx]}p`); }
+  if (hit('p')) { resIdx = (resIdx + 1) % RES.length; resManual = true; resize(); toast(`Render height ${RES[resIdx]}p`); }
+  autoRes(now);
   if (hit('m')) { const on = Sfx.toggle(); window.__pdMute = !on; toast(on ? 'Sound on' : 'Sound off'); }
   gamepad.update(dt); quests.input(); ui.update(dt); // ui: gamepad -> keys/touch, then pause menu / map (may set G.paused)
   if (!G.dialog && fishing.menuOpen()) { fishing.menuInput(); dt = 0; }
@@ -1545,6 +1573,7 @@ function frame(now) {
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
   dev.frame(dt); TER.beforeRender(scene, camera, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z); // engine: lift onto terrain
   BRK.update(dt);
+  sunShadow.update(dt, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z);
   quests.swapIn(); post.render(scene, camera, G.time); quests.swapOut(); // quests: HUD + beacon follow the tracked quest
   TER.afterRender(); dev.after();
   updateWaypoint();
@@ -1622,7 +1651,8 @@ SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High in
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
-const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i) => { resIdx = i; resize(); }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
+window.__G.setRes = (i) => { resIdx = Math.max(0, Math.min(RES.length - 1, i)); resize(); return RES[resIdx]; }; // qa: render height for comparison shots
+const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i, manual) => { resIdx = i; if (manual) resManual = true; resize(); }, gfx: { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b) }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
 quests.init({ G, P, hit, pressed, hud, checkMark, giverMarks, fishing, jail, ui, Sfx, toast, isTouch, px, pz, mission: () => mission, dev: () => dev }); window.__G.quests = quests; // quests

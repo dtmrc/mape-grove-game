@@ -16,8 +16,10 @@ const DISTRICT_LABELS = [['Hollow Woods', -130, 40], ["Nana's Place", -98, 28], 
 const LEGEND = [['#fff', 'You'], ['#5fd0ff', 'RV (save)'], ['#ffd23f', 'Job'], ['#ff3b6b', 'Waypoint'], ['#c77dff', 'Your marker'], ['#7fe07f', 'Quik Stop gas'], ['#3a78c8', 'Suds N Paws'], ['#3ab0a0', "Earl's Bait & Tackle"], ['#1e2a44', 'Maple Grove PD']];
 
 export function makeUI(o) {
-  const { G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes, setRes, setInvert, toast, px, pz, yaw, mission, dev, setMark } = o;
-  const S = { sound: true, res: getRes(), weather: !!fx.weatherOn, invert: false, dev: false, ...loadSettings() };
+  const { G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes, setRes, gfx = {}, setInvert, toast, px, pz, yaw, mission, dev, setMark } = o;
+  const S = { sound: true, res: getRes(), weather: !!fx.weatherOn, invert: false, dev: false, aa: true, shadows: true, crt: false, ...loadSettings() };
+  // graphics defaults changed on 2026-11-27 (sharper picture): take the new default height once, then keep the player's choice
+  if (S.gfxv !== 2) { S.gfxv = 2; S.res = getRes(); S.resManual = false; }
   if (!RES[S.res]) S.res = getRes();
   const save = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) { /* storage blocked */ } };
   const titled = () => document.body.classList.contains('titled');
@@ -26,7 +28,8 @@ export function makeUI(o) {
   // ---------- apply persisted settings ----------
   if (Sfx.isOn() !== !!S.sound) Sfx.toggle();
   fx.mute(!S.sound); window.__pdMute = !S.sound;
-  if (S.res !== getRes()) setRes(S.res);
+  if (S.res !== getRes() || S.resManual) setRes(S.res, !!S.resManual);
+  gfx.aa?.(!!S.aa); gfx.crt?.(!!S.crt); if (!S.shadows) gfx.shadows?.(false);
   fx.setWeather(!!S.weather);
   setInvert(!!S.invert);
   function markDev() {
@@ -63,6 +66,9 @@ export function makeUI(o) {
   const SETTINGS = [
     { k: 'sound', label: 'Sound', vals: [true, false], text: (v) => (v ? 'ON' : 'OFF') },
     { k: 'res', label: 'Render height', vals: RES.map((_, i) => i), text: (v) => `${RES[v]}p` },
+    { k: 'aa', label: 'Smooth edges', vals: [true, false], text: (v) => (v ? 'ON' : 'OFF') },
+    { k: 'shadows', label: 'Shadows', vals: [true, false], text: (v) => (v ? 'ON' : 'OFF') },
+    { k: 'crt', label: 'CRT filter', vals: [false, true], text: (v) => (v ? 'ON' : 'OFF') },
     { k: 'weather', label: 'Weather', vals: [false, true], text: (v) => (v ? 'ON' : 'OFF') },
     { k: 'invert', label: 'Invert look', vals: [false, true], text: (v) => (v ? 'ON' : 'OFF') },
     { k: 'dev', label: 'Dev tools', vals: [false, true], text: (v) => (v ? 'SHOWN' : 'HIDDEN') },
@@ -85,7 +91,8 @@ export function makeUI(o) {
     const s = SETTINGS.find((x) => x.k === k), i = s.vals.indexOf(S[k]), v = s.vals[(i + dir + s.vals.length) % s.vals.length];
     S[k] = v; save(); Sfx.blip(660);
     if (k === 'sound') { if (Sfx.isOn() !== v) Sfx.toggle(); fx.mute(!v); window.__pdMute = !v; }
-    if (k === 'res') setRes(v);
+    if (k === 'res') { S.resManual = true; save(); setRes(v, true); }
+    if (k === 'aa' || k === 'crt' || k === 'shadows') gfx[k]?.(v);
     if (k === 'weather') fx.setWeather(v);
     if (k === 'invert') setInvert(v);
     if (k === 'dev') { markDev(); toast(v ? 'Dev tools shown: F2 panel, F3 editor, ` time menu' : 'Dev tools hidden (shortcuts still work)', 3); }

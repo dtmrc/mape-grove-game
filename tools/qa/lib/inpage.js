@@ -122,6 +122,8 @@
       try {
         for (let i = 0; i < n; i++) {
           noRender = was || mode === false || (mode === 'last' && i < n - 1);
+          // the cached sun shadow map must not refresh on a frame whose draw calls are skipped (it would come out empty)
+          if (window.__SHADOW) window.__SHADOW.hold(noRender || QA.shadowHold);
           vt += dt * 1000; runFrame(vt);
           if (!noRender) gpuSync();
         }
@@ -148,6 +150,8 @@
       return -1;
     },
     set noRender(v) { noRender = !!v; }, get noRender() { return noRender; },
+    /** true = freeze the sun shadow map (perf: measure a steady frame, the refresh is measured on its own). */
+    shadowHold: false,
 
     /** Title screen -> playing, every intro dialog line skipped, input lock expired. */
     async start() {

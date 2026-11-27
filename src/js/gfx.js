@@ -392,6 +392,8 @@ export function makeSky() {
 }
 
 // ---------- post pipeline ----------
+// Scene -> HDR target (4x MSAA when `aa` is on) -> bloom -> composite: sharpen, tone curve, grade, vignette.
+// The old composite-cable look (colour fringes, scanlines, heavy grain and vignette) is the optional CRT filter.
 export function makePost(renderer) {
   const opts = { type: THREE.HalfFloatType, depthBuffer: true };
   const rt = new THREE.WebGLRenderTarget(4, 4, opts);
@@ -402,12 +404,14 @@ export function makePost(renderer) {
   const sc = new THREE.Scene(); sc.add(quad);
   const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
   const bright = new THREE.ShaderMaterial({
-    uniforms: { t: { value: null }, px: { value: new THREE.Vector2() } }, vertexShader: vs,
-    fragmentShader: `uniform sampler2D t; uniform vec2 px; varying vec2 vUv;
+    uniforms: { t: { value: null }, px: { value: new THREE.Vector2() }, night: { value: 1 } }, vertexShader: vs,
+    fragmentShader: `uniform sampler2D t; uniform vec2 px; uniform float night; varying vec2 vUv;
       void main(){ vec3 c = vec3(0.0);
         for (int i=-1;i<=1;i++) for (int j=-1;j<=1;j++) c += texture2D(t, vUv + vec2(i,j)*px*1.5).rgb;
         c /= 9.0; float l = dot(c, vec3(0.299,0.587,0.114));
-        gl_FragColor = vec4(c * smoothstep(0.62, 1.4, l), 1.0); }`,
+        // by day only what is really hot glows (sun glints, lit signs); at night lamps and windows bloom freely
+        float lo = mix(1.25, 0.62, night);
+        gl_FragColor = vec4(c * smoothstep(lo, lo + 0.78, l), 1.0); }`,
   });
   const blur = new THREE.ShaderMaterial({
     uniforms: { t: { value: null }, dir: { value: new THREE.Vector2() } }, vertexShader: vs,
@@ -419,26 +423,36 @@ export function makePost(renderer) {
         gl_FragColor = vec4(c, 1.0); }`,
   });
   const comp = new THREE.ShaderMaterial({
-    uniforms: { t: { value: null }, b: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2() }, night: { value: 1 }, hurt: { value: 0 } }, vertexShader: vs,
-    fragmentShader: `uniform sampler2D t, b; uniform float time, night, hurt; uniform vec2 res; varying vec2 vUv;
+    uniforms: { t: { value: null }, b: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2() }, night: { value: 1 }, hurt: { value: 0 }, crt: { value: 0 }, sharp: { value: 0.35 } }, vertexShader: vs,
+    fragmentShader: `uniform sampler2D t, b; uniform float time, night, hurt, crt, sharp; uniform vec2 res; varying vec2 vUv;
       float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + time*7.0) * 43758.5453); }
       void main(){
-        vec2 uv = vUv;
-        // faint chromatic offset at the edges, like a cheap composite cable
-        vec2 o = (uv - 0.5) * 0.0025;
-        vec3 c = vec3(texture2D(t, uv + o).r, texture2D(t, uv).g, texture2D(t, uv - o).b);
-        c += texture2D(b, uv).rgb * (0.9 + night * 0.6);
-        // tone + grade: soft shoulder, cool shadows, warm highlights
+        vec2 uv = vUv, px = 1.0 / res;
+        vec3 c = texture2D(t, uv).rgb;
+        if (crt > 0.5) {   // faint chromatic offset at the edges, like a cheap composite cable
+          vec2 o = (uv - 0.5) * 0.0025;
+          c = vec3(texture2D(t, uv + o).r, c.g, texture2D(t, uv - o).b);
+        } else {           // crisp: unsharp mask against the four neighbours (clamped so edges don't ring)
+          vec3 n = (texture2D(t, uv + vec2(px.x, 0.0)).rgb + texture2D(t, uv - vec2(px.x, 0.0)).rgb
+                  + texture2D(t, uv + vec2(0.0, px.y)).rgb + texture2D(t, uv - vec2(0.0, px.y)).rgb) * 0.25;
+          c = clamp(c + (c - n) * sharp, c * 0.6, c * 1.5 + 0.02);
+        }
+        c += texture2D(b, uv).rgb * (0.55 + night * 0.95);
+        // tone: soft shoulder, then gamma
         c = c / (1.0 + c * 0.35);
-        float l = dot(c, vec3(0.299,0.587,0.114));
-        c = mix(vec3(l), c, 1.08);
-        c += vec3(0.0, 0.006, 0.03) * (1.0 - l) * (0.5 + night);
         c = pow(max(c, 0.0), vec3(1.0/2.2));
-        // vignette, interlace, grain
+        // grade: a little more contrast and colour by day, cool shadows, warm highlights
+        float l = dot(c, vec3(0.299,0.587,0.114));
+        float day = 1.0 - night;
+        c = mix(c, c * c * (3.0 - 2.0 * c), 0.22 + 0.16 * day);
+        c = mix(vec3(dot(c, vec3(0.299,0.587,0.114))), c, 1.1 + 0.1 * day);
+        c += vec3(-0.004, 0.0, 0.016) * (1.0 - l) * (0.5 + night);
+        c += vec3(0.012, 0.006, -0.008) * l * day;
+        // vignette (+ scanlines and grain with the CRT filter)
         float v = smoothstep(1.05, 0.35, length((uv - 0.5) * vec2(1.1, 1.0)));
-        c *= mix(0.62, 1.0, v);
-        c *= 0.97 + 0.03 * mod(floor(uv.y * res.y), 2.0);
-        c += (h(uv * res) - 0.5) * 0.035;
+        c *= mix(mix(0.84, 0.62, crt), 1.0, v);
+        c *= 1.0 - crt * 0.03 * (1.0 - mod(floor(uv.y * res.y), 2.0));
+        c += (h(uv * res) - 0.5) * mix(0.008, 0.035, crt);   // the faint grain also hides banding in the sky
         c = mix(c, vec3(0.6,0.0,0.0), hurt * 0.35 * (1.0 - v));
         gl_FragColor = vec4(c, 1.0);
       }`,
@@ -447,6 +461,9 @@ export function makePost(renderer) {
   return {
     rt,
     comp,
+    /** 4x multisampling on the scene target (edges stop crawling; cheap on phone GPUs). */
+    setAA(on) { const n = on ? 4 : 0; if (rt.samples !== n) { rt.samples = n; rt.dispose(); } },
+    setCRT(on) { comp.uniforms.crt.value = on ? 1 : 0; },
     setSize(w, h) {
       W = w; H = h; rt.setSize(w, h);
       bA.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2)); bB.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2));
@@ -454,7 +471,7 @@ export function makePost(renderer) {
     },
     render(scene, camera, t) {
       renderer.setRenderTarget(rt); renderer.render(scene, camera);
-      quad.material = bright; bright.uniforms.t.value = rt.texture; bright.uniforms.px.value.set(1 / W, 1 / H);
+      quad.material = bright; bright.uniforms.t.value = rt.texture; bright.uniforms.px.value.set(1 / W, 1 / H); bright.uniforms.night.value = comp.uniforms.night.value;
       renderer.setRenderTarget(bA); renderer.render(sc, cam);
       quad.material = blur;
       for (let i = 0; i < 2; i++) {
