@@ -8,16 +8,19 @@ import { makeOfficer, makePawGun, makeCuffs } from './officer.js';
 import { animBiped } from './models.js';
 import { NODES } from './world.js';
 import { setText, setHTML, setStyle } from './dom.js';
+import { Sfx } from './sfx.js';
 
 // ---------------- sound (own tiny WebAudio graph: gunshots, cuffs, radio) ----------------
 let ac = null, out = null;
 function au() {
-  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); out = ac.createGain(); out.gain.value = 0.45; out.connect(ac.destination); } catch (e) { ac = null; } }
-  if (ac && ac.state === 'suspended') ac.resume();
+  Sfx.unlock();   // one shared AudioContext for the whole game (sfx.js); resumes it too
+  if (!ac) { const sh = Sfx.audio(); if (sh) { ac = sh.ctx; out = ac.createGain(); out.gain.value = 0.45; out.connect(ac.destination); } }
   return ac;
 }
 addEventListener('pointerdown', au); addEventListener('keydown', au);
-function noiseBuf(dur) { const n = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5); return b; }
+const NB = new Map();   // a few pre-made decaying noise bursts per length instead of a fresh buffer per shot
+function noiseBuf(dur) { let v = NB.get(dur); if (!v) NB.set(dur, v = []); if (v.length < 4) v.push(makeNoiseBuf(dur)); return v[(Math.random() * v.length) | 0]; }
+function makeNoiseBuf(dur) { const n = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5); return b; }
 function snd(fn) { if (!ac || ac.state !== 'running' || window.__pdMute) return; try { fn(ac.currentTime); } catch (e) { /* ignore */ } }
 const SND = {
   bang(vol = 1, lp = 5000) {

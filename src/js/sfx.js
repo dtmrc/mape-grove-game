@@ -1,32 +1,50 @@
 // Tiny synthesized sound effects (WebAudio). Everything is generated, no audio files.
+// One AudioContext for the whole game (fx.js ambience, police.js and radio.js play through it too: iOS glitches
+// with several). One-shot voices always stop themselves, are capped at MAX_VOICES, and reuse one noise buffer.
 let ctx = null, master = null, on = true;
 let eng = null, sir = null; let sk = null; // driving
+let white = null; const WHITE_S = 2;   // shared white noise; sounds play a random slice of it
+let voices = 0; const MAX_VOICES = 24;  // live one-shot voices (tone/noise/meow); new ones are dropped above this
+function busy() { return voices >= MAX_VOICES; }
+function track(src) { voices++; src.onended = () => { voices--; }; }
+/** Glide an AudioParam toward v without stacking an automation event on it every frame: skips an unchanged target
+ *  and sends at most ~30 changes a second (per-frame setTargetAtTime piles up timeline events, worst on iOS). */
+export function glide(p, v, t, tc) {
+  const l = p.__gv;
+  if (l !== undefined && (Math.abs(v - l) <= Math.max(1e-4, Math.abs(l) * 0.005) || t - p.__gt < 0.033)) return;
+  p.__gv = v; p.__gt = t; p.setTargetAtTime(v, t, tc);
+}
+function noiseSlice(s, t, dur) { s.buffer = white; s.start(t, Math.random() * Math.max(0, WHITE_S - dur - 0.05), dur + 0.05); }
 
 function tone(freq, dur, type = 'square', vol = 0.12, slide = 0, delay = 0) {
-  if (!ctx || !on) return;
+  if (!ctx || !on || busy()) return;
   const t = ctx.currentTime + delay;
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+  o.connect(g); g.connect(master); track(o); o.start(t); o.stop(t + dur + 0.02);
 }
 function noise(dur, vol = 0.2, lp = 1200) {
-  if (!ctx || !on) return;
-  const n = Math.floor(ctx.sampleRate * dur), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-  const s = ctx.createBufferSource(); s.buffer = b;
+  if (!ctx || !on || busy()) return;
+  const t = ctx.currentTime;
+  const s = ctx.createBufferSource();
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp;
-  const g = ctx.createGain(); g.gain.value = vol;
-  s.connect(f); f.connect(g); g.connect(master); s.start();
+  const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.linearRampToValueAtTime(0, t + dur);   // same linear fade the old per-sound buffer had baked in
+  s.connect(f); f.connect(g); g.connect(master); track(s); noiseSlice(s, t, dur);
 }
+function wake() { if (ctx && ctx.state !== 'running') { try { ctx.resume(); } catch (e) { /* not allowed yet */ } } }
+// iOS suspends or 'interrupts' the context when the app goes to the background, a call comes in, etc.
+addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
 
 export const Sfx = {
   unlock() {
-    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    if (ctx) { wake(); return; }
     try {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain(); master.gain.value = 0.6; master.connect(ctx.destination);
+      white = ctx.createBuffer(1, Math.floor(ctx.sampleRate * WHITE_S), ctx.sampleRate);
+      { const d = white.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
       // engine: two detuned saws through a lowpass
       eng = { o1: ctx.createOscillator(), o2: ctx.createOscillator(), f: ctx.createBiquadFilter(), g: ctx.createGain() };
       eng.o1.type = 'sawtooth'; eng.o2.type = 'square'; eng.f.type = 'lowpass'; eng.f.frequency.value = 500; eng.g.gain.value = 0;
@@ -38,7 +56,6 @@ export const Sfx = {
   },
   toggle() { on = !on; if (master) master.gain.value = on ? 0.6 : 0; return on; },
   isOn() { return on; },
-  audio() { return ctx ? { ctx, master } : null; },   // radio.js plays through the same context and mute
   // driving: looping tyre screech, level 0..1 (carphys.js)
   skid(level) {
     if (!ctx) return;
@@ -54,18 +71,34 @@ export const Sfx = {
     sk.g.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.11, t, 0.05);
     sk.f.frequency.setTargetAtTime(1400 + level * 700 + Math.sin(t * 23) * 120, t, 0.05);
   },
+  audio() { return ctx ? { ctx, master } : null; },   // radio.js plays through the same context and mute; fx.js and police.js share the context
+  voices() { return voices; },
+  // driving: looping tyre screech, level 0..1 (carphys.js)
+  skid(level) {
+    if (!ctx) return;
+    if (!sk) {
+      if (level < 0.05) return;
+      sk = { s: ctx.createBufferSource(), f: ctx.createBiquadFilter(), g: ctx.createGain() };
+      sk.s.buffer = white; sk.s.loop = true; sk.f.type = 'bandpass'; sk.f.frequency.value = 1700; sk.f.Q.value = 4; sk.g.gain.value = 0;
+      sk.s.connect(sk.f); sk.f.connect(sk.g); sk.g.connect(master); sk.s.start();
+    }
+    const t = ctx.currentTime;
+    glide(sk.g.gain, Math.max(0, Math.min(1, level)) * 0.11, t, 0.05);
+    if (level > 0.01) glide(sk.f.frequency, 1400 + level * 700 + Math.sin(t * 23) * 120, t, 0.05);
+  },
   engine(level, siren) {
     if (!ctx) return;
     const t = ctx.currentTime;
-    if (level < 0) eng.g.gain.setTargetAtTime(0, t, 0.1);
+    if (level < 0) glide(eng.g.gain, 0, t, 0.1);
     else {
       const f = 38 + level * 120 + Math.sin(t * 30) * 2;
-      eng.o1.frequency.setTargetAtTime(f, t, 0.05); eng.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
-      eng.f.frequency.setTargetAtTime(300 + level * 900, t, 0.05);
-      eng.g.gain.setTargetAtTime(0.05 + level * 0.05, t, 0.1);
+      glide(eng.o1.frequency, f, t, 0.05); glide(eng.o2.frequency, f * 0.5, t, 0.05);
+      glide(eng.f.frequency, 300 + level * 900, t, 0.05);
+      glide(eng.g.gain, 0.05 + level * 0.05, t, 0.1);
     }
-    sir.o.frequency.setValueAtTime(Math.floor(t * 2.5) % 2 ? 720 : 560, t);
-    sir.g.gain.setTargetAtTime(siren * 0.035, t, 0.2);
+    const sf = Math.floor(t * 2.5) % 2 ? 720 : 560;
+    if (sir.f !== sf) { sir.f = sf; sir.o.frequency.setValueAtTime(sf, t); }
+    glide(sir.g.gain, siren * 0.035, t, 0.2);
   },
   blip(f = 660) { tone(f, 0.08, 'square', 0.08); },
   pickup() { tone(880, 0.06, 'square', 0.08); tone(1320, 0.1, 'square', 0.08, 0, 0.06); },
@@ -81,7 +114,7 @@ export const Sfx = {
    *  'mrrp' (hops up onto something), 'hiss' (falls into water), 'grumble' (still swimming), 'pff' (climbs out),
    *  'meow' / 'mrow' / 'chirp' (random idle chatter). */
   meow(kind = 'mew', pitch = 1, delay = 0) {
-    if (!ctx || !on) return;
+    if (!ctx || !on || busy()) return;
     const K = {   // f0 start / peak / end (Hz), duration, formant open (Hz), loudness, breathiness
       hup:     [520, 640, 470, 0.13, 1500, 0.10, 0.25],
       mew:     [620, 860, 560, 0.22, 1900, 0.11, 0.15],
@@ -113,10 +146,9 @@ export const Sfx = {
     vib.connect(vg); vg.connect(o.frequency);
     const og = ctx.createGain(); og.gain.value = 1; o.connect(og); og.connect(f1); og.connect(f2);
     // breath
-    const n = Math.floor(ctx.sampleRate * d), buf = ctx.createBuffer(1, n, ctx.sampleRate), dd = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) dd[i] = Math.random() * 2 - 1;
-    const ns = ctx.createBufferSource(); ns.buffer = buf; const ng = ctx.createGain(); ng.gain.value = br * 0.6; ns.connect(ng); ng.connect(f2);
-    o.start(t); vib.start(t); ns.start(t);   // (delay lets a preview line several up) o.stop(t + d + 0.05); vib.stop(t + d + 0.05); ns.stop(t + d + 0.05);
+    const ns = ctx.createBufferSource(); const ng = ctx.createGain(); ng.gain.value = br * 0.6; ns.connect(ng); ng.connect(f2);
+    const end = t + d + 0.05;   // every node stops itself; a stopped graph is released (these used to run forever)
+    track(o); o.start(t); vib.start(t); noiseSlice(ns, t, d); o.stop(end); vib.stop(end);
   },
   splash() { noise(0.35, 0.25, 1800); },
   siren() { tone(560, 0.25, 'triangle', 0.08, 200); tone(760, 0.25, 'triangle', 0.08, -200, 0.25); },

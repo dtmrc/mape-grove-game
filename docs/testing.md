@@ -37,6 +37,7 @@ Add `--fresh` to any command to ignore the warm page.
 | `eval '<js>'` | Runs JS in the page with `QA` and `G` (= `window.__G`) in scope; `await` works; statements need `return`. `--file x.js` reads it from a file. |
 | `perf [where...]` | Real frame time (GPU included), draw calls, triangles, visible objects, geometries, materials, lights, heap per spot, worst of 4 camera yaws. `--save base.json` then `--compare base.json` after a change. |
 | `soak [--secs 120]` | Fast free-roam simulation (walk, teleports, car hops) with sanity checks; reports errors, hitches, NaNs, scene growth. |
+| `node tools/qa/audioprobe.cjs` | Audio leak probe (separate script, audio forced on): AudioContexts, live voices, nodes made, while jumping, idling, driving with the radio and forcing 200 meows. Live voices should return to ~3 (engine + siren). |
 | `test [suite...]` | Smoke suites in `tools/qa/suites` (`--list` shows them). Screenshots go to `qa-out/tests/`. |
 | `run <file.cjs>` | Your own scenario (see below). |
 | `serve` / `stop` / `status` / `reload` / `errors` | Warm page control. `errors` prints and clears what was captured. |
