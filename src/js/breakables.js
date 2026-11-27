@@ -5,6 +5,8 @@
 // 2026-11-27: fence sections and gates break too (their panels, rails and posts fly as instanced debris: at most 6 draw
 // calls however much fence is down); a lamp's light, cone, halo and ground glow go out the moment it is hit; a hydrant
 // gushes for a minute, then the water is shut off.
+// Later the same day: signs, flagpoles and stop signs break too, and the impact speed decides how: a slow hit bends a pole
+// over and leaves it rooted, a fast one snaps it and throws it; spray, debris throw, car damage and lost speed scale with it.
 import * as THREE from 'three';
 import * as TER from './terrain.js';
 import { breakablesNear, colliders as WCOLS } from './world.js';
@@ -19,9 +21,10 @@ const matRed = new THREE.MeshLambertMaterial({ color: 0xd8302a });
 const matWater = new THREE.PointsMaterial({ color: 0xbfe6ff, size: 0.2, transparent: true, opacity: 0.8, depthWrite: false });
 // P18: shared geometries (one set for every lamp / hydrant that ever breaks)
 const gPole = new THREE.CylinderGeometry(0.07, 0.11, 6, 8), gArm = new THREE.BoxGeometry(0.09, 0.09, 2), gHead = new THREE.BoxGeometry(0.42, 0.14, 0.7), gStump = new THREE.CylinderGeometry(0.32, 0.38, 0.5, 8);
+const gBox = new THREE.BoxGeometry(1, 1, 1);
 const gHyd = new THREE.CylinderGeometry(0.16, 0.2, 0.65, 8), gCap = new THREE.SphereGeometry(0.17, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), gStub = new THREE.CylinderGeometry(0.12, 0.14, 0.15, 8);
 
-/** Call once after the scene exists. o = { scene, Sfx, toast, camera, T (textures), lights, pools (lamp glow mesh), lightfx } */
+/** Call once after the scene exists. o = { scene, Sfx, toast, camera, T (textures), lights, pools (lamp glow mesh), lightfx, TC (traffic.js stop signs), damageCar, shake } */
 export function init(o) { ctx = o; window.__BRK = { live, carHit, near: breakablesNear, debris: () => DEB && Object.fromEntries(Object.entries(DEB).map(([k, d]) => [k, d.items.length])) }; }
 
 // ---------- lamp glow: everything a street lamp lights goes out with it, now ----------
@@ -107,7 +110,7 @@ function fencePieces(orig, G, dx, dz, sp, hx, hz) {
   }
   // kick: what the car hit flies, the rest of the section is dragged down with it
   for (const p of out) {
-    const d = Math.hypot(p.x - hx, p.z - hz), k = Math.max(0, 1 - d / 3), r = 0.8 + Math.random() * 0.4;
+    const d = Math.hypot(p.x - hx, p.z - hz), k = Math.max(0, 1 - d / (1 + sp * 0.15)), r = 0.8 + Math.random() * 0.4;
     p.vx = dx * sp * (0.12 + 0.55 * k) * r; p.vz = dz * sp * (0.12 + 0.55 * k) * r; p.vy = (0.6 + 3.2 * k) * r * Math.min(1, sp / 10);
     p.w = side * (1.2 + 6 * k) * r; p.wy = (Math.random() - 0.5) * 5 * k; p.side = side;
   }
@@ -152,20 +155,79 @@ function geyser() {
 }
 
 /** Called for each car body circle before it collides with the world. */
+// Speed decides everything (diet 2026-11-27): below SNAP a pole only bends over and stays rooted, above it snaps and is
+// thrown further the faster the car; hydrant spray, fence debris throw, the car's damage and how much speed the car loses
+// all scale with the impact speed. dv: speed the prop takes out of the car, dmg: car damage per m/s over 3.
+const HIT = {
+  lamp: { snap: 10, dv: 7, dmg: 1.4 }, sign: { snap: 7, dv: 2.5, dmg: 0.5 }, stop: { snap: 6, dv: 2, dmg: 0.4 },
+  hydrant: { snap: 0, dv: 5, dmg: 1.0 }, fence: { snap: 0, dv: 1.5, dmg: 0.25 }, gate: { snap: 0, dv: 3, dmg: 0.5 },
+};
+function hitCar(car, kind, sp, snapped) {
+  const H = HIT[kind] || HIT.sign, dv = snapped ? H.dv * 0.6 : H.dv, k = Math.max(0.05, sp - dv) / sp;
+  car.vx *= k; car.vz *= k;
+  if (ctx.damageCar) ctx.damageCar(car, H.dmg * (sp - 3));
+  if (car.driver === 'player' && ctx.shake) ctx.shake(Math.min(0.5, H.dv * sp / 180));
+}
+
+/** Called for each car body circle before it collides with the world. */
 export function carHit(car, cx, cz, r) {
   if (!ctx) return;
   const sp = Math.hypot(car.vx, car.vz); if (sp < 3) return;
+  const dx = car.vx / sp, dz = car.vz / sp;
   for (const c of breakablesNear(cx, cz, r)) {
     let m = c._m; if (!m) { const i = WCOLS.indexOf(c); m = i >= 0 ? TER.colModel[i] : null; }   // before the first toggle the engine list is world.js's raw one
     const orig = m ? m.orig : c, gi = m ? m.grp : TER.groupAt(c.cx, c.cz, false), G = gi && TER.groups[gi];
     if (!G || G.broken || G.hide || (orig.brk === 'lamp' || orig.brk === 'hydrant') && sp < 3.5) continue;
     if (G.cols.some((ci) => TER.colModel[ci].orig.bld)) continue;   // never knock a building over with its fence
-    smash(G, gi, orig, c, car.vx / sp, car.vz / sp, sp, cx, cz);
-    const k = orig.brk === 'fence' ? 0.93 : orig.brk === 'gate' ? 0.88 : 0.82; car.vx *= k; car.vz *= k;
+    const snapped = sp >= (HIT[orig.brk] || HIT.sign).snap;
+    smash(G, gi, orig, c, dx, dz, sp, cx, cz, snapped);
+    hitCar(car, orig.brk, sp, snapped);
+  }
+  // stop signs (traffic.js instances, no world collider)
+  const TC = ctx.TC; if (!TC) return;
+  for (const st of TC.stops()) {
+    if (st.down || Math.abs(st.x - cx) > r + 0.2 || Math.abs(st.z - cz) > r + 0.2 || Math.hypot(st.x - cx, st.z - cz) > r + 0.1) continue;
+    if (!TC.hideStop(st, true)) continue;
+    const snapped = sp >= HIT.stop.snap, e = { kind: 'stop', st, t: 0, x: st.x, z: st.z };
+    const P = TC.stopParts, body = new THREE.Group();
+    const pole = new THREE.Mesh(P.poleGeo, P.poleMat); pole.scale.y = 2.1; body.add(pole);
+    const face = new THREE.Mesh(P.signGeo, P.signMat); face.position.y = 2.05; face.rotation.y = st.face; body.add(face);
+    poleFall(e, body, st.x, st.z, dx, dz, sp, snapped);
+    ctx.Sfx && ctx.Sfx.crash && ctx.Sfx.crash(Math.min(8, sp * 0.5));
+    ctx.scene.add(e.mesh); live.push(e);
+    hitCar(car, 'stop', sp, snapped);
   }
 }
 
-function smash(G, gi, orig, c, dx, dz, sp, hx, hz) {
+/** A pole (lamp, sign, stop sign) pivots at its base: bent over and left standing when slow, snapped off and thrown when fast. */
+function poleFall(e, body, x, z, dx, dz, sp, snapped) {
+  const pivot = new THREE.Group(); pivot.position.set(x, 0, z);
+  const tilt = new THREE.Group(); tilt.rotation.order = 'YXZ'; pivot.add(tilt);
+  tilt.rotation.y = Math.atan2(dx, dz);            // tilt axis faces the travel direction
+  body.rotation.y -= tilt.rotation.y; tilt.add(body);
+  const H = HIT[e.kind] || HIT.sign;
+  e.mesh = pivot; e.tilt = tilt; e.ang = 0; e.snapped = snapped; e.sp = sp;
+  if (snapped) { e.av = 0.6 + sp * 0.08; e.vx = dx * sp * 0.4; e.vz = dz * sp * 0.4; e.vy = Math.max(0, sp - H.snap) * 0.22; e.py = 0; }
+  else { e.target = Math.min(1.2, 0.18 + (sp - 3) / Math.max(1, H.snap - 3) * 0.85); e.av = sp * 0.35; }   // bent ~10 to ~60 degrees
+}
+const lamC = new Map(), lam = (c) => lamC.get(c) || lamC.set(c, new THREE.MeshLambertMaterial({ color: c })).get(c);
+function signMesh(orig, gi, x, z) {
+  const S = orig.sg || {}, h = orig.h || 2.4, body = new THREE.Group();
+  const pole = new THREE.Mesh(gBox, lam(S.pc ?? 0x9a9a9a)); pole.scale.set(S.pw || 0.1, h, S.pw || 0.1); pole.position.y = h / 2; body.add(pole);
+  const ry = orig.ry || 0, cs = Math.cos(ry), sn = Math.sin(ry);
+  if (S.panel) {
+    const [ox, y, oz, w, ph, d, col] = S.panel, q = new THREE.Mesh(gBox, lam(col));
+    q.scale.set(w, ph, d); q.position.set(ox * cs + oz * sn, y, -ox * sn + oz * cs); q.rotation.y = ry; body.add(q);
+  }
+  // the text signs (separate meshes linked to this group) come along
+  for (const o of ctx.scene.children) {
+    const tg = o.userData && o.userData.tg; if (!tg || tg.g !== gi || !o.isMesh) continue;
+    const k = o.clone(); k.userData = {}; k.position.set(o.position.x - x, o.position.y, o.position.z - z); body.add(k);
+  }
+  return body;
+}
+
+function smash(G, gi, orig, c, dx, dz, sp, hx, hz, snapped) {
   TER.setBroken(gi, true); // P18: only this group's texture entry, light and collider change
   if (orig.brk === 'fence' || orig.brk === 'gate') {
     const [x0, z0, x1, z1] = orig.seg || [hx, hz, hx, hz];
@@ -175,28 +237,42 @@ function smash(G, gi, orig, c, dx, dz, sp, hx, hz) {
   }
   const e = { G, gi, kind: orig.brk, t: 0, x: c.cx, z: c.cz };
   if (orig.brk === 'lamp') {
-    lampLightsChanged();   // light, cone and glow pool out this frame (setBroken already zeroed the light)
-    // pivot at the base, tip over away from the car, the arm keeps its original heading
-    const pivot = new THREE.Group(); pivot.position.set(c.cx, 0, c.cz);
-    const tilt = new THREE.Group(); tilt.rotation.order = 'YXZ'; pivot.add(tilt);
-    const body = lampMesh(); body.rotation.y = orig.ry || 0; tilt.add(body);
-    tilt.rotation.y = Math.atan2(dx, dz);            // tilt axis faces the travel direction
-    body.rotation.y -= tilt.rotation.y;
-    e.mesh = pivot; e.tilt = tilt; e.ang = 0; e.av = 0.4 + sp * 0.05;
+    lampLightsChanged();   // light, cone and glow pool out this frame (setBroken already zeroed the light), bent or snapped
+    const body = lampMesh(); body.rotation.y = orig.ry || 0;   // the arm keeps its original heading
+    poleFall(e, body, c.cx, c.cz, dx, dz, sp, snapped);
     const stump = new THREE.Mesh(gStump, matBase); stump.position.set(c.cx, 0.25, c.cz);
     e.stump = stump; ctx.scene.add(stump);
     ctx.Sfx && ctx.Sfx.crash && ctx.Sfx.crash(Math.min(14, sp));
+  } else if (orig.brk === 'sign') {
+    poleFall(e, signMesh(orig, gi, c.cx, c.cz), c.cx, c.cz, dx, dz, sp, snapped);
+    ctx.Sfx && ctx.Sfx.crash && ctx.Sfx.crash(Math.min(8, sp * 0.5));
   } else {
     const h = hydrantMesh(); h.position.set(c.cx, 0.33, c.cz);
-    e.mesh = h; e.vx = dx * sp * 0.6; e.vz = dz * sp * 0.6; e.vy = 4 + sp * 0.25; e.spin = 8 + sp;
+    e.mesh = h; e.vx = dx * sp * 0.6; e.vz = dz * sp * 0.6; e.vy = 2 + sp * 0.3; e.spin = 6 + sp;
     const stub = new THREE.Mesh(gStub, matRed); stub.position.set(c.cx, 0.08, c.cz);
     e.stump = stub; ctx.scene.add(stub);
     e.water = geyser(); e.water.pts.position.set(c.cx, 0, c.cz); ctx.scene.add(e.water.pts);
+    e.power = Math.min(1, Math.max(0.4, (sp - 2) / 14));   // a nudge cracks it, a hard hit sends the plume high
     e.puddle = new THREE.Mesh(gPuddle, matPuddle.clone()); e.puddle.position.set(c.cx, 0.03, c.cz); e.puddle.scale.setScalar(0.5); ctx.scene.add(e.puddle);
     ctx.Sfx && ctx.Sfx.punch && ctx.Sfx.punch();
     if (!ctx.saidWash && ctx.toast) { ctx.saidWash = true; ctx.toast('Free car wash. The water bill goes to the HOA.'); }
   }
   ctx.scene.add(e.mesh); live.push(e);
+}
+
+function stepPole(e, dt) {
+  const FLAT = Math.PI / 2 - 0.02;
+  if (e.snapped) {
+    if (e.ang < FLAT) { e.av += 3.2 * Math.sin(e.ang + 0.05) * dt; e.ang = Math.min(FLAT, e.ang + e.av * dt); if (e.ang >= FLAT && !e.landed) { e.landed = true; ctx.Sfx && ctx.Sfx.crash && ctx.Sfx.crash(6); } }
+    // thrown: the base slides (and hops on a hard hit) along the ground
+    if (e.vx || e.vz || e.vy || e.py > 0) {
+      const p = e.mesh.position; e.vy -= 14 * dt; e.py = Math.max(0, e.py + e.vy * dt); if (e.py === 0) { e.vy = 0; const f = Math.max(0, 1 - 3.5 * dt); e.vx *= f; e.vz *= f; if (Math.hypot(e.vx, e.vz) < 0.05) e.vx = e.vz = 0; }
+      p.x += e.vx * dt; p.z += e.vz * dt; p.y = e.py; e.x = p.x; e.z = p.z;
+    }
+  } else {   // bent: springs past the bend, wobbles, settles
+    e.av += ((e.target - e.ang) * 70 - e.av * 9) * dt; e.ang += e.av * dt;
+  }
+  e.tilt.rotation.x = e.ang;
 }
 
 export function update(dt) {
@@ -209,10 +285,8 @@ export function update(dt) {
       let moved = false;
       for (const p of e.pieces) if (stepPiece(p, dt)) moved = true;
       if (moved) { const seen = new Set(); for (const p of e.pieces) if (!seen.has(p.D)) { seen.add(p.D); p.D.m.instanceMatrix.needsUpdate = true; } }
-    } else if (e.kind === 'lamp') {
-      if (e.ang < Math.PI / 2 - 0.02) { e.av += 3.2 * Math.sin(e.ang + 0.05) * dt; e.ang = Math.min(Math.PI / 2 - 0.02, e.ang + e.av * dt); if (e.ang >= Math.PI / 2 - 0.02 && !e.landed) { e.landed = true; ctx.Sfx && ctx.Sfx.crash && ctx.Sfx.crash(6); } }
-      e.tilt.rotation.x = e.ang;
-    } else {
+    } else if (e.tilt) stepPole(e, dt);   // lamps, signs, stop signs
+    else {
       const m = e.mesh;
       if (m.position.y > 0.2 || e.vy > 0) {
         e.vy -= 14 * dt; m.position.x += e.vx * dt; m.position.z += e.vz * dt; m.position.y += e.vy * dt;
@@ -224,7 +298,7 @@ export function update(dt) {
         const strength = e.t < GUSH - GUSH_FADE ? 1 : Math.max(0, (GUSH - e.t) / GUSH_FADE) * (0.6 + 0.4 * Math.random());   // full for ~54 s, sputters, off at 60 s
         for (let k = 0; k < W.N; k++) {
           W.age[k] += dt;
-          if (W.age[k] > 1.4 && e.t < GUSH) { W.age[k] = 0; W.pos[k * 3] = (Math.random() - 0.5) * 0.15; W.pos[k * 3 + 1] = 0.15; W.pos[k * 3 + 2] = (Math.random() - 0.5) * 0.15; W.vel[k * 3] = (Math.random() - 0.5) * 1.6; W.vel[k * 3 + 1] = (5 + Math.random() * 3) * strength; W.vel[k * 3 + 2] = (Math.random() - 0.5) * 1.6; }
+          if (W.age[k] > 1.4 && e.t < GUSH) { W.age[k] = 0; W.pos[k * 3] = (Math.random() - 0.5) * 0.15; W.pos[k * 3 + 1] = 0.15; W.pos[k * 3 + 2] = (Math.random() - 0.5) * 0.15; W.vel[k * 3] = (Math.random() - 0.5) * 1.6; W.vel[k * 3 + 1] = (5 + Math.random() * 3) * strength * (e.power || 1); W.vel[k * 3 + 2] = (Math.random() - 0.5) * 1.6; }
           W.vel[k * 3 + 1] -= 9.8 * dt;
           W.pos[k * 3] += W.vel[k * 3] * dt; W.pos[k * 3 + 1] = Math.max(0.02, W.pos[k * 3 + 1] + W.vel[k * 3 + 1] * dt); W.pos[k * 3 + 2] += W.vel[k * 3 + 2] * dt;
         }
@@ -246,7 +320,7 @@ export function update(dt) {
       if (e.mesh) ctx.scene.remove(e.mesh); if (e.stump) ctx.scene.remove(e.stump); if (e.water) ctx.scene.remove(e.water.pts);
       if (e.puddle) { ctx.scene.remove(e.puddle); e.puddle.material.dispose(); }
       if (e.pieces) for (const p of e.pieces) freePiece(p);
-      TER.setBroken(e.gi, false);
+      if (e.st) ctx.TC && ctx.TC.hideStop(e.st, false); else TER.setBroken(e.gi, false);
       if (e.kind === 'lamp') lampLightsChanged();
       live.splice(i, 1);
     }
