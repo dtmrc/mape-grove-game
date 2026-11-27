@@ -87,6 +87,7 @@ function lodOf(sc, names, mats) {
     // keep each node's transform: quantized GLBs carry the dequantization scale / offset on the node
     for (const [src, grp] of [[a, near], [b, far]]) { const q = new THREE.Mesh(src.geometry, mats[n] || src.material); q.matrixAutoUpdate = false; q.matrix.copy(src.matrixWorld); grp.add(q); }
   }
+  near.matrixAutoUpdate = far.matrixAutoUpdate = false;   // identity groups
   lod.addLevel(near, 0); lod.addLevel(far, LOD_FAR);
   return lod;
 }
@@ -102,7 +103,18 @@ function mergeWheels(root, wheels, spins, wheelLods) {
   if (near.length && far.length) {
     const lod = new THREE.LOD(), gn = new THREE.Group(), gf = new THREE.Group();
     gn.add(...near); gf.add(...far); lod.addLevel(gn, 0); lod.addLevel(gf, LOD_FAR); root.add(lod);
-    for (const l of wheelLods) { l.autoUpdate = false; for (const q of l.levels) q.object.visible = true; }   // empty now: only pivots for the merged wheels
+    for (const o of [gn, gf, ...near, ...far]) o.matrixAutoUpdate = false;   // identity: they only ride on the car
+    // The merged wheels follow the four spin pivots directly; the emptied per-wheel LOD nodes (12 per car) leave the
+    // car, so the scene has that much less to walk every frame.
+    const done = new Set();
+    for (const m of [...near, ...far]) {
+      const sk = m.skeleton; if (done.has(sk)) continue; done.add(sk);
+      sk.bones.forEach((b, i) => {
+        const spin = b.parent && b.parent.isLOD ? b.parent.parent : null; if (!spin) return;
+        spin.updateWorldMatrix(true, false); sk.bones[i] = spin; sk.boneInverses[i].copy(spin.matrixWorld).invert();
+      });
+    }
+    for (const l of wheelLods) if (l.parent) l.parent.remove(l);
   }
   for (const [o, q] of pose) o.quaternion.copy(q);
 }
