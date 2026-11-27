@@ -333,7 +333,7 @@ export function prepareWorld(buckets, ctx) {
     const p = parent(m);
     if (p >= 0) { late.push([i, find(p)]); return; }
     const c = canon(m.orig);
-    groups.push({ id: m.id, anchor: { x: c.cx, z: c.cz }, cols: [i], dx: 0, dz: 0, r: 0, s: 1, hide: false, label: m.orig.bld ? 'building' : m.orig.tree ? 'tree' : m.orig.brk === 'fence' || m.orig.brk === 'gate' ? m.orig.brk : c.kind === 'circle' ? 'post / round prop' : 'prop' });
+    groups.push({ id: m.id, anchor: { x: c.cx, z: c.cz }, cols: [i], dx: 0, dz: 0, r: 0, s: 1, hide: false, label: m.orig.bld ? 'building' : m.orig.tree ? 'tree' : m.orig.brk === 'fence' || m.orig.brk === 'gate' || m.orig.brk === 'sign' ? m.orig.brk : c.kind === 'circle' ? 'post / round prop' : 'prop' });
     m.grp = groups.length - 1;
   });
   for (const [i, p] of late) { const g = colModel[p].grp; if (!g) continue; colModel[i].grp = g; groups[g].cols.push(i); }

@@ -45,8 +45,8 @@ softHook('game.js', [
   // breakable lamp posts + hydrants (src/js/breakables.js)
   ["import { Sfx } from './sfx.js';", "import { Sfx } from './sfx.js';\nimport * as BRK from './breakables.js';", "from './breakables.js'"],
   ['    const q = collide(cx, cz, r, 0.5);', '    BRK.carHit(c, cx, cz, r); // engine: knock over lamps + hydrants\n    const q = collide(cx, cz, r, 0.5);', 'BRK.carHit('],
-  ['window.__G = {', 'BRK.init({ scene, Sfx, toast, camera, T, lights, pools, lightfx }); // engine: breakables\nwindow.__G = {', 'BRK.init('],
-  ['  post.render(scene, camera, G.time);', '  BRK.update(dt);\n  post.render(scene, camera, G.time);', 'BRK.update('],
+  ['window.__G = {', 'BRK.init({ scene, Sfx, toast, camera, T, lights, pools, lightfx, TC, damageCar, shake }); // engine: breakables\nwindow.__G = {', 'BRK.init('],
+  ['  dev.frame(dt); TER.beforeRender(', '  BRK.update(dt); // breakables: before the terrain lift (moving debris would be reset by afterRender otherwise)\n  dev.frame(dt); TER.beforeRender(', 'BRK.update('],
   ["import * as BRK from './breakables.js';", "import * as BRK from './breakables.js';\nimport * as DONUT from './donut.js';", "from './donut.js'"],
   ["window.__G.shops = shops;", "DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)\nwindow.__G.shops = shops;", 'DONUT.init('],
 ]);

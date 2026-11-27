@@ -200,7 +200,7 @@ function frame(cx, cz, ry) {
     floor(lx, lz, w, d, top, rr = 0) { const [x, z] = at(lx, lz), a = ry + rr; floors.push({ top, cx: x, cz: z, hw: w / 2, hd: d / 2, c: Math.cos(a), s: Math.sin(a) }); }, // engine: walkable deck
     col(lx, lz, w, d, h = 3, rr = 0, o) { const [x, z] = at(lx, lz); colBox(x, z, w, d, h, ry + rr, o); },
     bld(lx, lz, w, d, h = 4) { F.col(lx, lz, w, d, h, 0, { bld: true }); },
-    post(lx, lz, r = 0.2, h = 3) { const [x, z] = at(lx, lz); colliders.push({ cx: x, cz: z, r, h }); },
+    post(lx, lz, r = 0.2, h = 3, o) { const [x, z] = at(lx, lz); colliders.push({ cx: x, cz: z, r, h, ...(o ? { ...o, ry } : {}) }); },   // o: breakable sign flags (sgn)
     sign(text, bg, fg, w, h, y, lz, o = {}) {
       const lx = o.lx || 0;
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), signMat(TEX.sign(text, bg, fg, o.tw || 256, o.th || 48, o.glow), o.double ? { side: THREE.DoubleSide } : {}));
@@ -430,6 +430,8 @@ function deadTree0(x, z, s, o = {}) {
   colliders.push({ cx: x, cz: z, r: 0.35 * s, h: 6, tree: true, top: 4.2 * s, pr: 0.6 * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
 function bush(x, z, s = 1, c = 0xb0e0a0) { addS(bushCrown(x, z, s, R() * 6), 'leaves', c, x, 0, z); }
+/** breakables: flags for a sign / flagpole post. pc pole colour, pw pole width, panel [ox, y, oz, w, h, d, col] in the post's frame. */
+const sgn = (pc, pw, panel) => ({ brk: 'sign', sg: { pc, pw, panel } });
 function fence(x0, z0, x1, z1, h = 1.2, color = 0xffffff) {
   const len = Math.hypot(x1 - x0, z1 - z0), ry = Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2;
   // breakables: long lines are cut into <= 7.2 m sections, each its own breakable group (a car knocks down one section)
@@ -984,7 +986,7 @@ function buildDowntown(scene, T) {
     for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283; F.halo(Math.cos(a) * 4.2, 3.2, Math.sin(a) * 4.2, 0.6, [0xffd060, 0xfff0c0][k % 2]); }
     F.light(0, 2.8, 0, 0xffe0a0, 0.8, { always: true });
     for (const [x, z] of [[-9, -8], [9, -8], [-9, 8], [9, 8]]) bench(F, x, z, x > 0 ? -Math.PI / 2 : Math.PI / 2);
-    F.box(8, 3.5, -11, 0.08, 7, 0.08, 'plain', 0xdddddd); F.box(8.75, 6.4, -11, 1.5, 0.9, 0.04, 'plain', 0x2f5d2f); F.post(8, -11, 0.1, 7);
+    F.box(8, 3.5, -11, 0.08, 7, 0.08, 'plain', 0xdddddd); F.box(8.75, 6.4, -11, 1.5, 0.9, 0.04, 'plain', 0x2f5d2f); F.post(8, -11, 0.1, 7, sgn(0xdddddd, 0.08, [0.75, 6.4, 0, 1.5, 0.9, 0.04, 0x2f5d2f]));
     F.box(-8, 0.8, 11, 1.6, 1.6, 0.6, 'brick', 0xb0aca0); F.col(-8, 11, 1.6, 0.6, 1.6);
     const [tx, tz] = F.at(-10, -11); tree(tx, tz, 1.3, { kind: 'round' });
     const [ux, uz] = F.at(10, 11); tree(ux, uz, 1.2, { kind: 'round' });
@@ -1090,8 +1092,8 @@ function buildPoliceStation() {
   for (const x of [-1.6, 1.6]) { F.box(x, 2.9, 0.75, 0.3, 0.42, 0.3, 'lamp', 0x5070ff); F.halo(x, 2.9, 0.9, 1.6, 0x4060ff); }
   F.light(0, 3.2, 3, 0x7090ff, 1.1, { always: true });
   // flagpole, the reserved space, a donut-shaped bench joke and a holding-yard fence out back
-  F.box(9, 4, 4, 0.1, 8, 0.1, 'plain', 0xdddddd); F.box(9.8, 7.4, 4, 1.6, 1, 0.04, 'plain', 0x2f5d2f); F.post(9, 4, 0.12, 8);
-  F.box(-12, 0.6, 7.5, 0.08, 1.2, 0.08, 'metal', 0x888888); F.sign('RESERVED: SGT. DONUTS', '#ffffff', '#1e2a44', 1.4, 0.35, 1.3, 7.55, { tw: 256, th: 40, lx: -12 });
+  F.box(9, 4, 4, 0.1, 8, 0.1, 'plain', 0xdddddd); F.box(9.8, 7.4, 4, 1.6, 1, 0.04, 'plain', 0x2f5d2f); F.post(9, 4, 0.12, 8, sgn(0xdddddd, 0.1, [0.8, 7.4, 0, 1.6, 1, 0.04, 0x2f5d2f]));
+  F.box(-12, 0.6, 7.5, 0.08, 1.2, 0.08, 'metal', 0x888888); F.post(-12, 7.5, 0.08, 1.2, sgn(0x888888, 0.08)); F.sign('RESERVED: SGT. DONUTS', '#ffffff', '#1e2a44', 1.4, 0.35, 1.3, 7.55, { tw: 256, th: 40, lx: -12 });
   for (const s of [-1, 1]) { F.box(s * 12.8, 1, -11, 0.08, 2, 6, 'fence', 0xbfc4c8); F.col(s * 12.8, -11, 0.2, 6, 2); }
   F.box(0, 1, -13.9, 25.6, 2, 0.08, 'fence', 0xbfc4c8); F.col(0, -13.9, 25.6, 0.2, 2);
   F.box(7, 0.7, -11, 2, 1.4, 1.2, 'plain', 0x2d6a3a); F.col(7, -11, 2, 1.2, 1.4);
@@ -1201,9 +1203,9 @@ function buildNanaAndRV(scene) {
   places.goobTruck = { x: lx + 3.2, z: lz + 5, yaw: Math.PI / 2 };   // Goobles' truck: parked south of the trailer, nose toward the dirt road
 
   // the HOA's notice, nailed to a post
-  F.box(7, 0.8, 7, 0.1, 1.6, 0.1, 'wood', 0xffffff); F.post(7, 7, 0.1, 1.6); F.face(7, 1.3, 7.06, 0.6, 0.9, 'posterHoa', 0xffffff);
+  F.box(7, 0.8, 7, 0.1, 1.6, 0.1, 'wood', 0xffffff); F.post(7, 7, 0.1, 1.6, sgn(0xb89870, 0.1, [0, 1.3, 0.06, 0.6, 0.9, 0.02, 0xf2eedc])); F.face(7, 1.3, 7.06, 0.6, 0.9, 'posterHoa', 0xffffff);
   // hand-painted sign at the trail head into the woods
-  F.box(-9.5, 0.9, -3, 0.12, 1.8, 0.12, 'wood', 0xffffff); F.post(-9.5, -3, 0.1, 1.8);
+  F.box(-9.5, 0.9, -3, 0.12, 1.8, 0.12, 'wood', 0xffffff); F.post(-9.5, -3, 0.1, 1.8, sgn(0xb89870, 0.12));
   F.sign('KEEP OUT', '#3a2a1a', '#d8c8a0', 1.6, 0.5, 1.6, -2.9, { rr: Math.PI / 2, double: true, lx: -9.5 });
 }
 
@@ -1624,7 +1626,7 @@ function buildEstates() {
     places.garyCart = (([x, z]) => ({ x, z, yaw: ry }))(F.at(H.drive[0], H.drive[1] + 3.5));
     places.garyBack = (([x, z]) => ({ x, z }))(F.at(-6, -6.5));
     // the flagpole and the perfect lawn stripes stay
-    F.box(-6.5, 3.5, 7.2, 0.08, 7, 0.08, 'plain', 0xdddddd); F.box(-5.7, 6.4, 7.2, 1.6, 1, 0.04, 'plain', 0x2050a0); F.post(-6.5, 7.2, 0.12, 7);
+    F.box(-6.5, 3.5, 7.2, 0.08, 7, 0.08, 'plain', 0xdddddd); F.box(-5.7, 6.4, 7.2, 1.6, 1, 0.04, 'plain', 0x2050a0); F.post(-6.5, 7.2, 0.12, 7, sgn(0xdddddd, 0.08, [0.8, 6.4, 0, 1.6, 1, 0.04, 0x2050a0]));
     for (let k = 0; k < 4; k++) F.geo(plane(1.6, 4.4), 'grass', k % 2 ? 0xd0f0b8 : 0xb8e0a0, 2.6 + k * 1.7, 0.045, 7.4);
     F.light(0.3, 3, 6.2, 0xfff0d0, 0.9);
   }
@@ -1734,7 +1736,7 @@ function buildSchool() {
     // marquee + flagpole + bike rack
     F.box(-12, 1, 18, 4, 1.4, 0.4, 'brick', 0xd0c0b0); F.col(-12, 18, 4, 0.4, 1.4);
     F.sign('GO RACCOONS! HOMECOMING FRI', '#111111', '#ffd040', 3.8, 0.6, 1.25, 18.22, { tw: 512, th: 64, glow: true, lx: -12 });
-    F.box(10, 4, 16, 0.1, 8, 0.1, 'plain', 0xdddddd); F.box(10.8, 7.4, 16, 1.6, 1, 0.04, 'plain', 0x2050a0); F.post(10, 16, 0.12, 8);
+    F.box(10, 4, 16, 0.1, 8, 0.1, 'plain', 0xdddddd); F.box(10.8, 7.4, 16, 1.6, 1, 0.04, 'plain', 0x2050a0); F.post(10, 16, 0.12, 8, sgn(0xdddddd, 0.1, [0.8, 7.4, 0, 1.6, 1, 0.04, 0x2050a0]));
     for (let k = 0; k < 5; k++) F.box(14 + k * 0.6, 0.4, 8, 0.05, 0.8, 0.9, 'metal', 0x888888);
     F.col(15.2, 8, 3, 1, 0.8);
     places.school = (([x, z]) => ({ x, z }))(F.at(0, 12));
@@ -2341,7 +2343,7 @@ function buildHospital() {
   // blue H road sign by the highway
   {
     const lx = -12.5, lz = 24;
-    F.box(lx, 1.3, lz, 0.1, 2.6, 0.1, 'metal', 0x9a9a9a); F.post(lx, lz, 0.1, 2.6);
+    F.box(lx, 1.3, lz, 0.1, 2.6, 0.1, 'metal', 0x9a9a9a); F.post(lx, lz, 0.1, 2.6, sgn(0x9a9a9a, 0.1));
     F.sign('H', '#2a5ab8', '#ffffff', 1.0, 1.0, 2.4, lz + 0.06, { lx, tw: 64, th: 64, double: true });
     F.sign('HOSPITAL', '#2a5ab8', '#ffffff', 1.4, 0.32, 1.7, lz + 0.06, { lx, tw: 192, th: 40, double: true });
   }
@@ -2613,7 +2615,7 @@ function buildCountry() {
   // road name signs where County Rd 12 meets the town roads
   const post = (x, z, ry, text) => {
     [x, z] = offRoad(x, z, 0.6); const F = frame(x, z, ry);
-    F.box(0, 1.2, 0, 0.1, 2.4, 0.1, 'metal', 0x9a9a9a); F.post(0, 0, 0.08, 2.4);
+    F.box(0, 1.2, 0, 0.1, 2.4, 0.1, 'metal', 0x9a9a9a); F.post(0, 0, 0.08, 2.4, sgn(0x9a9a9a, 0.1));
     F.sign(text, '#1f6a3a', '#ffffff', 1.9, 0.38, 2.3, 0.06, { tw: 256, th: 48, double: true });
   };
   for (const [k, o, text] of [['HNJ', 1, 'CO RD 12'], ['HEJ', -1, 'CO RD 12'], ['OMJ', 1, 'CO RD 12'], ['SN', 1, 'SAWYER FARM RD'], ['PE', 1, 'HOLLOW LN'], ['GW1', -1, 'ESTATES PKWY']]) {

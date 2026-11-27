@@ -1,7 +1,7 @@
 // Breakable street props (breakables.js): a car knocks over fence sections, gates, street lamps and hydrants.
 // Lamps go dark the frame they are hit (light, cone, glow pool); a hydrant gushes for a minute and is then shut off.
 module.exports = {
-  name: 'breakables', desc: 'car smashes a fence section, a gate, a lamp (lights out at once) and a hydrant (water off after 60 s)',
+  name: 'breakables', desc: 'car smashes fences, gates, signs, stop signs, lamps (lights out at once), hydrants (water off after 60 s); damage scales with speed',
   async run({ S, check, shot }) {
     // find one of each breakable kind
     const info = await S.js(() => {
@@ -16,9 +16,9 @@ module.exports = {
     check('fences, gates, lamps and hydrants are breakable groups', ['fence:picket', 'fence:chain', 'fence:farmrail', 'gate', 'lamp', 'hydrant'].every((k) => info[k]), Object.keys(info));
 
     // ram a target with a moving car: put the car 6 m back on the perpendicular, aimed at the point, at 14 m/s
-    const ram = (k) => S.js(async (k) => {
+    const ram = (k, v = 14, nth = 0) => S.js(async ([k, v, nth]) => {
       const QA = window.QA, T = window.__dev.TER, B = window.__BRK, G = window.__G;
-      const g0 = (() => { for (let g = 1; g < T.groups.length; g++) { const o = T.colModel[T.groups[g].cols[0]].orig; if ((o.brk === 'fence' ? 'fence:' + o.fk : o.brk) === k) return g; } })();
+      const g0 = (() => { for (let g = 1; g < T.groups.length; g++) { const o = T.colModel[T.groups[g].cols[0]].orig; if ((o.brk === 'fence' ? 'fence:' + o.fk : o.brk) === k && !T.groups[g].broken && nth-- <= 0) return g; } })();
       const o = T.colModel[T.groups[g0].cols[0]].orig;
       let px, pz, nx, nz;
       if (o.seg) { const [a, b, c, d] = o.seg; px = (a + c) / 2; pz = (b + d) / 2; const L = Math.hypot(c - a, d - b); nx = -(d - b) / L; nz = (c - a) / L; }
@@ -27,11 +27,12 @@ module.exports = {
       const s = G.cars ? 1 : 1, sx = px - nx * 6 * s, sz = pz - nz * 6 * s;
       await QA.tp(sx + ',' + sz, { settle: 2 });
       const car = await QA.spawnCar('sedan', { enter: true, dist: 0 });
-      const c = G.P.car; c.x = sx; c.z = sz; c.yaw = Math.atan2(nx, nz); c.vx = nx * 14; c.vz = nz * 14;
+      const c = G.P.car; c.x = sx; c.z = sz; c.yaw = Math.atan2(nx, nz); c.vx = nx * v; c.vz = nz * v; c.hp = 100;
       const before = T.groups[g0].broken;
-      let n = 0; for (; n < 40 && !T.groups[g0].broken; n++) { c.vx = nx * 14; c.vz = nz * 14; QA.step(1, { render: false }); }
-      return { g: g0, before: !!before, broken: !!T.groups[g0].broken, frames: n, live: B.live.length, debris: B.debris && B.debris() };
-    }, k);
+      let n = 0; for (; n < 80 && !T.groups[g0].broken; n++) { c.vx = nx * v; c.vz = nz * v; QA.step(1, { render: false }); }
+      const e = B.live[B.live.length - 1];
+      return { g: g0, before: !!before, broken: !!T.groups[g0].broken, frames: n, live: B.live.length, debris: B.debris && B.debris(), hp: c.hp, snapped: e && e.snapped, after: Math.hypot(c.vx, c.vz) };
+    }, [k, v, nth]);
 
     const f = await ram('fence:picket');
     check('car breaks a picket fence section', !f.before && f.broken, f);
@@ -44,6 +45,27 @@ module.exports = {
     check('car breaks a gate', ga.broken, ga);
     const fr = await ram('fence:farmrail');
     check('car breaks a field rail fence section', fr.broken, fr);
+
+    // signs: a slow nudge bends the pole and leaves it rooted, a fast hit snaps it and throws it
+    const sl = await ram('sign', 5, 0);
+    check('a slow hit breaks a sign', sl.broken, sl);
+    const bent = await S.js(() => { window.QA.step(40, { render: false }); const e = window.__BRK.live[window.__BRK.live.length - 1]; return { kind: e.kind, snapped: e.snapped, ang: e.ang, x: e.mesh.position.x, x0: e.x }; });
+    check('slow: the sign only bends over and stays in the ground', bent.kind === 'sign' && !bent.snapped && bent.ang > 0.15 && bent.ang < 1.3, bent);
+    const sf = await ram('sign', 22, 0);
+    const thrown = await S.js(() => { const B = window.__BRK, e = B.live[B.live.length - 1], x0 = e.mesh.position.x, z0 = e.mesh.position.z; window.QA.step(40, { render: false }); return { kind: e.kind, snapped: e.snapped, ang: e.ang, moved: Math.hypot(e.mesh.position.x - x0, e.mesh.position.z - z0) }; });
+    check('fast: the sign snaps off, falls flat and is thrown', sf.broken && thrown.snapped && thrown.ang > 1.4 && thrown.moved > 1, { sf, thrown });
+    check('car damage and lost speed grow with impact speed', 100 - sf.hp > 100 - sl.hp && sf.after > sl.after, { slow: [sl.hp, sl.after], fast: [sf.hp, sf.after] });
+    // stop signs (traffic.js instances)
+    const stp = await S.js(async () => {
+      const QA = window.QA, G = window.__G, TC = window.__TC, st = TC.stops().find((s) => !s.down);
+      const nx = Math.sin(st.face), nz = Math.cos(st.face), sx = st.x + nx * 8, sz = st.z + nz * 8;   // drive in from the road side
+      await QA.tp(sx + ',' + sz, { settle: 2 }); await QA.spawnCar('sedan', { enter: true, dist: 0 });
+      const c = G.P.car; c.x = sx; c.z = sz; c.yaw = Math.atan2(-nx, -nz);
+      let n = 0; for (; n < 60 && !st.down; n++) { c.vx = -nx * 12; c.vz = -nz * 12; QA.step(1, { render: false }); }
+      const e = window.__BRK.live.find((e) => e.st === st);
+      return { down: !!st.down, frames: n, live: !!e, snapped: e && e.snapped };
+    });
+    check('car knocks a stop sign down', stp.down && stp.live && stp.snapped, stp);
 
     // lamp at night: everything goes out in the frame it's hit
     await S.js(() => window.QA.time(22, { freeze: true }));

@@ -2,7 +2,9 @@
 // flirt with. Each visit opens a menu of pick-up lines in different styles (smooth, punny, honest, bold, weird, a
 // compliment, showing off, or a fish as a gift). Every cat has her own taste, and the outcome is a dice roll: she
 // swoons, warms up a little, shrugs, or (often) reacts with comic disgust and snubs you for a while. Win one over all
-// the way (100%) and "Pop the question"; if she says yes she moves in at the RV as your cat wife (grooms you every ten
+// the way (100%) and "Ask her out" (girlfriend), go on dates (another dice roll on her taste) until the bond hits 100%, then
+// "Pop the question"; if she says yes she moves in at the RV as your cat wife. Flirt with another cat while married and
+// she storms over, fights the other cat, then scolds you; while dating, word gets back and the bond drops (grooms you every ten
 // minutes for health). Courting only, PG.
 //
 // Models: the Tracebench Goobles GLB re-used (same rig and clips), with its six materials merged into ONE skinned
@@ -167,10 +169,27 @@ const FLAVOR = {
 };
 const GIFT_NONE = 'You pat your empty bag. Nothing. Earl at the Bait & Tackle sells rods.';
 
+// ---------- dates (girlfriend stage) ----------
+// style: which of her like[] entries the date leans on. night: better after dark. fish: costs a fish.
+const DATES = [
+  { id: 'stars', label: 'Stargaze on the RV roof', style: 'smooth', night: true, blurb: 'Lie on the warm RV roof and point at stars. Better after dark.',
+    great: 'You name a star after her. It is a plane. She does not care. She falls asleep on your shoulder.', bad: '{n} spends the whole date pointing out that "that one is a satellite" and "that one is ALSO a satellite".', awful: 'It rains. You both get soaked. {n} blames you personally and hisses at the sky.' },
+  { id: 'dinner', label: 'Candlelit fish dinner', style: 'gift', fish: true, blurb: 'One fish, one candle, two cats, one dumpster lid as a table. Costs a fish.',
+    great: '{n} eats her half, then your half, then gazes at you. That is love.', bad: 'The candle sets the napkin on fire. {n} puts it out with a glass of milk. She is unimpressed.', awful: 'You chew with your mouth open. {n} watches in silence, then leaves to "use the litter box" and never comes back.' },
+  { id: 'lake', label: 'Walk down to Lake Juniper', style: 'honest', blurb: 'A long walk to the water. You talk about your dreams. Yours involve tuna.',
+    great: 'You talk for hours. She tells you about the time she fell in a pool. You tell her about the time you fell in the lake. You are made for each other.', bad: 'An otter steals {n}\'s attention for twenty minutes. You stand there.', awful: 'You slip on the dock and fall in. {n} laughs so hard she has to lie down. Then she goes home.' },
+  { id: 'gary', label: "Spy on Gary's lawn mowing", style: 'weird', blurb: 'Hide in the hedge and judge his stripes. Romantic, in a way.',
+    great: 'Gary mows a crooked stripe and screams. {n} grabs your paw. You have never been closer.', bad: '{n} gets bored and falls asleep in the hedge. You watch Gary alone.', awful: 'Gary spots you. He chases you both out with a leaf blower. {n} is not speaking to you.' },
+  { id: 'trash', label: 'Raid trash night with the raccoons', style: 'bold', blurb: 'Big Ricky owes you one. Tonight, you dine like kings.',
+    great: '{n} finds a whole rotisserie chicken. She shares the wishbone with you. She wishes for you.', bad: 'The raccoons keep flirting with {n}. It is very awkward for everyone.', awful: 'A bin lid slams on {n}\'s tail. She yowls, the porch lights come on, and you run in different directions.' },
+  { id: 'show', label: 'Take her for a drive', style: 'show', blurb: 'Windows down, radio on, county road, no seatbelts (you are a cat).',
+    great: '{n} sticks her head out the window, ears flapping. She has never been this happy. You might cry.', bad: '{n} gets carsick on the second turn. Her opinion of your driving is now "bad".', awful: 'You run a stop sign, a cruiser lights up, and {n} has to hide under the seat for an hour.' },
+];
+
 // ---------- state ----------
-const S = { aff: {}, wife: null, met: {}, groomDay: 0, flirts: 0, rejections: 0, cool: {}, last: {} };
-function load() { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) Object.assign(S, { aff: s.aff || {}, wife: BY[s.wife] ? s.wife : null, met: s.met || {}, groomDay: s.groomDay || 0, flirts: s.flirts | 0, rejections: s.rejections | 0 }); } catch (e) { /* storage blocked */ } }
-function persist() { try { localStorage.setItem(KEY, JSON.stringify({ aff: S.aff, wife: S.wife, met: S.met, groomDay: S.groomDay, flirts: S.flirts, rejections: S.rejections })); } catch (e) { /* ignore */ } }
+const S = { aff: {}, wife: null, gf: null, bond: 0, dates: 0, dateAt: 0, met: {}, groomDay: 0, flirts: 0, rejections: 0, cool: {}, last: {} };
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) Object.assign(S, { aff: s.aff || {}, wife: BY[s.wife] ? s.wife : null, gf: BY[s.gf] && !s.wife ? s.gf : null, bond: +s.bond || 0, dates: s.dates | 0, dateAt: +s.dateAt || 0, met: s.met || {}, groomDay: s.groomDay || 0, flirts: s.flirts | 0, rejections: s.rejections | 0 }); } catch (e) { /* storage blocked */ } }
+function persist() { try { localStorage.setItem(KEY, JSON.stringify({ aff: S.aff, wife: S.wife, gf: S.gf, bond: S.bond, dates: S.dates, dateAt: S.dateAt, met: S.met, groomDay: S.groomDay, flirts: S.flirts, rejections: S.rejections })); } catch (e) { /* ignore */ } }
 const aff = (id) => Math.round(S.aff[id] || 0);
 const pick = (a) => a[(Math.random() * a.length) | 0];
 // placement and idle wandering use their own seeded generator so the yard cats never shift the game's random sequence
@@ -182,7 +201,7 @@ const fill = (s, c) => s.replace(/\{n\}/g, c.name);
 let A = null, CATLIST = [];
 quests.add && quests.add({
   id: 'romance', kind: 'side', title: 'Nine Lives, One Love', giver: 'a yard cat', where: 'the Estates front yards', reward: 100,
-  blurb: 'Some very fine lady cats lounge in the Estates front yards. Find one, try your best lines, survive the rejections, and win a cat wife. She moves into the RV.',
+  blurb: 'Some very fine lady cats lounge in the Estates front yards. Flirt until one is smitten, ask her out, take your girlfriend on dates until the bond is solid, then propose. Your cat wife moves into the RV.',
   status() { if (S.wife) return 'done'; return Object.keys(S.met).length ? 'active' : 'open'; },
   guide() {
     if (!A) return { obj: '', check: null };
@@ -192,13 +211,17 @@ quests.add && quests.add({
       const n = nearest(here);
       return { obj: 'Find a yard cat in the Estates front yards and say hi.', check: n && dist(n) > 4 ? { x: n.x, z: n.z, r: 2.2, label: 'Yard cat', col: '#ff8ab0' } : null };
     }
-    const best = CATLIST.filter((c) => c.home && S.met[c.def.id]).sort((a, b) => aff(b.def.id) - aff(a.def.id))[0];
+    const best = S.gf ? CATLIST.find((c) => c.def.id === S.gf) : CATLIST.filter((c) => c.home && S.met[c.def.id]).sort((a, b) => aff(b.def.id) - aff(a.def.id))[0];
     if (!best) return { obj: 'Find a yard cat.', check: null };
-    const ready = aff(best.def.id) >= 100;
-    return { obj: ready ? `${best.def.name} is smitten (100%). Pop the question!` : `Win over ${best.def.name} (${aff(best.def.id)}% smitten). Try lines she likes.`,
+    const n = best.def.name, b = Math.round(S.bond), wait = Math.ceil(dateWait() / 1000);
+    const obj = S.gf ? (b >= 100 ? `You and ${n} are serious (bond 100%). Pop the question!` : wait > 0 ? `Dating ${n} (bond ${b}%). She wants some me-time: next date in ${wait > 60 ? Math.ceil(wait / 60) + ' min' : wait + ' s'}.` : `Dating ${n} (bond ${b}%). Take her on a date.`)
+      : aff(best.def.id) >= 100 ? `${n} is smitten (100%). Ask her out!` : `Win over ${n} (${aff(best.def.id)}% smitten). Try lines she likes.`;
+    return { obj,
       check: dist(best) > 4 ? { x: best.home.x, z: best.home.z, r: 2.2, label: best.def.name, col: '#ff8ab0' } : null };
   },
 });
+const DATE_MS = 90e3;   // real time between dates: she needs her me-time
+const dateWait = () => Math.max(0, DATE_MS - (Date.now() - (S.dateAt || 0)));
 const dist = (c) => Math.hypot(A.px() - c.x, A.pz() - c.z);
 function nearest(list) { let b = null, bd = 1e9; for (const c of list) { const d = dist(c); if (d < bd) { bd = d; b = c; } } return b; }
 
@@ -513,23 +536,62 @@ export function makeYardCats(ctx) {
       if (res === 'swoon') play(c, 'Wave', 0.15, true);
       if (def.gary && res === 'disgust' && lines.length > 2) ctx.addHeat(1, 'flirting with the HOA cat');
       const a = aff(id);
-      ctx.toast(res === 'disgust' ? `${def.name} is not into it. Smitten: ${a}%` : a >= 100 ? `${def.name} is head over paws. Pop the question!` : `${def.name}: smitten ${a}%`, 3);
+      ctx.toast(res === 'disgust' ? `${def.name} is not into it. Smitten: ${a}%` : a >= 100 && !S.gf && !S.wife ? `${def.name} is head over paws. Ask her out!` : `${def.name}: smitten ${a}%`, 3);
       if (res === 'disgust') { try { Sfx.meow('pff', 0.9, 0.5); } catch (e) { /* audio off */ } }
+      cheated(c);
     });
   }
-  function propose(c) {
-    const def = c.def, yes = Math.random() < (def.gary ? 0.5 : 0.72);
+  // stage 2: smitten (100%) -> ask her out -> girlfriend
+  function askOut(c) {
+    const def = c.def, yes = Math.random() < (def.gary ? 0.55 : 0.8);
+    const ask = ['Goobles', pick(['"So... do you wanna maybe go out sometime? Like, on purpose?"', '"Would you be my girlfriend? I have a truck."', '*nervously offers a dandelion* "Wanna be my girlfriend?"'])];
     if (!yes) {
-      S.aff[def.id] = 82; persist();
+      S.aff[def.id] = 85; persist();
+      return queue([ask, [def.name, pick([`${def.name}: "I like you. But I'm not ready to be seen in public with you."`, `${def.name}: "Ask me again when you've showered."`, `${def.name} says yes, then says "wait, no", then walks away to think about it.`])]], () => { emote(c, 'meh'); ctx.toast(`Not yet. ${def.name}: smitten 85%`, 3); });
+    }
+    S.gf = def.id; S.bond = 10; S.dates = 0; S.dateAt = 0; persist();
+    queue([ask, [def.name, `${def.name}: "Fine. Yes. You're my boyfriend now. Don't tell anyone. Tell everyone."`], ['', `You're dating ${def.name}. Take her on dates to build your bond, then propose.`]], () => {
+      emote(c, 'swoon', 3); play(c, 'Wave', 0.15, true);
+      ctx.banner && ctx.banner('RELATIONSHIP STATUS', `Dating ${def.name}`, 3.5);
+      try { Sfx.jingle(); } catch (e) { /* audio off */ }
+    });
+  }
+  // dates: like flirting, the outcome is a roll on her taste for that kind of date
+  function goOnDate(c, d) {
+    const def = c.def;
+    if (d.fish) { const f = ['trout', 'catfish', 'bass', 'bluegill'].find((k) => ctx.fishing.countFish(k) > 0); if (!f) return; ctx.fishing.removeFish(f, 1); }
+    const like = def.like[d.style] ?? 0, night = (G.clock ?? 12) >= 20 || (G.clock ?? 12) < 5;
+    let p = 0.5 + like * 0.3 + (d.night ? (night ? 0.15 : -0.1) : 0) + S.bond / 500;
+    if (S.lastDate === d.id) p -= 0.2;
+    p = Math.max(0.1, Math.min(0.92, p));
+    const r = Math.random(), res = r < p * 0.55 ? 'great' : r < p ? 'good' : r < p + (1 - p) * 0.5 ? 'bad' : 'awful';
+    const delta = { great: 30 + Math.random() * 12, good: 16 + Math.random() * 8, bad: 4, awful: -12 }[res];
+    S.bond = Math.max(0, Math.min(100, S.bond + delta)); S.dates++; S.dateAt = Date.now(); S.lastDate = d.id; persist();
+    const text = fill(res === 'great' ? d.great : res === 'good' ? pick(WARM) : res === 'bad' ? d.bad : d.awful, def);
+    try { Sfx.meow(res === 'awful' ? 'hiss' : res === 'great' ? 'chirp' : 'mrrp', 1.4); } catch (e) { /* audio off */ }
+    queue([['', `Date night: ${d.label.toLowerCase()}.`], [def.name, text]], () => {
+      emote(c, res === 'great' ? 'swoon' : res === 'good' ? 'warm' : res === 'bad' ? 'meh' : 'broken');
+      const b = Math.round(S.bond);
+      ctx.toast(res === 'awful' ? `Rough date. Bond ${b}%` : b >= 100 ? `You and ${def.name} are serious. Pop the question!` : `${res === 'great' ? 'Great date!' : res === 'good' ? 'Nice date.' : 'Meh date.'} Bond ${b}%`, 3);
+    });
+  }
+  function breakUp(c) {
+    const def = c.def; S.gf = null; S.bond = 0; S.aff[def.id] = 30; persist(); c.snub = 40;
+    queue([['Goobles', '"I think we should see other cats."'], [def.name, pick([`${def.name} knocks your phone, wallet, and dignity off the porch.`, `${def.name}: "I was going to dump YOU. Tomorrow. At brunch."`, `${def.name} hisses, then sobs, then hisses again.`])]], () => emote(c, 'broken', 3));
+  }
+  function propose(c) {
+    const def = c.def, yes = Math.random() < (def.gary ? 0.6 : 0.85);
+    if (!yes) {
+      S.bond = 75; persist();
       const no = pick([
         `${def.name}: "Whoa. Slow down. Get a real job first. One that isn't the RV."`,
         `${def.name}: "I said I LIKED you. I didn't say I wanted your last name. What IS your last name?"`,
         `${def.name}: "Ask me when you've got a ring. A real one. Not a can tab."`,
         `${def.name} panics, zooms around the yard three times, and hides under a car.`,
       ]);
-      return queue([['Goobles', '*gets down on one knee and holds out a pop can tab* Will you be my cat wife?'], [def.name, no]], () => { emote(c, 'meh'); ctx.toast(`Not yet. ${def.name}: smitten 82%`, 3); });
+      return queue([['Goobles', '*gets down on one knee and holds out a pop can tab* Will you be my cat wife?'], [def.name, no]], () => { emote(c, 'meh'); ctx.toast(`Not yet. Bond 75%`, 3); });
     }
-    S.wife = def.id; S.aff[def.id] = 100; persist();
+    S.wife = def.id; S.gf = null; S.bond = 100; S.aff[def.id] = 100; persist();
     queue([['Goobles', '*gets down on one knee and holds out a pop can tab* Will you be my cat wife?'], [def.name, `${def.name}: "...Yes. YES. Obviously yes. Did you think I'd say no? I would never say no. Shut up."`],
       ['', `${def.name} trots off toward the empty lot. She's moving into the RV.`], ['', 'Nana sends a card with $100 in it. "About time, sweetie."']], () => {
       emote(c, 'swoon', 4); ctx.banner && ctx.banner('JUST MARRIED', `${def.name} moved into the RV`, 4);
@@ -570,6 +632,30 @@ export function makeYardCats(ctx) {
       },
     };
   }
+  function gfMenu(c) {
+    const def = c.def;
+    return {
+      title: `${def.name}  \u2665 girlfriend · bond ${Math.round(S.bond)}%`,
+      items: () => {
+        const wait = dateWait(), hasFish = ['trout', 'catfish', 'bass', 'bluegill'].some((f) => ctx.fishing.countFish(f) > 0);
+        const it = DATES.map((d) => ({ id: 'd:' + d.id, label: d.label, price: wait > 0 ? 'later' : d.fish ? (hasFish ? '\u{1F41F}x1' : 'no fish') : '', blurb: wait > 0 ? `${def.name} needs some me-time. Next date in ${Math.ceil(wait / 1000)} s.` : d.blurb, dim: wait > 0 || (d.fish && !hasFish) }));
+        if (S.bond >= 100) it.unshift({ id: 'propose', label: '\u2665 Pop the question', price: '', blurb: 'You have a pop can tab. It will have to do.' });
+        it.push({ id: 'flirt', label: 'Just flirt', price: '', blurb: 'Keep the spark alive.' });
+        it.push({ id: 'break', label: 'Break up', price: '', blurb: 'Are you sure? She will remember this.' });
+        it.push({ id: 'about', label: `About ${def.name}`, price: '', blurb: `${def.bio} Dates so far: ${S.dates}.` });
+        return it;
+      },
+      pick: (it) => {
+        if (it.id === 'about') return;
+        if (it.dim) { Sfx.blip(180); return; }
+        ctx.fishing.close && ctx.fishing.close();
+        if (it.id === 'propose') return propose(c);
+        if (it.id === 'break') return breakUp(c);
+        if (it.id === 'flirt') { const st = pick(STYLE_IDS); return flirt(c, st, pick(STYLES[st].lines)); }
+        goOnDate(c, DATES.find((d) => 'd:' + d.id === it.id));
+      },
+    };
+  }
   function flirtMenu(c) {
     const def = c.def;
     // four styles each visit, plus the gift, plus the proposal once she's smitten
@@ -581,7 +667,7 @@ export function makeYardCats(ctx) {
         const it = offer.map((o, i) => ({ id: 'l' + i, label: `${STYLES[o.s].tag}: ${o.line.replace(/^\*|\*$/g, '').slice(0, 30)}${o.line.length > 32 ? '...' : ''}`, price: '', blurb: o.line }));
         const hasFish = ctx.fishing && ['trout', 'catfish', 'bass', 'bluegill'].some((f) => ctx.fishing.countFish(f) > 0);
         it.push({ id: 'gift', label: 'Gift: offer her a fish', price: hasFish ? '\u{1F41F}x1' : 'no fish', blurb: hasFish ? 'Nothing says romance like something you pulled out of a lake.' : GIFT_NONE, dim: !hasFish });
-        if (aff(def.id) >= 100 && !S.wife) it.push({ id: 'propose', label: '♥ Pop the question', price: '', blurb: 'You have a pop can tab. It will have to do.' });
+        if (aff(def.id) >= 100 && !S.wife && !S.gf) it.push({ id: 'askout', label: '♥ Ask her out', price: '', blurb: 'Make it official. Girlfriend first, then we talk rings.' });
         it.push({ id: 'about', label: `About ${def.name}`, price: '', blurb: def.bio });
         return it;
       },
@@ -589,7 +675,7 @@ export function makeYardCats(ctx) {
         if (it.id === 'about') return;
         if (it.id === 'gift' && it.dim) { Sfx.blip(180); return; }
         ctx.fishing.close && ctx.fishing.close();
-        if (it.id === 'propose') return propose(c);
+        if (it.id === 'askout') return askOut(c);
         if (it.id === 'gift') return flirt(c, 'gift', '');
         const o = offer[+it.id.slice(1)]; flirt(c, o.s, o.line);
       },
@@ -602,14 +688,76 @@ export function makeYardCats(ctx) {
     const c = near(); if (!c) return false;
     active = c;
     if (c.wife) return ctx.fishing.menu(wifeMenu(c)) || true;
-    if (S.wife) { queue([['Goobles', '"Hey there."'], [c.def.name, pick([`${c.def.name}: "Aren't you married to ${BY[S.wife].name}? She's at the RV. Staring at us. Right now."`, `${c.def.name}: "Go home, Goobles. Your wife is waiting."`, `${c.def.name}: "I heard about the wedding! Congrats. Now shoo."`])]]); return true; }
+    if (S.gf === c.def.id) return ctx.fishing.menu(gfMenu(c)) || true;
     if (c.snub > 0) { queue([['', pick([`${c.def.name} has her back to you. She is not talking to you right now.`, `${c.def.name} is very busy staring at a wall.`, `${c.def.name}: "No."`])]]); return true; }
     if (!S.met[c.def.id] && !S.metOnce) { S.metOnce = true; ctx.toast(`${c.def.name}. ${c.def.bio}`, 4.5); }
+    if ((S.wife || S.gf) && !S.warned) { S.warned = true; ctx.toast(`Careful. ${BY[S.wife || S.gf].name} hears everything.`, 3.5); }
     return ctx.fishing.menu(flirtMenu(c)) || true;
+  }
+  // ---------- jealousy: flirting with another cat while taken ----------
+  // married: the wife storms over from the RV, fights the other cat (dust cloud, the rival flees and won't talk to you),
+  // then marches up to Goobles and scolds him. Dating: the girlfriend hears about it and the bond drops.
+  let chase = null;
+  const SCOLD = [
+    ['"A POP CAN TAB, GOOBLES. I accepted a POP CAN TAB for you."', '"You think I didn\'t see that? I see EVERYTHING. I am a CAT."', '"You\'re sleeping in the truck tonight."'],
+    ['"Who was she? No. Don\'t answer. I already handled it."', '"I leave you alone for ONE nap."', '"Go home. Now. Walk in front of me."'],
+    ['"Do you know how embarrassing that was for me? In front of the whole cul-de-sac?"', '"Gary SAW that, Goobles. GARY."', '"No fish for a week. I mean it."'],
+  ];
+  function cheated(c) {
+    if (S.gf && S.gf !== c.def.id) {
+      const g = BY[S.gf]; if (Math.random() < 0.6) { S.bond = Math.max(0, S.bond - 25); persist(); ctx.toast(`Word gets back to ${g.name}. Bond ${Math.round(S.bond)}%`, 3.5); }
+      return;
+    }
+    if (!S.wife || S.wife === c.def.id) return;
+    const w = CATLIST.find((k) => k.def.id === S.wife); if (!w || chase) return;
+    // if the RV is far away she turns up at the edge of view, so the scene plays out right here
+    if (Math.hypot(c.x - w.x, c.z - w.z) > 24) { const a = Math.random() * Math.PI * 2; for (let k = 0; k < 8; k++) { const x = c.x + Math.cos(a + k) * 18, z = c.z + Math.sin(a + k) * 18; if (!collide(x, z, 0.4).hit) { w.x = x; w.z = z; break; } } }
+    chase = { w, rival: c, phase: 'run', t: 0 };
+    emote(w, 'disgust', 60);
+    ctx.banner && ctx.banner(`${w.def.name.toUpperCase()} SAW THAT`, 'uh oh', 3);
+    try { Sfx.meow('yowl', 1.3); } catch (e) { /* audio off */ }
+  }
+  function moveTo(w, tx, tz, speed, dt) {
+    const dx = tx - w.x, dz = tz - w.z, d = Math.hypot(dx, dz); if (d < 1e-3) return d;
+    const sp = Math.min(d, speed * dt), r = collide(w.x + dx / d * sp, w.z + dz / d * sp, 0.3);
+    w.x = r.x; w.z = r.z; w.yaw = Math.atan2(dx, dz); return d;
+  }
+  function updateChase(dt) {
+    const ch = chase, w = ch.w, rv = ch.rival; ch.t += dt;
+    if (ch.phase === 'run') {                     // storm over to the other cat
+      if (moveTo(w, rv.x, rv.z, 5.2, dt) < 0.7 || ch.t > 20) { ch.phase = 'fight'; ch.t = 0; rv.snub = 0; try { Sfx.meow('hiss', 1.2); } catch (e) { /* audio off */ } }
+    } else if (ch.phase === 'fight') {            // cat fight: a spinning dust cloud, hisses, the rival gets knocked about
+      const a = ch.t * 14;
+      w.x = rv.x + Math.cos(a) * 0.35; w.z = rv.z + Math.sin(a) * 0.35; w.yaw = a; rv.yaw = -a;
+      if (ctx.puff && Math.random() < dt * 30) ctx.puff('dust', rv.x + (Math.random() - 0.5) * 0.8, 0.3 + Math.random() * 0.4, rv.z + (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 2, 0.6, (Math.random() - 0.5) * 2, 0.8, 0.7);
+      if (Math.random() < dt * 4) { try { Sfx.meow(Math.random() < 0.5 ? 'hiss' : 'yowl', 1.1 + Math.random() * 0.4); if (Math.random() < 0.5) Sfx.punch(); } catch (e) { /* audio off */ } }
+      if (ch.t > 2.6) {
+        ch.phase = 'flee'; ch.t = 0; emote(rv, 'broken', 4); rv.snub = 120;
+        S.aff[rv.def.id] = Math.max(0, (S.aff[rv.def.id] || 0) - 40); persist();
+        // the rival bolts to the far side of her lawn
+        const ax = rv.x - P.x, az = rv.z - P.z, l = Math.hypot(ax, az) || 1; ch.fx = rv.yard.x + ax / l * 1.2; ch.fz = rv.yard.z + az / l * 1.2;
+        if (collide(ch.fx, ch.fz, 0.4).hit) { ch.fx = rv.yard.x; ch.fz = rv.yard.z; }
+        ctx.toast(`${rv.def.name} loses the fight and runs off. She will not be talking to you for a while.`, 3.5);
+      }
+    } else if (ch.phase === 'flee') {             // rival runs off, the wife turns on Goobles
+      moveTo(rv, ch.fx, ch.fz, 4, dt);
+      const tx = P.car ? P.car.x : P.x, tz = P.car ? P.car.z : P.z;
+      if (moveTo(w, tx, tz, 4.2, dt) < 1.1 || ch.t > 15) {
+        ch.phase = 'scold'; w.yaw = Math.atan2(tx - w.x, tz - w.z);
+        const s = pick(SCOLD), n = w.def.name;
+        queue([[n, `${n}: ${s[0]}`], ['Goobles', pick(['"It\'s not what it looked like."', '"I was just being friendly!"', '"She started it."', '*stares at his feet*'])], [n, `${n}: ${s[1]}`], [n, `${n}: ${s[2]}`]], () => {
+          S.cheats = (S.cheats || 0) + 1; persist();
+          ch.phase = 'home'; w.emo.visible = false; emote(w, 'disgust', 3);
+          ctx.toast(`${n} stomps back to the RV.`, 3);
+        });
+      }
+    } else if (ch.phase === 'home') {             // walk back to the RV, then life goes on
+      if (moveTo(w, w.home.x, w.home.z, 2.2, dt) < 0.3 || Math.hypot(P.x - w.x, P.z - w.z) > SHOW_R - 2) { w.x = w.home.x; w.z = w.home.z; w.st = 'idle'; w.t = 3; chase = null; }
+    }
   }
   function prompt() {
     const c = near(); if (!c) return '';
-    return c.wife ? `E: Talk to ${c.def.name} ♥` : `E: Flirt with ${c.def.name}`;
+    return c.wife ? `E: Talk to ${c.def.name} ♥` : S.gf === c.def.id ? `E: Date ${c.def.name} ♥` : `E: Flirt with ${c.def.name}`;
   }
 
   function update(dt) {
@@ -617,6 +765,7 @@ export function makeYardCats(ctx) {
     const L = ctx.light ? ctx.light() : null;
     if (L) _c.setRGB(1, 1, 1).lerp(L.color, 0.25 * (1 - L.k)).multiplyScalar(L.k);
     const px = ctx.px(), pz = ctx.pz();
+    if (chase && !G.paused) updateChase(dt);
     for (const c of CATLIST) {
       const d = Math.hypot(px - c.x, pz - c.z), show = c.ready && d < SHOW_R && !(ctx.inside && ctx.inside());
       c.root.visible = show;
@@ -627,7 +776,8 @@ export function makeYardCats(ctx) {
       // behaviour: face Goobles when he's close (back to him while snubbing), otherwise idle and stroll round the yard
       let want = c.yaw, moving = false;
       const pd = Math.hypot(P.x - c.x, P.z - c.z);
-      if (pd < 5 && !P.car) { want = Math.atan2(P.x - c.x, P.z - c.z) + (c.snub > 0 ? Math.PI : 0); c.st = 'idle'; c.t = Math.max(c.t, 2); }
+      if (chase && (chase.w === c || (chase.rival === c && chase.phase !== 'run'))) { want = c.yaw; moving = chase.phase !== 'scold'; }
+      else if (pd < 5 && !P.car) { want = Math.atan2(P.x - c.x, P.z - c.z) + (c.snub > 0 ? Math.PI : 0); c.st = 'idle'; c.t = Math.max(c.t, 2); }
       else if (c.st === 'walk') {
         const dx = c.tx - c.x, dz = c.tz - c.z, dd = Math.hypot(dx, dz);
         if (dd < 0.1 || (c.t -= dt) <= 0) { c.st = 'idle'; c.t = 3 + rng() * 6; }
@@ -640,9 +790,13 @@ export function makeYardCats(ctx) {
       if (pd < 0.55 && !P.car && pd > 1e-3) { const k = 0.55 / pd; P.x = c.x + (P.x - c.x) * k; P.z = c.z + (P.z - c.z) * k; }   // Goobles can't walk through her
       c.root.position.set(c.x, 0, c.z); c.body.rotation.y = c.yaw;
       if (c.wife && !c.emo.visible && rng() < dt * 0.08) emote(c, 'wife', 2);
+      if (c.wife && !chase) {   // welcome home: once each time Goobles comes back after being away a while
+        if (pd > 30) c.away = (c.away || 0) + dt;
+        else if (pd < 9 && c.away > 45) { c.away = 0; emote(c, 'swoon', 3); play(c, 'Wave', 0.15, true); ctx.toast(pick([`${c.def.name}: "You're home!"`, `${c.def.name}: "Took you long enough."`, `${c.def.name}: "There's my idiot."`, `${c.def.name}: "Did you bring fish?"`]), 3); }
+      }
       if (d < ANIM_R && c.mixer) {
-        if (c.cur !== c.acts.Wave || c.cur.time >= c.cur.getClip().duration - 0.02) play(c, moving ? 'Walk' : 'Idle');
-        if (moving && c.cur) c.cur.timeScale = 1.1;
+        if (c.cur !== c.acts.Wave || c.cur.time >= c.cur.getClip().duration - 0.02) play(c, chase && moving && (chase.w === c || chase.rival === c) ? 'Run' : moving ? 'Walk' : 'Idle');
+        if (moving && c.cur) c.cur.timeScale = chase && (chase.w === c || chase.rival === c) ? 1.6 : 1.1;
         c.mixer.update(dt);
       }
       if (L && c.mat) c.mat.color.copy(_c);
@@ -653,9 +807,13 @@ export function makeYardCats(ctx) {
     S, cats: CATLIST, CATS, STYLES, update, interact, prompt, outcome: (id, style, roll) => outcome(BY[id], style, roll),
     flirt: (id, style) => { const c = CATLIST.find((k) => k.def.id === id); if (c) flirt(c, style, pick(STYLES[style] ? STYLES[style].lines : ['...'])); return c ? aff(id) : -1; },
     propose: (id) => { const c = CATLIST.find((k) => k.def.id === id); if (c) propose(c); },
+    askOut: (id) => { const c = CATLIST.find((k) => k.def.id === id); if (c) askOut(c); },
+    date: (id, dateId) => { const c = CATLIST.find((k) => k.def.id === id); if (c) goOnDate(c, DATES.find((d) => d.id === dateId) || DATES[2]); },
+    cheat: (id) => { const c = CATLIST.find((k) => k.def.id === id); if (c) cheated(c); },
+    get chase() { return chase; }, DATES,
     get template() { return template; },
     get pending() { return pending; },
-    reset() { Object.assign(S, { aff: {}, wife: null, met: {}, groomDay: 0, flirts: 0, rejections: 0, cool: {}, last: {} }); persist(); for (const c of CATLIST) { c.wife = false; c.snub = 0; c.home = c.yard; c.x = c.yard.x; c.z = c.yard.z; } },
+    reset() { chase = null; Object.assign(S, { aff: {}, wife: null, gf: null, bond: 0, dates: 0, dateAt: 0, warned: false, met: {}, groomDay: 0, flirts: 0, rejections: 0, cool: {}, last: {} }); persist(); for (const c of CATLIST) { c.wife = false; c.snub = 0; c.home = c.yard; c.x = c.yard.x; c.z = c.yard.z; } },
   };
   return api;
 }
