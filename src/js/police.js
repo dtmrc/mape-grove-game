@@ -495,7 +495,7 @@ export function makePolice(A) {
   function moveCop(o, sp, dt, yaw = o.yaw) {
     o.x += Math.sin(yaw) * sp * dt; o.z += Math.cos(yaw) * sp * dt;
     const q = A.collide(o.x, o.z, 0.32); o.x = q.x; o.z = q.z;
-    for (const c of cars) if (!c.dead) for (const [cx, cz] of A.carCircles(c)) {
+    for (const c of (A.carsNear ? A.carsNear(o.x, o.z, 8) : cars)) if (!c.dead) for (const [cx, cz] of A.carCircles(c)) {
       const dx = o.x - cx, dz = o.z - cz, dd = Math.hypot(dx, dz), m = c.spec.wid / 2 + 0.3;
       if (dd < m && dd > 1e-4) { o.x = cx + dx / dd * m; o.z = cz + dz / dd * m; }
     }

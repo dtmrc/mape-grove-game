@@ -164,7 +164,7 @@ export function makeTraffic(api) {
   }
 
   function mainBusy(j, me) {
-    const cars = api.cars; if (!cars) return false;
+    const cars = api.carsNear ? api.carsNear(j.x, j.z, 36) : api.cars; if (!cars) return false;   // dyngrid: only the cars around the junction
     for (const o of cars) {
       if (o === me || o.dead) continue;
       const dx = j.x - o.x, dz = j.z - o.z, d = Math.hypot(dx, dz);
@@ -206,5 +206,6 @@ export function makeTraffic(api) {
   }
   const T = { footBlock, build, update, limit, queued, signal, junctions: () => J, stops: () => stopList, hideStop, stopParts: { poleGeo, poleMat, signGeo, signMat } };
   if (typeof window !== 'undefined') window.__TC = T;
+  T.api = api;
   return T;
 }

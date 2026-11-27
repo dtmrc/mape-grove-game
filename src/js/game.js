@@ -37,6 +37,7 @@ import { makePolice } from './police.js'; // police
 import { makeCarPhys } from './carphys.js'; // driving
 import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // remodeled cars (src/models/vehicles)
 import { EDGES as CP_EDGES } from './world.js'; // driving
+import { makeDynGrid } from './dyngrid.js'; // broad phase for cars + peds
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
 import { makeSpawnView } from './spawnview.js'; // cars spawn / despawn out of sight
 import { makeOfficer } from './officer.js';
@@ -344,7 +345,7 @@ function spawnTraffic(type) {
     const t = 0.3 + Math.random() * 0.4;
     const x = A.x + (B.x - A.x) * t - dz * a.off, z = A.z + (B.z - A.z) * t + dx * a.off;
     if (!Number.isFinite(x) || !Number.isFinite(z)) continue; // zero-length edge or edge without a width (rescued/deleted roads): NaN would spread to every car via collisions
-    if (!SV_.hidden(x, z, 35) || cars.some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue; // spawnview.js: out of sight (was 25 m from where Goobles last stood, even while driving)
+    if (!SV_.hidden(x, z, 35) || CARG.near(x, z, 10, _bSp).some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue; // spawnview.js: out of sight (was 25 m from where Goobles last stood, even while driving)
     const c = spawnCar(type, x, z, Math.atan2(dx, dz), { driver: 'ai' });
     c.ai = { ...a, cruise: 8 + Math.random() * 4 };
     return c;
@@ -353,6 +354,12 @@ function spawnTraffic(type) {
 
 // ---------------- peds ----------------
 const peds = [];
+// dyngrid: cars and peds in a spatial grid, refilled at the start of each phase that moves them (updatePlayer, updateCars,
+// interactions). Every "for each car / ped near X" below asks the grid, so the cost follows what is nearby, not the totals.
+const CARG = makeDynGrid(8), PEDG = makeDynGrid(8);
+const _bTC = [], _bSp = [], _bEx = [], _bExP = [], _bLane = [], _bLaneP = [], _bFoot = [], _bPaw = [], _bCC = [], _bCP = [], _bCat = [], _bCop = [];
+function dynSync() { CARG.fill(cars); PEDG.fill(peds); }
+TC.api.carsNear = (x, z, r) => CARG.near(x, z, r, _bTC);
 function attachPed(p) {
   // put a walker on the shoulder of the nearest road
   const n = nearestNode(p.x, p.z), opts = roadOpts(n, -1), e = opts[(Math.random() * opts.length) | 0];
@@ -810,8 +817,8 @@ function explode(c) {
   Sfx.boom(); shake(0.9);
   const d = Math.hypot(px() - c.x, pz() - c.z);
   if (d < 6) { hurt(P.car === c ? 60 : 45 * (1 - d / 6), true); if (P.car === c) exitCar(); P.down = 1.5; }
-  for (const p of peds) if (Math.hypot(p.x - c.x, p.z - c.z) < 6) knock(p, p.x - c.x, p.z - c.z, 8);
-  for (const o of cars) if (o !== c && Math.hypot(o.x - c.x, o.z - c.z) < 6) damageCar(o, 30);
+  for (const p of PEDG.near(c.x, c.z, 8, _bExP)) if (Math.hypot(p.x - c.x, p.z - c.z) < 6) knock(p, p.x - c.x, p.z - c.z, 8);
+  for (const o of CARG.near(c.x, c.z, 8, _bEx)) if (o !== c && Math.hypot(o.x - c.x, o.z - c.z) < 6) damageCar(o, 30);
   if (c.role === 'patrol') addHeat(1, 'blowing up a golf cart');
 }
 
@@ -825,8 +832,9 @@ function inLane(x, z, w, cx, cz, fx, fz, range) { const dx = x - cx, dz = z - cz
 function blockedAhead(c, range) { // P13: no per-call closure
   const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw), cx = c.x, cz = c.z;
   if (!P.car && inLane(P.x, P.z, 1.6, cx, cz, fx, fz, range)) return 'player';
-  for (let i = 0; i < cars.length; i++) { const o = cars[i]; if (o !== c && inLane(o.x, o.z, 2.0, cx, cz, fx, fz, range)) return o === P.car ? 'player' : 'car'; }
-  for (let i = 0; i < peds.length; i++) { const p = peds[i]; if (p.state !== 'down' && inLane(p.x, p.z, 1.4, cx, cz, fx, fz, range)) return 'ped'; }
+  const R = range + 5, L = CARG.near(cx, cz, R, _bLane), Q = PEDG.near(cx, cz, R, _bLaneP);   // dyngrid: +5 m covers this frame's movement since the fill
+  for (let i = 0; i < L.length; i++) { const o = L[i]; if (o !== c && inLane(o.x, o.z, 2.0, cx, cz, fx, fz, range)) return o === P.car ? 'player' : 'car'; }
+  for (let i = 0; i < Q.length; i++) { const p = Q[i]; if (p.state !== 'down' && inLane(p.x, p.z, 1.4, cx, cz, fx, fz, range)) return 'ped'; }
   return false;
 }
 function trafficAI(c, dt) {
@@ -977,6 +985,7 @@ function respawn(title, sub, at) {
 }
 
 function updatePlayer(dt) {
+  dynSync();
   P.invuln -= dt; P.lock -= dt;
   // a respawn, arrest or jail hand-off can zero P.down mid-tumble: stand the cat back up instead of leaving him flat
   if (P.lying && !(P.down > 0)) { P.lying = false; cat.userData.body.rotation.x = 0; }
@@ -1035,7 +1044,7 @@ function updatePlayer(dt) {
   // car bodies are solid on foot
   // (an oriented box, 2026-11-27: the two end circles left a gap in the middle of a long car's side he could run through)
   if (!INT.inside) { TC.footBlock(P, 0.22); BRK.footBlock(P, 0.22); } // signal/stop poles + knocked-but-standing lamps and signs
-  if (P.y < 1.1) for (const c of cars) {
+  if (P.y < 1.1) for (const c of CARG.near(P.x, P.z, 8, _bFoot)) {
     const dx = P.x - c.x, dz = P.z - c.z, hl = c.spec.len / 2 + 0.22, hw = c.spec.wid / 2 + 0.22;
     if (dx * dx + dz * dz > hl * hl + hw * hw) continue;
     const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw), lz = dx * fx + dz * fz, lx = dx * fz - dz * fx;   // along / across the car
@@ -1053,7 +1062,7 @@ function updatePlayer(dt) {
       P.punchHit = true;
       const fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
       police.paw(fx, fz); // police
-      for (const p of peds) {
+      for (const p of PEDG.near(P.x, P.z, 3, _bPaw)) {
         const dx = p.x - P.x, dz = p.z - P.z;
         if (Math.hypot(dx, dz) < 1.4 && dx * fx + dz * fz > 0) {
           if (p.npc) { toast(p.npc === 'nana' ? 'Nana: "Not in the face, sweetie."' : 'They dodge with practiced ease.'); continue; }
@@ -1095,8 +1104,9 @@ function nearNpc() {
 
 // ---------------- collisions between cars and with peds ----------------
 function interactions(dt) {
-  for (let a = 0; a < cars.length; a++) for (let b = a + 1; b < cars.length; b++) {
-    const A = cars[a], B = cars[b];
+  dynSync();
+  for (let a = 0; a < cars.length; a++) { const A = cars[a], nb = CARG.near(A.x, A.z, 10, _bCC); for (let b = 0; b < nb.length; b++) {   // dyngrid: was every pair of cars on the map
+    const B = nb[b]; if (B._gi <= a) continue;
     if (Math.abs(A.x - B.x) > 7 || Math.abs(A.z - B.z) > 7) continue;
     const ra = A.spec.wid / 2, rb = B.spec.wid / 2;
     for (const [ax, az] of carCircles(A)) for (const [bx, bz] of carCircles(B)) {
@@ -1121,14 +1131,15 @@ function interactions(dt) {
         }
       }
     }
-  }
+  } }
   // cars vs peds and the cat
   for (const c of cars) {
     const sp = Math.hypot(c.vx, c.vz);
     if (sp < 3) continue;
+    const nearPeds = PEDG.near(c.x, c.z, c.spec.len / 2 + 4, _bCP);
     for (const [cx, cz] of carCircles(c)) {
       const r = c.spec.wid / 2 + 0.3;
-      for (const p of peds) {
+      for (const p of nearPeds) {
         if (p.state === 'down' || p.npc) continue;
         if (Math.hypot(p.x - cx, p.z - cz) < r) {
           if (police.runOver(p, c, cx, cz, sp)) { // police: tumble
@@ -1144,7 +1155,7 @@ function interactions(dt) {
     }
   }
   // the cat bumps peds out of the way
-  if (!P.car) for (const p of peds) {
+  if (!P.car) for (const p of PEDG.near(P.x, P.z, 3, _bCat)) {
     const dx = p.x - P.x, dz = p.z - P.z, d = Math.hypot(dx, dz), m = p.r + 0.22;
     if (d < m && d > 1e-4) { p.x = P.x + dx / d * m; p.z = P.z + dz / d * m; }
   }
@@ -1479,6 +1490,7 @@ function updateHeat(dt) {
 function sirenNear(cru) { let near = 999; for (const c of patrolList) near = Math.min(near, Math.hypot(c.x - px(), c.z - pz())); for (const c of cru) near = Math.min(near, Math.hypot(c.x - px(), c.z - pz())); return near; } // P13: nearest pursuer without spread / map allocations
 
 function updateCars(dt) {
+  dynSync();
   for (let i = 0; i < cars.length; i++) { const c = cars[i]; // P13: index loops, no slice / filter copies (nothing in here removes a car)
     if (c.driver === 'ai' && c.ai) trafficAI(c, dt);
     else if (c.driver === 'patrol') patrolAI(c, dt);
@@ -1679,7 +1691,7 @@ const haunted = makeHaunted({ scene, G, P, cat, places, NPC, fishing, quests, ca
 const otters = makeOtters({ scene, G, P, T, Sfx, blocked, places, camera, px: () => px(), pz: () => pz(), inside: () => INT.inside || jail.active() });
 window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
-const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time, hidden: SV_.hidden });
+const police = makePolice({ carsNear: (x, z, r) => CARG.near(x, z, r, _bCop), scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time, hidden: SV_.hidden });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block
@@ -1703,7 +1715,7 @@ const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, place
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
 quests.init({ G, P, hit, pressed, hud, checkMark, giverMarks, fishing, jail, ui, Sfx, toast, isTouch, px, pz, mission: () => mission, dev: () => dev }); window.__G.quests = quests; // quests
-Object.assign(window.__G, { spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
+Object.assign(window.__G, { dyn: { cars: CARG, peds: PEDG }, spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
 
 // P17: pre-warm the shader programs that would otherwise compile mid-game (first officer, HP bar, muzzle flash, tracer,
 // plane, contrail, waypoint beam): hidden stand-ins go into the scene for one renderer.compile against the HDR target.
