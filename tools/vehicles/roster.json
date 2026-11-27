@@ -372,5 +372,16 @@
   "top": 49,
   "acc": "9.6 s",
   "mass": 2050
+ },
+ "hoacart": {
+  "file": "HoaCart",
+  "name": "Fairway Patrol",
+  "year": 2019,
+  "era": "new",
+  "cls": "Cart",
+  "real": "HOA security golf cart (Club Car Precedent style)",
+  "top": 8,
+  "acc": "7.0 s",
+  "mass": 450
  }
 }

@@ -15,6 +15,7 @@ const GAME = {
   sport: ['stallion99', 'comet17', 'corsair24'],
   suv: ['pathway97', 'tahoma04', 'grand16', 'crest12', 'escalon24', 'rambla24'],
   pickup: ['k15_95', 'f15_04', 'rampart16', 'f15_24'],
+  cart: ['hoacart'],
   police: ['crownpi08', 'chaserpd18', 'tahomappv04', 'pathwaypiu23', 'blazonppv23'],
 };
 const LIVERY = new Set(GAME.police);                       // keep their own paint (black-and-white, decals)
@@ -44,7 +45,7 @@ const glbIn = (dir) => path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
   for (const id of ids) {
     const rel = (m) => '/tmp/' + path.relative(TMP, glbIn(path.join(TMP, id + '-' + m)));
-    const r = await p.evaluate(([a, w, o]) => window.bake(a, w, o), [rel('body'), rel('wheel'), { police: clsOf(id) === 'police', livery: LIVERY.has(id), ratio: RATIO, err: ERR, far: FAR, maxTex: 512, maxPaint: 512 }]);
+    const r = await p.evaluate(([a, w, o]) => window.bake(a, w, o), [rel('body'), rel('wheel'), { police: clsOf(id) === 'police' || clsOf(id) === 'cart', livery: LIVERY.has(id), ratio: RATIO, err: ERR, far: FAR, maxTex: 512, maxPaint: 512 }]);
     const raw = path.join(TMP, id + '-game.glb'); fs.writeFileSync(raw, Buffer.from(r.glb, 'base64'));
     const doc = await io.read(raw);
     doc.createExtension(EXTTextureWebP).setRequired(true);
