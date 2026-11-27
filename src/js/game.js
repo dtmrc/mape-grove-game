@@ -525,17 +525,21 @@ const MISSIONS = {
       objective("Get in Nana's wagon.");
     },
     update(dt) {
-      if (this.car.dead) return endMission(false, 'The casseroles are toast.');
-      if (P.car !== this.car) { checkMark.visible = false; G.check = { x: this.car.x, z: this.car.z, r: 1, blipOnly: true, label: "Nana's wagon", col: '#ffd23f' }; }
+      if (this.car.dead && !this.wrecked) { // the wagon blew up: Goobles saved the casseroles, any ride (or paws) will do now
+        this.wrecked = true; if (this.stage === 'car') { this.stage = 'drive'; this.timer = 130; } this.timer += 20; G.check = null; this.next();
+        toast('The wagon is toast, but you saved the casseroles! Grab any car, or run them over on foot. (+20 s)', 5); Sfx.blip(520);
+      }
+      const ride = this.wrecked ? P.car : this.car, onFoot = this.wrecked && !P.car, mine = this.wrecked || P.car === this.car;
+      if (this.wrecked) { /* no wagon to point at */ } else if (P.car !== this.car) { checkMark.visible = false; G.check = { x: this.car.x, z: this.car.z, r: 1, blipOnly: true, label: "Nana's wagon", col: '#ffd23f' }; }
       else if (this.stage !== 'car' && (!G.check || G.check.blipOnly)) this.next();
       if (this.stage === 'car') { if (P.car === this.car) { this.stage = 'drive'; this.timer = 130; this.next(); } return; }
       this.timer -= dt;
       if (this.timer <= 0) return endMission(false, 'The casseroles went cold.');
-      if (P.car !== this.car) objective("Get back in Nana's wagon!");
-      else objective(`Deliver a casserole to ${this.stops[0].who}. (${3 - this.stops.length + 1}/3)`);
-      const s = this.stops[0];
-      if (G.check && !G.check.blipOnly) G.check.hint = Math.abs(this.car.speed) >= 6 && Math.hypot(this.car.x - s.x, this.car.z - s.z) < 18 ? 'SLOW DOWN' : '';
-      if (P.car === this.car && Math.hypot(this.car.x - s.x, this.car.z - s.z) < 4.5 && Math.abs(this.car.speed) < 6) {
+      if (!mine) objective("Get back in Nana's wagon!");
+      else objective(`Deliver a casserole to ${this.stops[0].who}${this.wrecked ? (onFoot ? ' on foot' : ' in any car') : ''}. (${3 - this.stops.length + 1}/3)`);
+      const s = this.stops[0], wx = ride ? ride.x : px(), wz = ride ? ride.z : pz(), wv = ride ? Math.abs(ride.speed) : 0;
+      if (G.check && !G.check.blipOnly) G.check.hint = ride && wv >= 6 && Math.hypot(wx - s.x, wz - s.z) < 18 ? 'SLOW DOWN' : '';
+      if (mine && Math.hypot(wx - s.x, wz - s.z) < 4.5 && wv < 6) {
         this.stops.shift(); Sfx.blip(880); addCash(10);
         toast(`${s.who}: "Tell Nana thank you!" (+$10 tip)`);
         if (!this.stops.length) return endMission(true, 'Nana is so proud.');
@@ -569,16 +573,17 @@ const MISSIONS = {
         for (const c of [this.car, ...this.rivals]) { c.vx = c.vz = 0; c.speed = 0; }
         return;
       }
-      if (this.car.dead) return endMission(false, 'Wrecked.');
-      this.out = P.car !== this.car ? (this.out || 0) + dt : 0; // grace: a cuff or a blast throws you out, you get a few seconds to climb back in
-      if (this.out > 6) return endMission(false, 'You left your ride.');
+      if (this.car.dead && !this.wrecked) { this.wrecked = true; toast('Wrecked! Grab any car and keep racing.', 4); Sfx.blip(520); }
+      this.out = !P.car || (!this.wrecked && P.car !== this.car) ? (this.out || 0) + dt : 0; // no longer a fail: you just fall behind
+      const me0 = { x: px(), z: pz() };
+      if (this.rivals.every((r) => r.done)) { this.late = (this.late || 0) + dt; if (this.late > 45) return endMission(false, 'The kids finished ages ago. You owe them Slurpees.'); }
       for (const r of this.rivals) {
         if (r.cp >= this.cps.length) continue;
         const c = this.cps[r.cp];
         if (Math.hypot(r.x - c.x, r.z - c.z) < 7) { r.cp++; if (r.cp >= this.cps.length) { r.done = true; } }
       }
       const c = this.cps[this.cp];
-      if (Math.hypot(this.car.x - c.x, this.car.z - c.z) < 6) {
+      if (Math.hypot(me0.x - c.x, me0.z - c.z) < 6) {
         this.cp++; Sfx.blip(900);
         if (this.cp >= this.cps.length) {
           const ahead = this.rivals.filter((r) => r.done).length;
@@ -587,9 +592,9 @@ const MISSIONS = {
         const n = this.cps[this.cp]; setCheck(n.x, n.z, 5);
       }
       const prog = (o, cp) => cp * 1000 - Math.hypot(o.x - this.cps[Math.min(cp, this.cps.length - 1)].x, o.z - this.cps[Math.min(cp, this.cps.length - 1)].z);
-      const me = prog(this.car, this.cp);
+      const me = prog(me0, this.cp);
       this.place = 1 + this.rivals.filter((r) => prog(r, r.cp) > me).length;
-      objective(this.out > 0 ? `Get back in the car! (${Math.ceil(6 - this.out)})` : `Slurpee Sprint: checkpoint ${this.cp + 1}/${this.cps.length}. Position ${this.place}/3`);
+      objective(this.out > 0 ? (this.wrecked ? 'Grab any car and keep racing!' : 'Get back in the car!') : `Slurpee Sprint: checkpoint ${this.cp + 1}/${this.cps.length}. Position ${this.place}/3`);
     },
     cleanup() { for (const r of this.rivals) { r.driver = null; r.role = null; } if (this.car) this.car.role = null; },
   }),
