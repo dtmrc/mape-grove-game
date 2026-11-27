@@ -13,6 +13,8 @@ import { lambert, basic, phong } from './gfx.js';
 import { colliders, lights, CAVE_SPOT } from './world.js';
 import { heightAt } from './terrain.js';
 import * as INTM from './interiors.js';
+import { buildCave } from './cavegen.js';
+import { dressLair, dressMouth } from './cavedress.js';
 
 const KEY = 'mg-cave-v1';
 const TUNNEL_DEPTH = 340, LAIR_DEPTH = 1940;
@@ -451,166 +453,27 @@ function resample(P, step) {
   return { pts: out, len };
 }
 const TUN_SIZE = [96, 116];
-const TUN_CTRL = [[0, 59], [0, 46], [-9, 35], [-26, 31], [-37, 19], [-31, 5], [-12, 0], [10, 6], [29, 1], [38, -13], [29, -27], [9, -27], [-11, -33], [-27, -39], [-33, -48], [-21, -53]];
-const bump = (s, c, w) => { const d = (s - c) / w; return d * d < 1 ? (1 - d * d) ** 2 : 0; };
 
 function buildTunnel(api) {
   return ({ THREE: _T, T }) => {
     sd = 77; textures();
-    const root = new THREE.Group();
-    const { pts, len } = resample(catmull(TUN_CTRL, 8), 2.5);
-    const N = pts.length;
-    const GROT = [len * 0.3, len * 0.62];                    // two wider grottos with mushrooms
-    const hw = (s) => Math.max(1.5, 1.95 + 0.55 * Math.sin(s * 0.11) + 0.35 * Math.sin(s * 0.37 + 1) + 2.4 * bump(s, GROT[0], 14) + 2.0 * bump(s, GROT[1], 12) + 1.6 * bump(s, len, 10) - 0.5 * bump(s, 0, 6));
-    const ch = (s) => 3.15 + 0.4 * Math.sin(s * 0.07) + 1.4 * bump(s, GROT[0], 14) + 1.1 * bump(s, GROT[1], 12) + 0.8 * bump(s, len, 10);
-    api.tun = { pts, len, hw, ch };
-    const at = (s, lat, y = 0) => { const k = clamp(Math.round(s / 2.5), 0, N - 1), p = pts[k]; return [p.x - p.tz * lat, y, p.z + p.tx * lat, p]; };
-    // 2026-11-27 rebuild: a ring every 1.25 m, 17 points over the arch, displaced by layered rock noise + strata; the floor
-    // dips to a gravel apron at the walls. Vertex colours carry mineral patches, wet streaks and crevice darkening; the
-    // room bake (roombake.js) lights it from the grotto glows, and the carried torch stays a live light.
-    const pts2 = resample(catmull(TUN_CTRL, 8), 1.25).pts, N2 = pts2.length, K = 16;
-    const prof = (k, w, c) => {   // lateral offset (- = left) and height of profile point k (0 = left floor edge, K = right)
-      const a = Math.PI * k / K, sa = Math.sin(a);
-      return [-Math.cos(a) * w * (1 + 0.14 * Math.sin(a * 2) ** 2), c * Math.pow(sa, 0.72)];
-    };
-    const ring = pts2.map((p) => {
-      const w = hw(p.s), c = ch(p.s), nx = -p.tz, nz = p.tx, out = [];
-      for (let k = 0; k <= K; k++) {
-        const [lat, y] = prof(k, w, c);
-        const x = p.x + nx * lat, z = p.z + nz * lat;
-        // inward normal of the arch (towards the tunnel axis, roughly)
-        const il = -lat, iy = (c * 0.45 - y), il2 = Math.hypot(il, iy) || 1;
-        let d = rockN(x * 0.55, y * 0.7, z * 0.55) * 0.42 + rockN(x * 1.7, y * 1.9, z * 1.7) * 0.14 + Math.sin(y * 7.5 + rockN(x * 0.3, 0, z * 0.3) * 4) * 0.045;
-        if (y < 1.3) d = Math.max(-0.06, Math.min(0.08, d * 0.3)) - 0.05;   // keep the walk-in width honest down low (cols sit at 0.93 w)
-        out.push([x + nx * (il / il2) * d, y + (iy / il2) * d, z + nz * (il / il2) * d]);
-      }
-      return out;
-    });
-    const wp = [], wu = [], wc = [], fp = [], fu = [], fc = [];
-    const col = new THREE.Color();
-    const shade = (x, y, z, c, k) => {
-      const n = rockN(x * 0.35 + 7, y * 0.5, z * 0.35), m = rockN(x * 2.3, y * 0.4 + 3, z * 2.3);
-      let v = 0.66 + n * 0.22 + m * 0.07;
-      v *= 0.62 + 0.38 * Math.min(1, y / 0.9);                     // dark where the wall meets the gravel
-      v *= 1 - 0.2 * Math.max(0, (y - c * 0.8) / (c * 0.2 + 1e-3)); // sooty crown
-      const wet = Math.max(0, rockN(x * 0.9, 0, z * 0.9) - 0.25) * 1.6;   // seeping streaks
-      const r = v * (1.04 - wet * 0.1 + Math.max(0, m) * 0.12), g = v * (0.95 - wet * 0.04), b = v * (0.86 + wet * 0.1);
-      return col.setRGB(r, g, b);
-    };
-    for (let i = 0; i < N2 - 1; i++) {
-      const A = ring[i], B = ring[i + 1], cA = ch(pts2[i].s), cB = ch(pts2[i + 1].s);
-      let vA = 0, vB = 0;
-      for (let j = 0; j < K; j++) {
-        const a = A[j], b = A[j + 1], c = B[j], d = B[j + 1];
-        wp.push(...a, ...c, ...b, ...b, ...c, ...d);
-        const la = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), lb = Math.hypot(d[0] - c[0], d[1] - c[1], d[2] - c[2]);
-        const u0 = pts2[i].s / 3, u1 = pts2[i + 1].s / 3, v0 = vA / 2.2, v1 = (vA + la) / 2.2, w0 = vB / 2.2, w1 = (vB + lb) / 2.2;
-        wu.push(u0, v0, u1, w0, u0, v1, u0, v1, u1, w0, u1, w1);
-        vA += la; vB += lb;
-        for (const [q, cc] of [[a, cA], [c, cB], [b, cA], [b, cA], [c, cB], [d, cB]]) { shade(q[0], q[1], q[2], cc, j); wc.push(col.r, col.g, col.b); }
-      }
-      // floor: 6 strips across, a gravel apron rising a little into the wall foot, darker and wetter at the edges
-      const FS = 6, fa = [], fb = [];
-      for (let f = 0; f <= FS; f++) {
-        const t = f / FS, e = Math.abs(t - 0.5) * 2;
-        const pa = pts2[i], pb = pts2[i + 1], wa = hw(pa.s) * 1.02, wb = hw(pb.s) * 1.02, la = (t - 0.5) * 2 * wa, lb = (t - 0.5) * 2 * wb;
-        const ya = e > 0.7 ? (e - 0.7) * 0.35 : 0, yb = ya;
-        fa.push([pa.x - pa.tz * la, ya + (e > 0.4 ? Math.max(0, rockN(pa.x * 2, 1, pa.z * 2)) * 0.05 : 0), pa.z + pa.tx * la, e]);
-        fb.push([pb.x - pb.tz * lb, yb + (e > 0.4 ? Math.max(0, rockN(pb.x * 2, 1, pb.z * 2)) * 0.05 : 0), pb.z + pb.tx * lb, e]);
-      }
-      for (let f = 0; f < FS; f++) {
-        const a = fa[f], b = fa[f + 1], c = fb[f], d = fb[f + 1];
-        for (const q of [a, c, b, b, c, d]) {
-          fp.push(q[0], q[1], q[2]); fu.push(q[0] / 3, q[2] / 3);
-          const n = rockN(q[0] * 0.7, 2, q[2] * 0.7), wet = Math.max(0, rockN(q[0] * 0.4, 5, q[2] * 0.4) - 0.3);
-          const v = (0.86 + n * 0.18) * (1 - 0.3 * Math.max(0, q[3] - 0.6) / 0.4);
-          fc.push(v * (1 - wet * 0.5), v * (0.97 - wet * 0.45), v * (0.92 - wet * 0.3));
-        }
-      }
-    }
-    { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(wu, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3)); g.computeVertexNormals();
-      root.add(new THREE.Mesh(g, lambert({ map: textures().rock, vertexColors: true, side: THREE.DoubleSide }))); }
-    { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(fu, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(fc, 3)); g.computeVertexNormals();
-      root.add(new THREE.Mesh(g, lambert({ map: textures().dirt, color: 0xb0a090, vertexColors: true, side: THREE.DoubleSide }))); }
-    // boulders and scree along the wall foot, and glowing crystal clusters in the grottos
-    const rocks = [], cryst = [];
-    for (let s = 3; s < len - 3; s += 1.1) {
-      if (rr() < 0.55) {
-        const sg = rr() < 0.5 ? -1 : 1, w = hw(s), [x, , z] = at(s + rnd(-0.5, 0.5), sg * w * rnd(0.78, 0.95)), r = rnd(0.12, 0.42);
-        const g = new THREE.DodecahedronGeometry(r, 0); g.scale(rnd(0.8, 1.4), rnd(0.5, 0.9), rnd(0.8, 1.3)); g.rotateY(rnd(0, 6));
-        const k = rnd(0.42, 0.62); rocks.push(tint(placed(g, x, r * 0.35, z), new THREE.Color(k * 1.05, k, k * 0.9).getHex()));
-      }
-    }
-    root.add(merged(rocks, lambert({ vertexColors: true, flatShading: true })));
-    for (const [gs, hue] of [[GROT[0], 0x58f0d8], [GROT[1], 0x8a7aff], [len * 0.15, 0x58f0d8]]) for (let k = 0; k < 6; k++) {
-      const sg = k % 2 ? 1 : -1, w = hw(gs), [x, , z] = at(gs + rnd(-4, 4), sg * w * rnd(0.72, 0.9));
-      for (let q = 0; q < 4; q++) { const h = rnd(0.18, 0.55), g = new THREE.ConeGeometry(rnd(0.04, 0.09), h, 4); g.rotateZ(rnd(-0.5, 0.5)); g.rotateX(rnd(-0.5, 0.5)); cryst.push(tint(placed(g, x + rnd(-0.15, 0.15), h * 0.4, z + rnd(-0.15, 0.15)), hue)); }
-    }
-    root.add(merged(cryst, basic({ vertexColors: true })));
-    // end cap (a rock wall behind the rope pit)
-    const E = pts[N - 1], Ew = hw(len);
-    { const cap = M(box(Ew * 2.6, 6, 0.8), lambert({ map: textures().rock, color: 0x6a625a }), E.x + E.tx * 0.6, 3, E.z + E.tz * 0.6, root); cap.rotation.y = Math.atan2(E.tx, E.tz); }
-    // colliders: a wall box either side of every segment
-    const cols = [];
-    for (let i = 0; i < N - 1; i++) {
-      const a = pts[i], b = pts[i + 1], mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;
-      const w = hw((a.s + b.s) / 2) * 0.93 + 0.7, nx = -uz, nz = ux, rot = Math.atan2(-uz, ux);
-      for (const sg of [-1, 1]) cols.push({ kind: 'box', cx: mx + nx * sg * w, cz: mz + nz * sg * w, w: L + 0.9, d: 1.4, rot, h: 4.5 });
-    }
-    cols.push({ kind: 'box', cx: E.x + E.tx * 0.9, cz: E.z + E.tz * 0.9, w: Ew * 2.6, d: 1.0, rot: Math.atan2(-E.tz, E.tx) + Math.PI / 2, h: 4.5 });
-    // dressing: stalactites + stalagmites, old timber props, mushrooms, feathers, painted signs, daylight at the mouth
-    const drips = [], mush = [], feath = [];
-    for (let s = 4; s < len - 2; s += 3.2) {
-      const w = hw(s), c = ch(s);
-      { const lat = rnd(-w * 0.6, w * 0.6), [x, , z] = at(s, lat), h = rnd(0.25, 0.8); drips.push(tint(placed(new THREE.ConeGeometry(rnd(0.06, 0.16), h, 5), x, c - h / 2 - 0.05 - Math.abs(lat) * 0.25, z, 0, Math.PI), 0x7a7268)); }
-      if (rr() < 0.45) { const sg = rr() < 0.5 ? -1 : 1, lat = sg * w * rnd(0.72, 0.88), [x, , z] = at(s, lat), h = rnd(0.3, 0.9); drips.push(tint(placed(new THREE.ConeGeometry(rnd(0.1, 0.22), h, 5), x, h / 2, z), 0x6e665c)); }
-    }
-    root.add(merged(drips, lambert({ vertexColors: true, flatShading: true })));
-    const mushAt = [[GROT[0], 1], [GROT[0] + 6, -1], [GROT[1], -1], [GROT[1] - 5, 1], [len * 0.15, 1], [len * 0.47, -1], [len * 0.8, 1], [len - 4, -1]];
-    for (const [s, sg] of mushAt) for (let k = 0; k < 7; k++) {
-      const w = hw(s), [x, , z] = at(s + rnd(-2, 2), sg * w * rnd(0.6, 0.85)), h = rnd(0.06, 0.2), r = rnd(0.04, 0.11);
-      mush.push(tint(placed(cyl(0.012, 0.018, h, 4), x, h / 2, z), 0xbfe8e0), tint(placed(new THREE.ConeGeometry(r, r * 0.8, 6), x, h + r * 0.3, z), k % 3 ? 0x6fe8d0 : 0x9a8aff));
-    }
-    root.add(merged(mush, basic({ vertexColors: true })));
-    for (let s = len * 0.45; s < len - 3; s += 1.4) for (let k = 0; k < 2; k++) {   // a trail of chicken feathers
-      const [x, , z] = at(s + rnd(-0.6, 0.6), rnd(-1.0, 1.0)); const f = new THREE.PlaneGeometry(0.06, 0.16); f.rotateX(-Math.PI / 2); f.rotateY(rnd(0, 6)); f.translate(x, 0.012, z);
-      feath.push(tint(f, [0xf4f0e8, 0xa0683a, 0xe8e0d0][(rr() * 3) | 0]));
-    }
-    root.add(merged(feath, basic({ vertexColors: true, side: THREE.DoubleSide })));
-    const wood = lambert({ map: T.wood, color: 0x8a6a48 });
-    for (const s of [14, len * 0.22, len * 0.52, len * 0.86]) {
-      const w = hw(s), c = ch(s), [x, , z, p] = at(s, 0), ry = Math.atan2(p.tx, p.tz);
-      const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; root.add(g);
-      for (const sg of [-1, 1]) { const post = M(box(0.18, c * 0.82, 0.18), wood, sg * w * 0.78, c * 0.41, 0, g); post.rotation.z = sg * 0.05; }
-      M(box(w * 1.8, 0.2, 0.22), wood, 0, c * 0.8, 0, g);
-    }
-    const SIGNS = [[22, 'DEPTH: SOME', 1], [len * 0.36, 'TURN BACK, CAT. (DON\'T.)', -1], [len * 0.55, 'NOT A CAT DOOR', 1], [len * 0.72, 'ALMOST THERE (LIE)', -1], [len * 0.9, 'MIND THE ROPE', 1]];
-    for (const [s, t, sg] of SIGNS) {
-      const w = hw(s), [x, , z, p] = at(s, sg * (w * 1.0 - 0.05)), pl = M(new THREE.PlaneGeometry(1.5, 0.36), basic({ map: fitSign(t, null, '#e8d8b0', 256, 56), transparent: true, opacity: 0.85 }), x, 1.55, z, root);
-      pl.rotation.y = Math.atan2(p.tx, p.tz) + (sg > 0 ? -Math.PI / 2 : Math.PI / 2);
-    }
-    { const [x, , z] = at(0.5, 0), d = M(new THREE.PlaneGeometry(5, 4), basic({ color: 0xc8d8e8, transparent: true, opacity: 0.85, fog: false }), x, 2, z + 1.2, root); d.rotation.y = Math.PI; }
-    // the rope pit at the far end
-    const pit = at(len - 2.4, 0);
-    M(new THREE.CircleGeometry(1.25, 9).rotateX(-Math.PI / 2), basic({ color: 0x000000 }), pit[0], 0.015, pit[2], root);
-    M(new THREE.RingGeometry(1.2, 1.55, 9).rotateX(-Math.PI / 2), lambert({ color: 0x3a342e }), pit[0], 0.02, pit[2], root);
-    const pitGlow = new THREE.Sprite(glowMat(0x88aaff, 0.35)); pitGlow.position.set(pit[0], 0.3, pit[2]); pitGlow.scale.set(2.6, 1.0, 1); root.add(pitGlow);
-    M(cyl(0.025, 0.025, ch(len) + 0.4, 5), lambert({ color: 0xb8a070 }), pit[0] + 0.5, (ch(len) - 0.4) / 2, pit[2], root);
-    M(box(0.12, 0.7, 0.12), wood, pit[0] + 0.5 - pit[3].tz * 1.9, 0.35, pit[2] + pit[3].tx * 1.9, root);
-    cols.push({ kind: 'box', cx: pit[0], cz: pit[2], w: 1.9, d: 1.9, rot: 0, h: 0.2 });   // walk round it, not into it
+    // 2026-11-27: the tunnel is now a branching cave made from a distance field (cavegen.js): forks, loops, dead ends,
+    // chambers with pillars, pools, mist and moss. This wrapper keeps what the rest of the game talks to: api.tun (the
+    // main route, for the depth gauge and the ghost's peeks), the carried torch light and the rope at the bottom.
+    const cave = buildCave({ rockN, catmull, resample, textures, fitSign, wood: T.wood, glowSprite: (c, o) => new THREE.Sprite(glowMat(c, o)) });
+    const root = cave.root, { pts, len } = cave.main, pit = cave.pit;
+    api.tun = { pts, len, hw: () => 2, ch: (s) => cave.ceilAt(pts[clamp(Math.round(s / 2.5), 0, pts.length - 1)].x, pts[clamp(Math.round(s / 2.5), 0, pts.length - 1)].z) };
+    api.cavegen = cave;
     // the ghost peeks out of the dark twice on the way down
     const peek = makeGhost(); peek.scale.setScalar(0.95); root.add(peek); ghostAlpha(peek, 0);
     api.tunGhost = peek;
-    const L = (s, lat, c, i, y = 0.6) => { const [x, , z] = at(s, lat); return { x, y, z, c, i }; };
-    const torchL = { x: 0, y: 1.0, z: 50, c: 0xffa050, i: 1.5, flicker: true, dyn: true };   // carried: a live light, not baked
-    api.tunTorch = torchL;
-    const lightsL = [torchL, L(GROT[0], 0, 0x48d8c8, 0.55, 0.5), L(len - 2.4, 0, 0x6a8aff, 0.6, 0.4), L(GROT[1], 0, 0x7a6aff, 0.5, 0.5), L(len * 0.15, 0, 0x48d8c8, 0.3, 0.4)];
-    const spawn = { x: 0, z: 56, yaw: 0 };
+    api.tunTorch = cave.torch;
     return {
-      group: root, size: TUN_SIZE, cols, spawn, exit: { x: 0, z: 57.6, r: 0.8 }, lights: lightsL, name: 'The Hollow Deep', bake: { amb: 0.24, sky: 0x8a9ac0, ground: 0x2a2018, shadows: false, maxEdge: 1.3 },
+      group: root, size: TUN_SIZE, cols: cave.cols, collide: cave.collide, solid: cave.solid, spawn: { x: 0, z: 56, yaw: 0 }, exit: { x: 0, z: 57.6, r: 0.8 }, lights: cave.lights, name: 'The Hollow Deep',
+      bake: { amb: 0.24, sky: 0x8a9ac0, ground: 0x2a2018, shadows: false, maxEdge: 1.6 }, halos: false,
       cam: { maxDist: 2.6, height: 2.7 },
       interact: [{ id: 'rope', x: pit[0] + pit[3].tx * -1.7, z: pit[2] - pit[3].tz * 1.7, r: 1.8, label: 'Climb down the rope', onUse: () => api.descend() }],
-      update: (t) => { pitGlow.material.opacity = 0.28 + Math.sin(t * 1.3) * 0.08; },
+      update: (t) => cave.update(t, cave.torch.x, cave.torch.z, 1),
     };
   };
 }
@@ -795,6 +658,9 @@ function buildLair(api) {
       const f = new THREE.Sprite(flameMat()); f.position.set(x + ox * 1.2, 2.42, z + oz * 1.2); f.scale.set(0.28, 0.5, 1); f.userData.b = 0.5; root.add(f); flames.push(f);
     }
     const lightsL = [torchL, { x: FX, y: 1.1, z: FZ, c: 0xff8a3a, i: 2.0, flicker: true }, { x: -3, y: 2.4, z: -11, c: 0xffc070, i: 0.55, flicker: true }, { x: 11, y: 1.0, z: -10.2, c: 0xffd080, i: 0.5 }, { x: 0, y: 4.6, z: 6, c: 0x6a7aa8, i: 0.5 }, { x: 10, y: 3.5, z: 6, c: 0x6a7aa8, i: 0.35 }, ...SCONCE.map(([x, z, ry]) => ({ x: x + Math.sin(ry) * 0.45, y: 2.4, z: z + Math.cos(ry) * 0.45, c: 0xff9a48, i: 1.4, r: 0.1 }))];
+    // 2026-11-27: mist, pools under the moonlit shaft, candle shrines, cobwebs, embers, eyes in the corners (cavedress.js)
+    const dress = dressLair(root, { W, D, HT, FX, FZ, lights: lightsL, rockN }), dressCol = new THREE.Color(), dressCat = { x: 0, z: 0, moving: 0 };
+    api.lairFx = dress;
     api.lair = { FX, FZ, W, D, flames, fireGlow, hen, roast };
     return {
       group: root, size: LAIR_SIZE, cols, spawn: { x: -11, z: 10.4, yaw: 0.2 }, exit: { x: -11, z: 12.3, r: 0.6 }, lights: lightsL, name: 'Ghost Dwelling', bake: { amb: 0.26, sky: 0x8a9ac0, ground: 0x2a2018, maxEdge: 1.0 }, cam: { maxDist: 3.0, height: 4.6 },
@@ -804,6 +670,8 @@ function buildLair(api) {
         fireGlow.material.opacity = 0.5 + Math.random() * 0.15;
         roast.rotation.x = t * 0.6;
         const hh = hen.userData.head; hh.position.y = 0.3 - (Math.sin(t * 3.1) > 0.85 ? 0.12 : 0); hen.rotation.y = Math.sin(t * 0.7) * 0.6;
+        dressCat.moving += ((Math.hypot(torchL.x - dressCat.x, torchL.z - dressCat.z) > 0.004 ? 1 : 0) - dressCat.moving) * 0.2; dressCat.x = torchL.x; dressCat.z = torchL.z;
+        dress.update(t, torchL, dressCol.set(torchL.c).multiplyScalar(0.9 + Math.random() * 0.2), dressCat);
       },
     };
   };
@@ -865,6 +733,8 @@ export function makeCave(ctx) {
     const fs = [];
     for (let k = 0; k < 14; k++) { const lx = rnd(-1.8, 2.4), lz = rnd(-0.6, 3.2), f = new THREE.PlaneGeometry(0.06, 0.16); f.rotateX(-Math.PI / 2); f.rotateY(rnd(0, 6)); f.translate(lx, hAt(lx, lz) + 0.03, lz); fs.push(tint(f, [0xf4f0e8, 0xa0683a][k % 2])); }
     mouth.add(merged(fs, lambert({ vertexColors: true, side: THREE.DoubleSide })));
+    // 2026-11-27: ferns, moss, mushrooms, roots over the opening, a puddle, ground mist, undergrowth along the approach
+    try { api.mouthFx = dressMouth(mouth, { hAt, rocks: ROCKS }); } catch (e) { console.error('[cave] mouth dressing failed', e); }
     mouth.traverse((o) => { if (o !== mouth) o.userData.noLift = true; });
     S.built = true;
   }
@@ -922,8 +792,8 @@ export function makeCave(ctx) {
   INTM.on('env', (id) => {
     if (id !== 'cave' && id !== 'cavelair') return;
     const lair = id === 'cavelair';
-    if (ctx.hemi) { ctx.hemi.intensity = lair ? 0.32 : 0.14; ctx.hemi.color.set(0x8a9ac0); ctx.hemi.groundColor.set(0x1a1410); }
-    if (scene.fog) { scene.fog.color.setRGB(0.012, 0.012, 0.02); scene.fog.near = lair ? 7 : 2.5; scene.fog.far = lair ? 34 : 20; }
+    if (ctx.hemi) { ctx.hemi.intensity = lair ? 0.28 : 0.14; ctx.hemi.color.set(lair ? 0x7f95c8 : 0x8a9ac0); ctx.hemi.groundColor.set(0x1a1410); }
+    if (scene.fog) { scene.fog.color.setRGB(0.012, lair ? 0.016 : 0.012, lair ? 0.028 : 0.02); scene.fog.near = lair ? 5.5 : 2.5; scene.fog.far = lair ? 31 : 20; }
     if (ctx.post && ctx.post.comp) ctx.post.comp.uniforms.night.value = lair ? 0.45 : 0.6;
   });
   INTM.on('enter', (id) => {
@@ -986,12 +856,32 @@ export function makeCave(ctx) {
   const interact = () => { const n = near(); if (!n) return false; n.fn(); return true; };
 
   // ---------- per frame ----------
+  // drips, and now and then something humming far below (quiet, through the game's own audio context and mute)
+  let ambT = 3;
+  function ambience(dt) {
+    ambT -= dt; if (ambT > 0) return; ambT = 1.2 + Math.random() * 4.5;
+    const A = Sfx.audio && Sfx.audio(); if (!A || !A.ctx || A.ctx.state !== 'running') return;
+    try {
+      const ac = A.ctx, t0 = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine';
+      if (Math.random() < 0.85) { const f = 900 + Math.random() * 900; o.frequency.setValueAtTime(f, t0); o.frequency.exponentialRampToValueAtTime(f * 0.55, t0 + 0.07); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.045, t0 + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24); o.stop(t0 + 0.26); }
+      else { o.frequency.setValueAtTime(165, t0); o.frequency.linearRampToValueAtTime(123, t0 + 0.9); o.frequency.linearRampToValueAtTime(139, t0 + 1.7); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.03, t0 + 0.5); g.gain.linearRampToValueAtTime(0.0001, t0 + 1.8); o.stop(t0 + 1.85); }
+      o.connect(g); g.connect(A.master); o.start(t0);
+    } catch (e) { /* no audio */ }
+  }
   let firstT = 0;
+  const mCat = { x: 0, z: 0, moving: 0 }, mTorch = new THREE.Vector3(), mCol = new THREE.Color();
   function update(dt) {
     if (!S.built) { firstT += dt; if (firstT > 0.05) { try { buildMouth(); } catch (e) { console.error('[cave] mouth failed', e); S.built = true; } } }
     const t = G.time || 0;
     mouth.visible = Math.abs(P.x - C.x) < 150 && Math.abs(P.z - C.z) < 150;   // deep in the woods: no draw calls from town
     if (postTorch.visible && mouth.visible) postTorch.userData.flick(t);
+    if (api.mouthFx && mouth.visible && !INTM.current()) {
+      // mouth-local cat and torch for the mist, the puddle and the eyes in the opening
+      const dx = P.x - C.x, dz = P.z - C.z, cs = Math.cos(C.yaw), sn = Math.sin(C.yaw), lx = dx * cs - dz * sn, lz = dx * sn + dz * cs, h0 = heightAt(C.x, C.z);
+      mCat.moving += ((Math.hypot(lx - mCat.x, lz - mCat.z) > 0.004 ? 1 : 0) - mCat.moving) * 0.2; mCat.x = lx; mCat.z = lz;
+      if (S.held) mTorch.set(lx, heightAt(P.x, P.z) - h0 + 1.0, lz); else mTorch.set(POST.lx, heightAt(postL.x, postL.z) - h0 + 1.6, POST.lz + 0.22);
+      api.mouthFx.update(t, G.clock ?? 12, mTorch, mCol.set(0xff9a40).multiplyScalar(0.9 + 0.2 * Math.sin(t * 23) * Math.sin(t * 7.3)), mCat);
+    }
     if (handTorch.visible) handTorch.userData.flick(t);
     // the torch light rides with the cat
     if (S.held && !INTM.current()) {
@@ -1001,6 +891,7 @@ export function makeCave(ctx) {
     const R = window.__INT && window.__INT.room;
     if (!R || (S.room !== 'cave' && S.room !== 'cavelair')) { if (S.descending) runDescent(dt); return; }
     const lx = P.x - R.origin.x, lz = P.z - R.origin.z;
+    ambience(dt);
     if (S.room === 'cave' && api.tun) {
       api.tunTorch.x = lx + Math.sin(P.yaw) * 0.3; api.tunTorch.z = lz + Math.cos(P.yaw) * 0.3;
       // how far down the tunnel are we? nearest sample, searched round the last one
