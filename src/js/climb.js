@@ -23,7 +23,7 @@ export function makeClimb({ P, cat, TER, Sfx }) {
     P.vx = P.vz = P.vy = 0; Sfx.blip(250);
   }
   function grab(c) {
-    P.climb = { c, a: Math.atan2(P.z - c.cz, P.x - c.cx) };
+    P.climb = c.ladder ? { c, L: true, cx: (c.x0 + c.x1) / 2, cz: (c.z0 + c.z1) / 2 } : { c, a: Math.atan2(P.z - c.cz, P.x - c.cx) };
     P.vx = P.vz = P.vy = 0; P.jumps = 0; P.climbT = 0; P.flip = 0; cat.userData.body.rotation.x = 0;
     Sfx.blip(200);
   }
@@ -46,6 +46,7 @@ export function makeClimb({ P, cat, TER, Sfx }) {
     }
     const C = P.climb;
     if (!C) return false;
+    if (C.L) return ladder(C, dt, mz, jump, sprint);
     const c = C.c, R = c.r + 0.24;
     if (P.car || P.swim || Math.hypot(P.x - c.cx, P.z - c.cz) > R + 0.6) { stop(); return false; }   // teleported, respawned, in a car
     if (jump) {   // leap off, away from the trunk
@@ -66,19 +67,41 @@ export function makeClimb({ P, cat, TER, Sfx }) {
     return true;
   }
 
+  // a ladder (2026-11-27, the water tower): straight up and down its front face, over the top onto the deck behind it
+  function ladder(C, dt, mz, jump, sprint) {
+    const c = C.c, nx = c.lnx, nz = c.lnz, ax = C.cx + nx * 0.32, az = C.cz + nz * 0.32;
+    if (P.car || P.swim || Math.hypot(P.x - ax, P.z - az) > 1) { stop(); return false; }
+    if (jump) { stop(); P.vx = nx * 3.2; P.vz = nz * 3.2; P.vy = 4.8; P.jumps = 1; P.yaw = Math.atan2(nx, nz); Sfx.blip(330); return false; }
+    const v = mz * (sprint ? CLIMB_FAST : CLIMB_UP);
+    P.y += v * dt; P.x = ax; P.z = az; P.yaw = Math.atan2(-nx, -nz);
+    P.vx = P.vz = P.vy = 0; P.fl = P.y;
+    cat.userData.air = false; cat.userData.climb = Math.abs(v); cat.userData.quad = false;
+    const top = c.top ?? c.h ?? 5;
+    if (P.y >= top - 0.6) { stop(); mantle(C.cx - nx * 0.7, top, C.cz - nz * 0.7, 0.35); }
+    else if (P.y <= 0 && v <= 0) { P.y = 0; stop(); }
+    return true;
+  }
+
   /** After the on-foot collide: start a climb on a tree, a pull-up onto a ledge, remember wall contact for scrambles. */
   function afterMove(q, mx, mz, camYaw, dt, inside) {
     // up on a roof, a fence, a shed or a treetop (a collider top 0.9 m+, not a deck or porch floor) he goes on all fours
-    cat.userData.quad = !inside && !P.swim && (P.fl || 0) >= 0.9 && !TER.floorHit;
+    cat.userData.quad = !inside && !P.swim && (P.fl || 0) >= 0.9 && (!TER.floorHit || TER.floorHit.high);
     if (inside) return;
     P.wallT = (P.wallT || 0) - dt;
     const air = P.y > (P.fl || 0) + 0.01;
     if (!air) P.scr = 0;
     const c = q.hc;
-    if (!q.hit || !c || P.swim || P.climb || P.mantle) { P.climbT = 0; return; }
     const I = intent(mx, mz, camYaw);
+    if (!q.hit && air && I && !P.swim && !P.climb && !P.mantle) {   // no wall in front, but a ledge ahead in reach: porch roofs, eaves
+      const own = TER.floorAt(P.x, P.z, P.y + REACH - 0.5);
+      for (const d of [0.35, 0.6]) {
+        const px = P.x + I[0] * d, pz = P.z + I[1] * d, t = TER.floorAt(px, pz, P.y + REACH - 0.5);
+        if (t >= 1 && t > P.y + 0.15 && t <= P.y + REACH && t > own + 0.3) { mantle(px, t, pz); return; }
+      }
+    }
+    if (!q.hit || !c || P.swim || P.climb || P.mantle) { P.climbT = 0; return; }
     const push = I ? -(I[0] * q.nx + I[1] * q.nz) : 0;     // n points from the collider to the cat
-    if (c.tree && c.top) {
+    if ((c.tree || c.ladder) && c.top) {
       if (push > 0.5) { P.climbT = (P.climbT || 0) + dt; if (air || P.climbT > 0.18) grab(c); } else P.climbT = 0;
       return;
     }

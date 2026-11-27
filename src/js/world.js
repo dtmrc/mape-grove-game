@@ -21,7 +21,7 @@ import { buildDock } from './dock.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
 import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex } from './houses.js';
-import { buildRoofs, roofTop } from './rooftops.js';   // walkable roofs
+import { buildRoofs, roofTop, slabTop } from './rooftops.js';   // walkable roofs
 import { roundCrown, pineCrown, bushCrown } from './trees.js';   // render pass: faceted, shaded tree crowns
 import { makeRV, makeCar } from './models.js';
 import { initRoads } from './roads.js';
@@ -1692,7 +1692,15 @@ function buildFarm() {
       F.post(Math.cos(a) * 4.1, Math.sin(a) * 4.1, 0.4, 16);
     }
     F.geo(new THREE.CylinderGeometry(0.4, 0.4, 16, 6), 'metal', 0xb8c0c8, 0, 8, 0);
-    F.geo(new THREE.CylinderGeometry(5.6, 5.6, 0.2, 16), 'metal', 0x9aa0a8, 0, 16, 0);
+    F.geo(new THREE.CylinderGeometry(6.2, 6.2, 0.2, 20), 'metal', 0x9aa0a8, 0, 16, 0);
+    // climb (2026-11-27, diet: "there should be a ladder to climb the water tower"): a catwalk with a rail round the tank and
+    // a ladder up the front (+z, the side you arrive from). climb.js climbs any collider flagged `ladder`.
+    F.geo(new THREE.TorusGeometry(6.1, 0.04, 4, 40).rotateX(Math.PI / 2), 'metal', 0xb8c0c8, 0, 17.05, 0);
+    for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8 + Math.PI / 16; F.box(Math.cos(a) * 6.1, 16.55, Math.sin(a) * 6.1, 0.06, 1.0, 0.06, 'metal', 0xb8c0c8); }
+    { const lz = 6.35; for (const sx of [-0.27, 0.27]) F.box(sx, 8.6, lz, 0.07, 17.2, 0.07, 'metal', 0x8a9098); for (let y = 0.45; y < 16.9; y += 0.38) F.box(0, y, lz, 0.54, 0.05, 0.05, 'metal', 0x8a9098);
+      const [x, z] = F.at(0, lz); colliders.push({ x0: x - 0.32, x1: x + 0.32, z0: z - 0.06, z1: z + 0.06, h: 16.1, top: 16.1, ladder: true, lnx: 0, lnz: 1, ng: true }); }
+    { const [x, z] = F.at(0, 0); floors.push({ top: 16.1, cx: x, cz: z, r: 6.2, high: true }); colliders.push({ cx: x, cz: z, r: 5.0, h: 26, y0: 15.5, ng: true }); }
+    for (let k = 0; k < 48; k++) { const a = k * Math.PI / 24; if (Math.abs(Math.sin(a) - 1) < 0.02) continue; const [x, z] = F.at(Math.cos(a) * 6.5, Math.sin(a) * 6.5); colliders.push({ cx: x, cz: z, r: 0.42, h: 17.1, y0: 15.5, ng: true }); }   // the rail (gap at the ladder): jump it to leave   // catwalk deck + the tank (solid only up there)
     F.geo(new THREE.CylinderGeometry(5, 4.4, 6.5, 16), 'metal', 0xdfe6ec, 0, 19.3, 0);
     F.geo(new THREE.ConeGeometry(5.2, 2.6, 16), 'metal', 0xc8d0d8, 0, 23.8, 0);
     for (const ry of [Math.PI / 4, Math.PI * 1.25]) {
@@ -2722,7 +2730,8 @@ export function collide(x, z, r, y = 0, o) {
   let hit = false, nx = 0, nz = 0, hc = null;
   const list = nearby(x, z, r + 1.5); // P13: iterate the shared scratch list directly (nothing below calls nearby)
   for (let it = 0; it < 2; it++) for (let i = 0; i < list.length; i++) { const c = list[i];
-    if (c.rg ? y >= roofTop(c, x, z) - 0.45 : y >= (c.top ?? c.h ?? 5) - 0.02) continue; // engine: standing on top of it (rooftops: roofs step like stairs)
+    if (c.rg ? y >= roofTop(c, x, z) - 0.45 : y >= (c.top ?? c.h ?? 5) - 0.02) continue;
+    if (c.y0 !== undefined && y + 1 < c.y0) continue;   // climb: solid only from y0 up (the water tower tank) // engine: standing on top of it (rooftops: roofs step like stairs)
     if (c.water && o && o.swim) continue;  // gameplay: the player can swim, cars and peds stay out
     if (c.r !== undefined) {
       const dx = x - c.cx, dz = z - c.cz, d = Math.hypot(dx, dz), m = c.r + r;
@@ -2783,7 +2792,7 @@ export function breakablesNear(x, z, r) {
   return out;
 }
 export function colTop(x, z, y) {
-  let best = 0;
+  let best = slabTop(x, z, y);   // rooftops: porch roofs + overhangs
   for (const c of nearby(x, z, 0.1)) {
     const top = c.rg ? roofTop(c, x, z) : c.top ?? c.h ?? 5;   // rooftops
     if (c.water || top <= best || top > y + 0.5) continue;
@@ -2800,7 +2809,7 @@ setFloorProvider(colTop);
 
 export function blocked(x, y, z) {
   for (const c of nearby(x, z, 0.1)) {
-    if (y > (c.rg ? roofTop(c, x, z) : c.h ?? 5) || c.water) continue;
+    if (y > (c.rg ? roofTop(c, x, z) : c.h ?? 5) || c.water || (c.y0 !== undefined && y < c.y0)) continue;
     if (c.r !== undefined) { if (Math.hypot(x - c.cx, z - c.cz) < c.r) return true; }
     else if (c.poly) { if (x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1 && polyNear(c.poly, x, z).inside) return true; }
     else if (c.ob) { const dx = x - c.cx, dz = z - c.cz; if (Math.abs(dx * c.c - dz * c.s) < c.hw && Math.abs(dx * c.s + dz * c.c) < c.hd) return true; }
