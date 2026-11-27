@@ -290,6 +290,30 @@ export function makeTextures() {
     for (let y = 0; y < 4; y++) for (let x = 0; x < 3; x++) { g.fillStyle = ['#2e6fbf', '#e0b030', '#3a8f5a'][(x + y) % 3]; g.fillRect(9 + x * 12, 44 + y * 16, 8, 12); }
     g.fillStyle = '#222'; g.fillRect(48, 50, 10, 20); g.fillRect(10, 114, 30, 8);
   }, { repeat: false });
+  // lot fences (world.js buildFences): alpha-cut so a whole run is one double-sided quad. One texture repeat = 1 m wide.
+  T.picket = tex(64, 64, (u, v, x, y) => {   // 4 pointed pickets per metre, two rails, white paint over wood grain
+    const px = x % 16, n = fbm(u * 0.5, v * 3, 8, 3), b = 226 + n * 26;
+    const tip = 7 - Math.abs(px - 6.5);       // pointed top
+    const picket = px >= 1 && px <= 12 && y >= 7 - tip * 0.9;
+    const rail = (y >= 20 && y < 25) || (y >= 50 && y < 55);
+    if (picket) return [b - (px < 2 || px > 11 ? 24 : 0), b - 2, b - 8, 255];
+    if (rail) return [b * 0.82, b * 0.8, b * 0.76, 255];
+    return [0, 0, 0, 0];
+  }, null, { nearest: true });
+  T.chain = tex(64, 64, (u, v, x, y) => {     // galvanised chain link with a top rail
+    if (y < 4) return [168, 172, 178, 255];
+    const a = (x + y) % 8, b = (x - y + 64) % 8;
+    if (a < 1 || b < 1) { const s = 150 + ((x * 7 + y * 3) % 5) * 9; return [s, s + 3, s + 8, 255]; }
+    return [0, 0, 0, 0];
+  }, null, { nearest: true });
+  T.iron = tex(64, 64, (u, v, x, y) => {      // wrought iron: bars with spear tips, two rails
+    const px = x % 16;
+    if ((y >= 10 && y < 14) || (y >= 53 && y < 57)) return [34, 34, 38, 255];
+    if (px >= 6 && px <= 9 && y >= 6) return [30, 30, 34, 255];
+    if (y < 6 && Math.abs(px - 7.5) < (6 - y) * 0.6) return [40, 40, 44, 255];
+    return [0, 0, 0, 0];
+  }, null, { nearest: true });
+  T.iron.generateMipmaps = false; T.iron.minFilter = THREE.NearestFilter;  // thin bars vanish in the mips otherwise
   T.sign = (text, bg, fg, w = 256, h = 64, glow = false) => signTex(text, bg, fg, w, h, glow);
   return T;
 }
