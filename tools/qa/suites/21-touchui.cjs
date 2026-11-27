@@ -51,11 +51,14 @@ module.exports = {
         b.classList.add('talking');
         const dialog = box(dl), shownWhileTalking = CONTROLS.filter((id) => { const e = document.getElementById(id); return e && getComputedStyle(e).display !== 'none' && getComputedStyle(e.closest('#touchui') || e).display !== 'none'; });
         b.classList.remove('talking'); bag.classList.toggle('has', bagHas); for (const id of forced) document.getElementById(id).style.setProperty('display', 'block', 'important'); dl.innerHTML = dl0[0]; dl.style.cssText = dl0[1];
+        const undoTr = () => trk.forEach(([e, d, h]) => { e.style.display = d; e.innerHTML = h; });
         const undoText = () => { for (const id in saved) { const e = document.getElementById(id); if (!e) continue; [e.innerHTML, e.style.cssText, e.className] = saved[id]; } fake2.forEach((e) => e.remove()); };
+        // worst-case clock panel: in a car (car health + fuel) with five wanted stars
+        const trk = ['carhp', 'fuel', 'stars'].map((id) => { const e = document.getElementById(id); return [e, e.style.display, e.innerHTML]; });
+        document.getElementById('carhp').style.display = 'block'; document.getElementById('fuel').style.display = 'flex';
+        const st = document.getElementById('stars'); if (!st.textContent) st.innerHTML = '<i class="on">★</i>'.repeat(5);
         const hud = { minimap: box(document.getElementById('minimap')), tr: box(document.getElementById('tr')) };
-        // stars (wanted level) grow the clock panel; count them in as if 2 lines tall
-        hud.tr.b = Math.max(hud.tr.b, hud.tr.t + 125);
-        window.__touchuiUndo = () => { undoText(); for (const id of forced) document.getElementById(id).style.removeProperty('display'); if (fake) fake.remove(); };
+        window.__touchuiUndo = () => { undoText(); undoTr(); for (const id of forced) document.getElementById(id).style.removeProperty('display'); if (fake) fake.remove(); };
         return { got, hud, texts, dialog, shownWhileTalking, missing: CONTROLS.filter((id) => !got[id]) };
       }, { ins, CONTROLS });
       await S.page.screenshot({ path: path.join(__dirname, '..', '..', '..', 'qa-out', 'tests', `touchui-${label}.png`) }).catch(() => {});
