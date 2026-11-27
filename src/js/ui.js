@@ -17,7 +17,7 @@ const LEGEND = [['#fff', 'You'], ['#5fd0ff', 'RV (save)'], ['#ffd23f', 'Job'], [
 
 export function makeUI(o) {
   const { G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes, setRes, gfx = {}, setInvert, toast, px, pz, yaw, mission, dev, setMark } = o;
-  const S = { sound: true, res: getRes(), weather: !!fx.weatherOn, invert: false, dev: false, aa: true, shadows: true, crt: false, ...loadSettings() };
+  const S = { sound: true, res: getRes(), weather: !!fx.weatherOn, invert: false, dev: false, aa: !window.QA, shadows: true, crt: false, ...loadSettings() };
   // graphics defaults changed on 2026-11-27 (sharper picture): take the new default height once, then keep the player's choice
   if (S.gfxv !== 2) { S.gfxv = 2; S.res = getRes(); S.resManual = false; }
   if (!RES[S.res]) S.res = getRes();
