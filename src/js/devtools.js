@@ -348,7 +348,9 @@ export function makeDev(o) {
   }
   function applyRoads(d) {
     let n, e;
-    if (d && Array.isArray(d.nx)) { n = d.nx.map((x, i) => ({ x: +x, z: +d.nz[i], b: +(d.nb || [])[i] || 0, c: +(d.nc || [])[i] || 0, d: +(d.nd || [])[i] || 0 })); e = d.e || []; [n, e] = migrateRoads(n, e, d.base ?? LEGACY_BASE); }
+    // A road graph saved before the 2026-11-13 map expansion (no `base`) no longer lines up with the town: the map's own roads
+    // were rebuilt since (Estates, Hollow Woods, cul-de-sacs). Use the map's roads instead; the saved doc is left as it is.
+    if (d && Array.isArray(d.nx) && d.base !== undefined) { n = d.nx.map((x, i) => ({ x: +x, z: +d.nz[i], b: +(d.nb || [])[i] || 0, c: +(d.nc || [])[i] || 0, d: +(d.nd || [])[i] || 0 })); e = d.e || []; [n, e] = migrateRoads(n, e, d.base ?? LEGACY_BASE); }
     else { n = ROAD0.n; e = ROAD0.e; }
     for (let i = 0; i < Math.max(n.length, NODES.length); i++) {
       const v = n[i] || { x: 0, z: 0, b: 0, c: 0, d: 1 };
