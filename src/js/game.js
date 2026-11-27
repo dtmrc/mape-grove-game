@@ -49,6 +49,7 @@ import * as PDST from './pdstation.js'; // police station interior
 import { bindWater, updateWater } from './water.js'; // lake water shader
 import { makeLightFX } from './lightfx.js'; // lamp light cones + glows
 import { makeSunShadow } from './sunshadow.js'; // cached sun/moon shadow map
+import * as WARD from './wardrobe.js'; // wearable clothes (Bev's Threads, Hank's gloves, raccoon-skin crafts)
 import { worldChunks as W_CHUNKS } from './world.js'; // sun shadows: casters
 
 // ---------------- renderer ----------------
@@ -1606,6 +1607,7 @@ function frame(now) {
   }
   cat.position.set(P.x, P.y - (P.swim ? SWIM_SINK - Math.sin(G.time * 3) * 0.03 : 0), P.z); cat.rotation.y = P.yaw;
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
+  WARD.update(); // wardrobe: clothes mesh follows what he wears
   if (!dev.camera(Math.max(dt, 0.001)))   updateCamera(Math.max(dt, 0.001));
   SV_.ready();
   sky.mesh.position.copy(camera.position);
@@ -1689,6 +1691,7 @@ const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, remove
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
 PIZZA.init({ G, places, fishing, toast, addCash, Sfx }); // Pizza City interior
 STORES.init({ G, places, fishing, toast, addCash, Sfx }); // Bev's Threads + Hank's Hardware interiors
+WARD.init({ cat, fishing, Sfx, toast }); // wardrobe
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;

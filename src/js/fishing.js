@@ -175,6 +175,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
       if (S.hat) list.push({ id: 'wear', label: S.wearHat ? 'Take off coonskin cap' : 'Wear coonskin cap', price: '', blurb: 'The tail hangs down the back. Very frontier.' });
       for (const id of ['rod', 'lure', 'lighter', 'pan', 'knife']) if (S.gear[id]) list.push({ id: 'gear', label: GEAR[id].name, price: '', blurb: GEAR[id].blurb, dim: true });
       if (S.gear.worms) list.push({ id: 'gear', label: `Worms x${S.gear.worms}`, price: '', blurb: GEAR.worms.blurb, dim: true });
+      for (const x of bagExtras) list.push(...x.rows()); // wardrobe.js: stitch + wear clothes
       if (!list.length) list.push({ id: 'gear', label: '(empty bag)', price: '', blurb: 'Earl at the Bait & Tackle sells rods and worms.', dim: true });
       list.push({ id: 'close', label: 'Close', price: '', blurb: '' });
     }
@@ -194,6 +195,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
     const it = cur[S.sel]; if (!it) return;
     if (it.id === 'close') return closeMenu();
     if (S.bagOpen === 'custom') { S.custom.pick(it); if (S.bagOpen) render(); return; }
+    if (it.ext) { it.ext(); if (S.bagOpen) render(); return; } // wardrobe.js rows
     if (it.id.startsWith('buy:')) {
       const id = it.id.slice(4), g = GEAR[id];
       if (S.gear[id] && !g.stack) return toast('You already have one.');
@@ -215,6 +217,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
     else return;
     render();
   }
+  const bagExtras = []; // wardrobe.js: { rows() -> [{id,label,price,blurb,dim,ext}], has() }
   const uidOf = () => Math.floor(Math.random() * 1e9);
   const foodOf = (f) => { const sp = FISH[f.id], k = 0.7 + 0.3 * (f.w - sp.w[0]) / Math.max(0.01, sp.w[1] - sp.w[0]); return Math.round(f.st === 'cooked' ? sp.food * k : f.st === 'burnt' ? sp.food * 0.25 : sp.food * 0.35); };
   const sellPrice = (f) => { const sp = FISH[f.id]; if (sp.junk) return 0; const base = Math.round(sp.sell * (0.6 + 0.4 * (f.w - sp.w[0]) / Math.max(0.01, sp.w[1] - sp.w[0]))); return f.st === 'raw' ? base : f.st === 'cooked' ? Math.round(base * 0.6) : 0; };
@@ -420,7 +423,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
   }
 
   return {
-    S, QUEST, SHOP, give, feed, menu, HUNGER_ENABLED, closeMenu, countFish, removeFish, FISH,
+    S, QUEST, SHOP, give, feed, menu, save, bagExtras, HUNGER_ENABLED, closeMenu, countFish, removeFish, FISH,
     // true while the player is busy (fishing, skinning, eating, menu open): game.js skips its own movement code
     hold(dt) {
       if (S.bagOpen) { animBiped(cat, 0, 0, G.time); return true; }
@@ -457,7 +460,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
       if (!S.bagOpen && !G.dialog && F.st === 'idle' && !S.skin && hit('i', 'b') && !P.car) openMenu('bag');
       updateBelly(dt); updateFire(dt); respawnRaccoon(dt); questHud();
       hat.visible = S.hat && S.wearHat;
-      setClass(bagBtn, 'has', !!(S.gear.rod || S.bag.length || S.hat));
+      setClass(bagBtn, 'has', !!(S.gear.rod || S.bag.length || S.hat || S.pelts || bagExtras.some((x) => x.has())));
       ico.rotation.y += dt * 2; ico.position.y = 1.7 + Math.sin(G.time * 3) * 0.15; mark.visible = S.quest !== 'done' || Math.random() < 2;
       // Earl idles and faces you when you're close
       const d = Math.hypot(P.x - SHOP.earl.x, P.z - SHOP.earl.z);

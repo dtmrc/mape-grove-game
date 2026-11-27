@@ -1,9 +1,11 @@
 # Builds the player build (saved world baked in, dev tools hidden) and serves it on GitHub Pages.
 # World snapshot lives in world/*.json (pulled from the game artifact's db collection `world`).
 name: Deploy to GitHub Pages
+# DISABLED 2026-11-27 (diet): every run failed (Actions are billing-locked) and spammed email.
+# The site is served from the gh-pages branch instead. To turn this back on, restore:
+#   push:
+#     branches: [main]
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

@@ -6,6 +6,7 @@
 // Wired in game.js: STORES.init({ G, places, fishing, toast, addCash, Sfx }) next to PIZZA.init.
 // Debug: window.__G.stores.buy('bev', 'scarf'), .S
 import * as INTR from './interiors.js';
+import * as WARD from './wardrobe.js'; // clothes you buy here are worn
 import { KIT } from './rooms.js';
 
 const PI = Math.PI;
@@ -457,9 +458,12 @@ const S = { bought: {}, spent: 0, greeted: {} };
 export function buy(shop, id) {
   if (!A) return false;
   const M = MENUS[shop]; const it = M && M.items.find((m) => m.id === id); if (!it) return false;
+  const wear = WARD.isGarment(id);
+  if (wear && WARD.owns(id)) { WARD.toggle(id); A.Sfx.blip && A.Sfx.blip(WARD.wearing(id) ? 620 : 380); A.toast(WARD.wearing(id) ? `You put the ${it.label.toLowerCase()} back on.` : `You take the ${it.label.toLowerCase()} off. It goes in the bag.`, 3); return true; }
   if ((A.G.cash || 0) < it.price) { A.Sfx.blip && A.Sfx.blip(180); A.toast(M.broke(it.price), 3.5); return false; }
   A.addCash(-it.price); S.bought[shop + ':' + id] = (S.bought[shop + ':' + id] || 0) + 1; S.spent += it.price;
   if (it.hp) A.G.hp = Math.min(100, (A.G.hp || 0) + it.hp);
+  if (wear) WARD.give(id, true);   // on him straight away; BAG or the RV wardrobe to take it off
   A.Sfx.pickup && A.Sfx.pickup();
   A.toast(`${M.lines[id]}${it.hp && !/health/.test(M.lines[id]) ? ` +${it.hp} health.` : ''} -$${it.price}`, 4);
   return true;
@@ -469,7 +473,10 @@ function openMenu(shop) {
   if (!A.fishing || !A.fishing.menu) return false;
   return A.fishing.menu({
     title: M.title,
-    items: () => M.items.map((m) => ({ id: m.id, label: m.label, price: '$' + m.price, blurb: m.blurb + (m.hp ? ` (+${m.hp} health)` : ''), dim: (A.G.cash || 0) < m.price })),
+    items: () => M.items.map((m) => {
+      if (WARD.isGarment(m.id) && WARD.owns(m.id)) return { id: m.id, label: (WARD.wearing(m.id) ? 'Take off ' : 'Put on ') + m.label.toLowerCase(), price: WARD.wearing(m.id) ? 'wearing' : 'owned', blurb: m.blurb };
+      return { id: m.id, label: m.label, price: '$' + m.price, blurb: m.blurb + (m.hp ? ` (+${m.hp} health)` : '') + (WARD.isGarment(m.id) ? ' Wearable.' : ''), dim: (A.G.cash || 0) < m.price };
+    }),
     pick: (it) => buy(shop, it.id),
   });
 }
