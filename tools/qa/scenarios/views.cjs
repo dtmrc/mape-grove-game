@@ -22,6 +22,8 @@ const SPOTS = [
   ['quikfront', 23, 2.4, -18, 30, 2.6, -37],
   ['donutfront', -39, 2.2, 5, -44, 2.2, 18],
   ['schoolback', 92, 5, -56, 100, 4, -36],
+  ['police', -60, 3, 6, -68, 3, 24],
+  ['hospital', 200, 4, 70, 212, 5, 40],
 ];
 module.exports = async ({ S, shot, args }) => {
   const only = args.only ? String(args.only).split(',') : null;

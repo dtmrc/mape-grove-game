@@ -96,3 +96,9 @@ export function pineCrown(x, z, s, lite) {
   g.computeVertexNormals();
   return g;
 }
+
+/** A bush: one jittered, soft-shaded lump with a darker base. ry = the turn world.js already rolls for it. */
+export function bushCrown(x, z, s, ry) {
+  const g = lump(0.72 * s, 1, 3 + ((hash(x, z, 7) * 9) | 0), 0.8); g.rotateY(ry); g.translate(0, 0.45 * s, 0);
+  return shade(g, 0, 1.05 * s, 0.75 * s, 1, 0.55, 1.12);
+}
