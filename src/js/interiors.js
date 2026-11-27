@@ -29,7 +29,8 @@
 import * as THREE from 'three';
 import * as TER from './terrain.js';
 import { setText, setStyle } from './dom.js';
-import { bakeRoom, BAKE_UNIFORMS } from './roombake.js';
+import { bakeRoom, BAKE_UNIFORMS, setDaylight } from './roombake.js';
+const _dayTint = new THREE.Color();
 const BAKE_ON = !/[?&]bake=0/.test((typeof location !== 'undefined' && location.search) || '');   // ?bake=0: old live-lit rooms
 
 // ---------------- module-level registry (usable before the game creates the instance) ----------------
@@ -605,6 +606,9 @@ export function makeInteriors(ctx) {
       if (n) BAKE_UNIFORMS.uBakeTint.value.setRGB(tr / n, tg / n, tb / n); else BAKE_UNIFORMS.uBakeTint.value.setRGB(1, 1, 1);
     }
     W.fill(1);
+    // daylight: window panes show a day view, and the room gets a touch brighter and cooler at noon
+    const day = setDaylight(G.clock ?? 12) || 0;
+    if (baked && BAKE_UNIFORMS.uBakeTint.value) BAKE_UNIFORMS.uBakeTint.value.multiply(_dayTint.setRGB(1 + 0.06 * day, 1 + 0.08 * day, 1 + 0.12 * day));
     for (let j = 0; j < S.pls.length && j < W.length; j++) { const i = pool.indexOf(S.pls[j]); if (i >= 0) W[j] = pw[i]; }
   }
   function camDist(d) { return S.room ? Math.min(d, S.room.cam.maxDist) : d; }

@@ -634,12 +634,31 @@ function buildLair(api) {
     const root = new THREE.Group();
     const [W, D] = LAIR_SIZE, HT = 5.6;
     const rockM = lambert({ map: textures().rock, color: 0x8a8076, side: THREE.DoubleSide }), dirtM = lambert({ map: textures().dirt, color: 0xb8a890 });
-    const floor = M(new THREE.PlaneGeometry(W, D), dirtM, 0, 0, 0, root); floor.rotation.x = -Math.PI / 2;
+    dirtM.vertexColors = true;
+    const floor = M(new THREE.PlaneGeometry(W, D, 30, 26), dirtM, 0, 0, 0, root); floor.rotation.x = -Math.PI / 2;
+    { const p = floor.geometry.attributes.position, col = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), v = 0.85 + rockN(x * 0.5, 4, y * 0.5) * 0.15; col[i * 3] = v; col[i * 3 + 1] = v * 0.97; col[i * 3 + 2] = v * 0.92; } floor.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); }
     { const t = textures().dirt; floor.geometry.attributes.uv.array.forEach((v, i, a) => { a[i] = v * (i % 2 ? D / 3 : W / 3); }); }
-    const wallMesh = (w, x, z, ry) => { const m = M(new THREE.PlaneGeometry(w, HT, 8, 4), rockM, x, HT / 2, z, root); m.rotation.y = ry; const p = m.geometry.attributes.position; for (let i = 0; i < p.count; i++) if (Math.abs(p.getX(i)) < w / 2 - 0.01 && p.getY(i) > -HT / 2 + 0.01) p.setZ(i, rnd(-0.35, 0.25)); m.geometry.computeVertexNormals(); { const uv = m.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 3, uv.getY(i) * HT / 3); } return m; };
+    // 2026-11-27: walls bow inward towards the roof with lumps and strata, vertex-coloured (sooty top, damp foot) so the
+    // room bake can light them from the fire, the lamps and the moonlit shaft
+    const wallM = lambert({ map: textures().rock, color: 0x8a8076, vertexColors: true, side: THREE.DoubleSide });
+    let wallK = 0;
+    const wallMesh = (w, x, z, ry) => {
+      const k0 = wallK++ * 37.1, g = new THREE.PlaneGeometry(w, HT, Math.ceil(w / 0.75), 10), p = g.attributes.position, n = p.count, col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const lx = p.getX(i), h = p.getY(i) + HT / 2, edge = Math.min(1, (w / 2 - Math.abs(lx)) / 1.6);
+        let d = rockN(lx * 0.5 + k0, h * 0.6, k0) * 0.45 + rockN(lx * 1.6, h * 1.8, k0 + 5) * 0.15 + Math.sin(h * 6 + rockN(lx * 0.3, 0, k0) * 3) * 0.05;
+        d = d * (0.35 + 0.65 * edge) + 1.4 * (h / HT) ** 2.2 * (0.4 + 0.6 * edge);
+        p.setZ(i, d);
+        const v = (0.68 + rockN(lx * 0.35 + k0, h * 0.5, 3) * 0.2) * (0.6 + 0.4 * Math.min(1, h / 1.0)) * (1 - 0.35 * (h / HT) ** 2);
+        col[i * 3] = v * 1.03; col[i * 3 + 1] = v * 0.95; col[i * 3 + 2] = v * 0.87;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals();
+      { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 3, uv.getY(i) * HT / 3); }
+      const m = M(g, wallM, x, HT / 2, z, root); m.rotation.y = ry; return m;
+    };
     wallMesh(W, 0, -D / 2, 0); wallMesh(W, 0, D / 2, Math.PI); wallMesh(D, -W / 2, 0, Math.PI / 2); wallMesh(D, W / 2, 0, -Math.PI / 2);
-    const ceil = M(new THREE.PlaneGeometry(W, D, 6, 6), lambert({ map: textures().rock, color: 0x5a524a, side: THREE.DoubleSide }), 0, HT, 0, root); ceil.rotation.x = Math.PI / 2;
-    { const p = ceil.geometry.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, -rnd(0, 0.6) + Math.hypot(p.getX(i) / W, p.getY(i) / D) * 1.5); ceil.geometry.computeVertexNormals(); }
+    const ceil = M(new THREE.PlaneGeometry(W, D, 20, 18), lambert({ map: textures().rock, color: 0x6a625a, vertexColors: true, side: THREE.DoubleSide }), 0, HT, 0, root); ceil.rotation.x = Math.PI / 2;
+    { const p = ceil.geometry.attributes.position, col = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, -rockN(x * 0.4, y * 0.4, 9) * 0.6 - 0.25 + Math.hypot(x / W, y / D) * 1.5); const v = 0.5 + rockN(x * 0.3, y * 0.3, 2) * 0.15; col[i * 3] = v; col[i * 3 + 1] = v * 0.95; col[i * 3 + 2] = v * 0.9; } ceil.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); ceil.geometry.computeVertexNormals(); }
     const cols = [], interact = [];
     const solid = (cx, cz, w, d, h, rot = 0, top) => { const c = { kind: 'box', cx, cz, w, d, rot, h }; if (top !== undefined) c.top = top; cols.push(c); return c; };
     // boulders in the corners and along the walls, stalactites
@@ -766,10 +785,19 @@ function buildLair(api) {
     const ghost = makeGhost(); root.add(ghost); ghostAlpha(ghost, 0); api.ghost = ghost;
     const torchL = { x: -11, y: 1.0, z: 10, c: 0xffa050, i: 1.15, flicker: true, dyn: true };
     api.lairTorch = torchL;
-    const lightsL = [torchL, { x: FX, y: 1.1, z: FZ, c: 0xff8a3a, i: 2.0, flicker: true }, { x: -3, y: 2.4, z: -11, c: 0xffc070, i: 0.55, flicker: true }, { x: 11, y: 1.0, z: -10.2, c: 0xffd080, i: 0.5 }, { x: 0, y: 4.6, z: 6, c: 0x6a7aa8, i: 0.5 }, { x: 10, y: 3.5, z: 6, c: 0x6a7aa8, i: 0.35 }];
+    // wall torches in iron brackets: baked-only lights (after the pool's share) so the cavern walls read at last
+    const SCONCE = [[-W / 2 + 0.5, 5, Math.PI / 2], [W / 2 - 0.5, 3, -Math.PI / 2], [2, -D / 2 + 0.5, 0], [-4, D / 2 - 0.5, Math.PI], [-W / 2 + 0.5, -6, Math.PI / 2], [W / 2 - 0.5, -4, -Math.PI / 2]];
+    const ironM = lambert({ color: 0x2a2624 });
+    for (const [x, z, ry] of SCONCE) {
+      const ox = Math.sin(ry) * 0.25, oz = Math.cos(ry) * 0.25;
+      const br = M(box(0.06, 0.5, 0.06), ironM, x + ox * 0.6, 1.95, z + oz * 0.6, root); br.rotation.y = ry; br.rotation.x = 0.5;
+      M(cyl(0.07, 0.05, 0.12, 6), ironM, x + ox * 1.2, 2.2, z + oz * 1.2, root);
+      const f = new THREE.Sprite(flameMat()); f.position.set(x + ox * 1.2, 2.42, z + oz * 1.2); f.scale.set(0.28, 0.5, 1); f.userData.b = 0.5; root.add(f); flames.push(f);
+    }
+    const lightsL = [torchL, { x: FX, y: 1.1, z: FZ, c: 0xff8a3a, i: 2.0, flicker: true }, { x: -3, y: 2.4, z: -11, c: 0xffc070, i: 0.55, flicker: true }, { x: 11, y: 1.0, z: -10.2, c: 0xffd080, i: 0.5 }, { x: 0, y: 4.6, z: 6, c: 0x6a7aa8, i: 0.5 }, { x: 10, y: 3.5, z: 6, c: 0x6a7aa8, i: 0.35 }, ...SCONCE.map(([x, z, ry]) => ({ x: x + Math.sin(ry) * 0.45, y: 2.4, z: z + Math.cos(ry) * 0.45, c: 0xff9a48, i: 1.4, r: 0.1 }))];
     api.lair = { FX, FZ, W, D, flames, fireGlow, hen, roast };
     return {
-      group: root, size: LAIR_SIZE, cols, spawn: { x: -11, z: 10.4, yaw: 0.2 }, exit: { x: -11, z: 12.3, r: 0.6 }, lights: lightsL, name: 'Ghost Dwelling', bake: { amb: 0.2, sky: 0x8a9ac0, ground: 0x2a2018 }, cam: { maxDist: 3.0, height: 4.6 },
+      group: root, size: LAIR_SIZE, cols, spawn: { x: -11, z: 10.4, yaw: 0.2 }, exit: { x: -11, z: 12.3, r: 0.6 }, lights: lightsL, name: 'Ghost Dwelling', bake: { amb: 0.26, sky: 0x8a9ac0, ground: 0x2a2018, maxEdge: 1.0 }, cam: { maxDist: 3.0, height: 4.6 },
       interact,
       update: (t) => {
         for (const f of flames) { const b = f.userData.b; f.scale.set(b * (0.55 + Math.random() * 0.25), b * (1.0 + Math.random() * 0.5), 1); }

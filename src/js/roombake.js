@@ -13,11 +13,43 @@ export const MAX_DYN = 32;   // weights for the first 32 point lights in render 
 export const BAKE_UNIFORMS = {
   uBakeTint: { value: null },          // THREE.Color, set by init
   uDynW: { value: new Float32Array(MAX_DYN) },
+  uDay: { value: 0 },                  // 0 night .. 1 day: window panes fade from their painted night to a day view
+  uSkyTop: { value: null }, uSkyLow: { value: null },
 };
+/** Daylight 0..1 and the sky colours seen through windows for a 0-24 clock. */
+export function setDaylight(h) {
+  const U = BAKE_UNIFORMS; if (!U.uSkyTop.value) return;
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const day = ss(5.5, 7.5, h) * (1 - ss(18.3, 20.3, h)), dusk = Math.max(ss(5.0, 6.5, h) * (1 - ss(6.5, 8.5, h)), ss(17.5, 19.0, h) * (1 - ss(19.0, 20.5, h)));
+  U.uDay.value = Math.max(day, dusk * 0.8);
+  U.uSkyTop.value.setRGB(0.42 + dusk * 0.3, 0.62 - dusk * 0.12, 0.92 - dusk * 0.35);
+  U.uSkyLow.value.setRGB(0.78 + dusk * 0.2, 0.86 - dusk * 0.2, 0.92 - dusk * 0.4);
+  return U.uDay.value;
+}
+/** A window pane (MeshBasicMaterial with a painted night map): mix toward a day sky over a hedge line by uDay. */
+export function patchWindow(m) {
+  if (!m || !m.isMeshBasicMaterial || !m.map || m.userData.win) return;
+  m.userData.win = true;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uDay = BAKE_UNIFORMS.uDay; sh.uniforms.uSkyTop = BAKE_UNIFORMS.uSkyTop; sh.uniforms.uSkyLow = BAKE_UNIFORMS.uSkyLow;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uDay; uniform vec3 uSkyTop; uniform vec3 uSkyLow;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+      {
+        float v = vMapUv.y;
+        vec3 sky = mix(uSkyLow, uSkyTop, smoothstep(0.35, 1.0, v));
+        float hedge = 1.0 - smoothstep(0.30, 0.36, v + 0.03 * sin(vMapUv.x * 40.0) + 0.02 * sin(vMapUv.x * 97.0));
+        vec3 view = mix(sky, vec3(0.30, 0.46, 0.24) * (0.8 + 0.4 * uDay), hedge);
+        diffuseColor.rgb = mix(diffuseColor.rgb, view * 1.15, uDay);
+      }`);
+  };
+  m.customProgramCacheKey = () => 'win1';
+  m.needsUpdate = true;
+}
 let inited = false;
 function init(THREE) {
   if (inited) return; inited = true;
   BAKE_UNIFORMS.uBakeTint.value = new THREE.Color(1, 1, 1);
+  BAKE_UNIFORMS.uSkyTop.value = new THREE.Color(); BAKE_UNIFORMS.uSkyLow.value = new THREE.Color();
 }
 
 // ---------- geometry: split triangles with an edge longer than maxEdge ----------
@@ -101,6 +133,7 @@ export function bakeRoom(THREE, group, out) {
   // perimeter walls (boxes reaching past the room rectangle) never sit between a light and a surface inside; the corner AO covers them
   const occ = cfg.shadows === false ? [] : occluders(out).filter((b) => Math.abs(b.cx) + b.ex < hw + 0.05 && Math.abs(b.cz) + b.ez < hd + 0.05);
   const L = (out.lights || []).filter((l) => l && !l.dyn && l.bake !== false).map((l) => ({ x: +l.x || 0, y: +l.y || 2.4, z: +l.z || 0, col: new THREE.Color(l.c ?? 0xfff0d8), i: l.i ?? 1, r: l.r ?? 0.25 }));
+  group.traverse((o) => { if (o.isMesh && !Array.isArray(o.material) && /^(room|pd):(night|street|pnight)$/.test(o.name)) patchWindow(o.material); });
   group.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
   // which meshes: static, vertex coloured, lit single materials; geometries used once (clone shared ones)

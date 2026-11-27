@@ -11,6 +11,7 @@
 // Extra (optional, not required by the contract): the returned object also carries update(t) for tiny
 // animations (flickering tube, TV static, cuckoo pendulum); harmless if never called.
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 let seed = 7;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -19,11 +20,15 @@ const sm = (t) => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
 
 // ---------- canvas textures ----------
 const texCache = new Map();
+const TEX_SCALE = 2;
 const ANISO = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 1 : 4; // P9: 1 on touch
 function ctex(THREE, key, w, h, draw, o = {}) {
   if (texCache.has(key)) return texCache.get(key);
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  // drawn at 2x (vector canvas ops, so edges, grout lines and sign text come out crisp; 2026-11-27)
+  const k = o.scale ?? TEX_SCALE;
+  const c = document.createElement('canvas'); c.width = w * k; c.height = h * k;
   const g = c.getContext('2d');
+  g.scale(k, k);
   draw(g, w, h);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -113,9 +118,18 @@ function makeBuilder(THREE, T) {
     }
     (buckets[key] ||= []).push(g);
   }
+  // 2026-11-27: soft furnishings get rounded edges, solid furniture a small chamfer (catches the baked light);
+  // thin parts (< 12 cm) stay plain boxes. o.round: false opts out, o.round: <radius> forces one.
+  const SOFT = new Set(['cloth', 'blanket', 'fabric', 'cushion', 'vinyl']), HARD = new Set(['wood', 'plain', 'shiny', 'metal']);
+  function boxGeo(key, w, h, d, o) {
+    const m = Math.min(Math.abs(w), Math.abs(h), Math.abs(d));
+    if (o.round === false || m < 0.12 || !(SOFT.has(key) || HARD.has(key) || o.round)) return new THREE.BoxGeometry(w, h, d);
+    const soft = SOFT.has(key), r = typeof o.round === 'number' ? o.round : soft ? Math.min(0.07, m * 0.3) : Math.min(0.022, m * 0.14);
+    return new RoundedBoxGeometry(Math.abs(w), Math.abs(h), Math.abs(d), soft ? 2 : 1, r);
+  }
   const B = {
     def, add, material,
-    box(key, color, w, h, d, x, y, z, ry = 0, o = {}) { add(new THREE.BoxGeometry(w, h, d), key, color, x, y, z, ry, o); },
+    box(key, color, w, h, d, x, y, z, ry = 0, o = {}) { add(boxGeo(key, w, h, d, o), key, color, x, y, z, ry, o); },
     cyl(key, color, rt, rb, h, x, y, z, s = 10, o = {}) { add(new THREE.CylinderGeometry(rt, rb, h, s), key, color, x, y, z, o.ry || 0, o); },
     sph(key, color, r, x, y, z, o = {}) { add(new THREE.SphereGeometry(r, o.ws || 8, o.hs || 6), key, color, x, y, z, 0, o); },
     /** Vertical quad facing +z before ry (0 = faces +z, PI = faces -z, PI/2 = faces +x, -PI/2 = faces -x). */

@@ -2,7 +2,7 @@
 // node tools/qa/qa.cjs run tools/qa/scenarios/interior-gallery.cjs --out qa-out/gallery-before [--rooms rv,quik]
 // Each view: [name, cat local x, cat local z, cam yaw, cam pitch]. x/z as fractions of the room size when |v| <= 0.5.
 const VIEWS = {
-  rv: [['a', 0, 0.3, 0, 0.3], ['b', 0, -0.25, Math.PI, 0.35]],
+  rv: [['a', -0.05, 0.05, Math.PI / 2, 0.3], ['b', 0, -0.25, Math.PI, 0.35], ['c', 0.1, 0.0, -Math.PI / 2, 0.3]],
   quik: [['a', 0, 0.3, 0, 0.3], ['b', 0.25, -0.2, 2.4, 0.35]],
   diner: [['a', 0, 0.3, 0, 0.3], ['b', -0.25, -0.1, 2.3, 0.35]],
   nana: [['a', 0, 0.3, 0, 0.3], ['b', 0.2, -0.2, 2.5, 0.35]],
@@ -19,7 +19,7 @@ const VIEWS = {
 module.exports = async ({ S, shot, args, log }) => {
   const want = args && args.rooms ? String(args.rooms).split(',') : [...Object.keys(VIEWS), 'cave'];
   const stats = {};
-  await S.js(() => { window.QA.time(21, { freeze: true }); if (window.__CAVE) window.__CAVE.reset(); });
+  await S.js((h) => { window.QA.time(h, { freeze: true }); if (window.__CAVE) window.__CAVE.reset(); }, args && args.time !== undefined ? +args.time : 21);
   for (const id of want) {
     if (id === 'cave') {
       for (const [k, f] of [['a', 0.08], ['b', 0.3], ['c', 0.62], ['d', 0.93]]) {
