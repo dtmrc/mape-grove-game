@@ -1032,9 +1032,14 @@ function updatePlayer(dt) {
   const q = (INT.inside ? INT.collide : collide)(P.x, P.z, 0.22, P.y, SWIM_OK); P.x = q.x; P.z = q.z;
   climb.afterMove(q, mx, mz, camYaw, dt, INT.inside); // climb (+ four-legged up high)
   // car bodies are solid on foot
-  for (const c of cars) for (const [cx, cz] of carCircles(c)) {
-    const dx = P.x - cx, dz = P.z - cz, d = Math.hypot(dx, dz), m = c.spec.wid / 2 + 0.22;
-    if (d < m && P.y < 1.1) { P.x = cx + dx / d * m; P.z = cz + dz / d * m; }
+  // (an oriented box, 2026-11-27: the two end circles left a gap in the middle of a long car's side he could run through)
+  if (P.y < 1.1) for (const c of cars) {
+    const dx = P.x - c.x, dz = P.z - c.z, hl = c.spec.len / 2 + 0.22, hw = c.spec.wid / 2 + 0.22;
+    if (dx * dx + dz * dz > hl * hl + hw * hw) continue;
+    const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw), lz = dx * fx + dz * fz, lx = dx * fz - dz * fx;   // along / across the car
+    const px = hw - Math.abs(lx), pz = hl - Math.abs(lz);
+    if (px <= 0 || pz <= 0) continue;
+    if (px < pz) { const k = (lx < 0 ? -px : px); P.x += fz * k; P.z -= fx * k; } else { const k = (lz < 0 ? -pz : pz); P.x += fx * k; P.z += fz * k; }
   }
   const sp = Math.hypot(P.vx, P.vz);
   P.ph += dt * sp * 4.6;
