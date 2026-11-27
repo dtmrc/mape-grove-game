@@ -169,26 +169,32 @@ export function makeTextures() {
     if ((x + off) % 24 < 1) b *= 0.65;
     return [b, b, b];
   });
+  // windows (render pass 2026-11-27): 128 px, a painted frame with a recess shadow, muntins, a sill and sky glare
   const winFrame = (g, w, h) => {
-    g.fillStyle = '#e8e4d8'; g.fillRect(0, 0, w, 4); g.fillRect(0, h - 6, w, 6); g.fillRect(0, 0, 4, h); g.fillRect(w - 4, 0, 4, h);
-    g.fillRect(w / 2 - 2, 0, 4, h); g.fillRect(0, h / 2 - 2, w, 4);
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(4, 4, w - 8, 2);
+    const f = Math.round(w * 0.07), m = Math.round(w * 0.045), sill = Math.round(h * 0.09);
+    g.fillStyle = 'rgba(0,0,0,0.38)'; g.fillRect(f, f, w - 2 * f, Math.round(h * 0.07)); g.fillRect(f, f, Math.round(w * 0.05), h - f - sill);   // recess shadow (light from upper right)
+    g.fillStyle = '#ece8dc'; g.fillRect(0, 0, w, f); g.fillRect(0, 0, f, h); g.fillRect(w - f, 0, f, h);
+    g.fillRect(w / 2 - m / 2, 0, m, h); g.fillRect(0, h * 0.48 - m / 2, w, m);
+    g.fillStyle = '#f6f3ea'; g.fillRect(0, h - sill, w, sill);   // sill
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, h - sill, w, 2); g.fillRect(0, h - 2, w, 2);
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(0, 0, w, 2); g.fillRect(w - f, 0, 2, h - sill);
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(w / 2 + m / 2, 0, 2, h - sill); g.fillRect(0, h * 0.48 + m / 2, w, 2);
   };
-  T.window = tex(64, 64, (u, v) => {
-    const r = Math.max(0, 1 - Math.abs(u - v * 0.8 - 0.1) * 4);
-    const c = mixc([26, 36, 52], [92, 118, 146], v * 0.3 + r * 0.6);
-    return c;
+  T.window = tex(128, 128, (u, v) => {
+    const r = Math.max(0, 1 - Math.abs(u - v * 0.8 - 0.1) * 4), r2 = Math.max(0, 1 - Math.abs(u - v * 0.8 - 0.45) * 9);
+    return mixc([30, 40, 56], [118, 146, 172], (1 - v) * 0.45 + r * 0.45 + r2 * 0.35);
   }, (g, w, h) => {
-    g.fillStyle = 'rgba(200,170,180,0.55)'; g.fillRect(4, 4, 9, h - 10); g.fillRect(w - 13, 4, 9, h - 10);
+    g.fillStyle = 'rgba(206,184,170,0.6)'; g.fillRect(8, 8, 18, h - 22); g.fillRect(w - 26, 8, 18, h - 22);
+    g.fillStyle = 'rgba(0,0,0,0.12)'; for (let x = 10; x < 26; x += 4) { g.fillRect(x, 8, 1, h - 22); g.fillRect(w - 26 + x - 8, 8, 1, h - 22); }
     winFrame(g, w, h);
   }, { repeat: false });
-  T.windowLit = tex(64, 64, (u, v) => {
+  T.windowLit = tex(128, 128, (u, v) => {
     const d = Math.hypot(u - 0.5, v - 0.35);
     const c = mixc([255, 226, 150], [196, 120, 52], Math.min(1, d * 1.6));
     return c;
   }, (g, w, h) => {
-    g.fillStyle = 'rgba(120,60,30,0.55)'; g.fillRect(4, 4, 10, h - 10); g.fillRect(w - 14, 4, 10, h - 10);
-    g.fillStyle = 'rgba(60,30,20,0.25)'; for (let y = 8; y < h - 8; y += 5) g.fillRect(14, y, w - 28, 1);
+    g.fillStyle = 'rgba(120,60,30,0.55)'; g.fillRect(8, 8, 20, h - 22); g.fillRect(w - 28, 8, 20, h - 22);
+    g.fillStyle = 'rgba(60,30,20,0.25)'; for (let y = 16; y < h - 16; y += 10) g.fillRect(28, y, w - 56, 2);
     winFrame(g, w, h);
   }, { repeat: false });
   T.door = tex(64, 128, (u, v) => { const n = fbm(u * 0.3, v * 3, 8, 3); const b = 220 + n * 30; return [b, b, b]; }, (g) => {
@@ -284,6 +290,30 @@ export function makeTextures() {
     for (let y = 0; y < 4; y++) for (let x = 0; x < 3; x++) { g.fillStyle = ['#2e6fbf', '#e0b030', '#3a8f5a'][(x + y) % 3]; g.fillRect(9 + x * 12, 44 + y * 16, 8, 12); }
     g.fillStyle = '#222'; g.fillRect(48, 50, 10, 20); g.fillRect(10, 114, 30, 8);
   }, { repeat: false });
+  // lot fences (world.js buildFences): alpha-cut so a whole run is one double-sided quad. One texture repeat = 1 m wide.
+  T.picket = tex(64, 64, (u, v, x, y) => {   // 4 pointed pickets per metre, two rails, white paint over wood grain
+    const px = x % 16, n = fbm(u * 0.5, v * 3, 8, 3), b = 226 + n * 26;
+    const tip = 7 - Math.abs(px - 6.5);       // pointed top
+    const picket = px >= 1 && px <= 12 && y >= 7 - tip * 0.9;
+    const rail = (y >= 20 && y < 25) || (y >= 50 && y < 55);
+    if (picket) return [b - (px < 2 || px > 11 ? 24 : 0), b - 2, b - 8, 255];
+    if (rail) return [b * 0.82, b * 0.8, b * 0.76, 255];
+    return [0, 0, 0, 0];
+  }, null, { nearest: true });
+  T.chain = tex(64, 64, (u, v, x, y) => {     // galvanised chain link with a top rail
+    if (y < 4) return [168, 172, 178, 255];
+    const a = (x + y) % 8, b = (x - y + 64) % 8;
+    if (a < 1 || b < 1) { const s = 150 + ((x * 7 + y * 3) % 5) * 9; return [s, s + 3, s + 8, 255]; }
+    return [0, 0, 0, 0];
+  }, null, { nearest: true });
+  T.iron = tex(64, 64, (u, v, x, y) => {      // wrought iron: bars with spear tips, two rails
+    const px = x % 16;
+    if ((y >= 10 && y < 14) || (y >= 53 && y < 57)) return [34, 34, 38, 255];
+    if (px >= 6 && px <= 9 && y >= 6) return [30, 30, 34, 255];
+    if (y < 6 && Math.abs(px - 7.5) < (6 - y) * 0.6) return [40, 40, 44, 255];
+    return [0, 0, 0, 0];
+  }, null, { nearest: true });
+  T.iron.generateMipmaps = false; T.iron.minFilter = THREE.NearestFilter;  // thin bars vanish in the mips otherwise
   T.sign = (text, bg, fg, w = 256, h = 64, glow = false) => signTex(text, bg, fg, w, h, glow);
   return T;
 }

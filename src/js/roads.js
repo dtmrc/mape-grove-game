@@ -40,12 +40,18 @@ export function changed() { relink(); rebuildRoads(); for (const f of onRoads) f
 
 // ---------------- geometry ----------------
 // one vertex list per map chunk (town + 8 countryside sectors), so each chunk's roads are culled on their own
+// Render pass 2026-11-27: a vertex may carry a 4th element, a brightness (number) or [r,g,b] multiplier (lane wear, verges),
+// and a Buf may take vc(x, z) -> brightness, a world-space variation applied to every vertex (patchy, weathered surfaces).
 class Buf {
-  constructor() { this.ch = new Map(); }
+  constructor(vc = null) { this.ch = new Map(); this.vc = vc; }
   tri(a, b, c, col, uvS) {
     const k = chunkOf((a[0] + b[0] + c[0]) / 3, (a[2] + b[2] + c[2]) / 3);
     let q = this.ch.get(k); if (!q) this.ch.set(k, q = { p: [], c: [], u: [] });
-    for (const v of [a, b, c]) { q.p.push(v[0], v[1], v[2]); q.c.push(col.r, col.g, col.b); q.u.push(v[0] / uvS, -v[2] / uvS); }
+    for (const v of [a, b, c]) {
+      const m = v[3], f = this.vc ? this.vc(v[0], v[2]) : 1;
+      const r = (m === undefined ? 1 : typeof m === 'number' ? m : m[0]) * f, g = (m === undefined ? 1 : typeof m === 'number' ? m : m[1]) * f, b = (m === undefined ? 1 : typeof m === 'number' ? m : m[2]) * f;
+      q.p.push(v[0], v[1], v[2]); q.c.push(col.r * r, col.g * g, col.b * b); q.u.push(v[0] / uvS, -v[2] / uvS);
+    }
   }
   meshes(mat) {
     const out = [];
@@ -76,13 +82,15 @@ function strip(B, ax, az, bx, bz, l0, l1, y, color, uvS = 5, across = 1, opt = {
   const dx = (bx - ax) / L, dz = (bz - az) / L, nx = -dz, nz = dx;
   const n = Math.max(1, Math.ceil(L / 2.5));
   const C = col(color);
-  const P = (t, l) => [ax + dx * t + nx * l, y, az + dz * t + nz * l];
+  // opt.lanes: [[l, mult], ...] lateral breakpoints (ascending, l0..l1) with a brightness / [r,g,b] each, instead of `across`
+  const LN = opt.lanes || Array.from({ length: across + 1 }, (_, j) => [l0 + (l1 - l0) * (j / across)]);
+  const P = (t, q) => [ax + dx * t + nx * q[0], y, az + dz * t + nz * q[0], q[1]];
   const dash = opt.dash;   // [on, off]
   for (let i = 0; i < n; i++) {
     let t0 = (i / n) * L, t1 = ((i + 1) / n) * L;
     if (dash) { const per = dash[0] + dash[1], ph = ((t0 + (opt.ph || 0)) % per + per) % per; if (ph >= dash[0]) continue; t1 = Math.min(t1, t0 + dash[0] - ph); }
-    for (let j = 0; j < across; j++) {
-      const a0 = l0 + (l1 - l0) * (j / across), a1 = l0 + (l1 - l0) * ((j + 1) / across);
+    for (let j = 0; j < LN.length - 1; j++) {
+      const a0 = LN[j], a1 = LN[j + 1];
       const p00 = P(t0, a0), p10 = P(t1, a0), p01 = P(t0, a1), p11 = P(t1, a1);
       B.tri(p00, p01, p10, C, uvS); B.tri(p10, p01, p11, C, uvS);
     }
@@ -112,14 +120,39 @@ function hull(pts) {
 }
 function srand(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 
-const Y = { shoulder: 0.018, base: 0.03, pad: 0.034, crown: 0.036, line: 0.046, cross: 0.05, puddle: 0.052 };
+// smooth world-space value noise for surface variation (no texture cost)
+const hh = (i, j) => { const v = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };
+function vn(x, z) {
+  const i = Math.floor(x), j = Math.floor(z), u = x - i, v = z - j, a = hh(i, j), b = hh(i + 1, j), c = hh(i, j + 1), d = hh(i + 1, j + 1);
+  const su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
+  return a + (b - a) * su + (c - a) * sv + (a - b - c + d) * su * sv;
+}
+const patchy = (x, z) => 0.86 + 0.14 * vn(x * 0.05, z * 0.05) + 0.09 * vn(x * 0.21 + 40, z * 0.21);   // old repairs, sun-bleached runs
+const dusty = (x, z) => 0.9 + 0.16 * vn(x * 0.08 + 9, z * 0.08);
+const worn = (x, z) => 0.8 + 0.22 * vn(x * 0.9, z * 0.9);   // flaking paint
+/** Lateral wear profile of a two-lane paved road of half-width h: crumbly dark edges, polished wheel tracks, an oily lane centre. */
+function laneWear(h) {
+  const L = [[-h, 0.78], [-h + 0.45, 0.97]];
+  if (h >= 3.5) for (const c of [-h / 2, h / 2]) L.push([c - 0.8, 1.08], [c, 0.9], [c + 0.8, 1.08]);
+  else L.push([0, 0.96]);
+  L.push([h - 0.45, 0.97], [h, 0.78]);
+  return L;
+}
+/** Dirt track: loose lighter edges, darker packed wheel ruts, a slightly raised (lighter) crown. */
+function rutWear(h) {
+  if (h < 2) return [[-h, 1.02], [0, 0.97], [h, 1.02]];
+  return [[-h, 1.06], [-h + 0.6, 1.0], [-1.6, 0.86], [-0.7, 0.9], [0, 1.04], [0.7, 0.9], [1.6, 0.86], [h - 0.6, 1.0], [h, 1.06]];
+}
+const VERGE_IN = [0.8, 0.77, 0.52], VERGE = 2.2;   // a dry, dusty band of grass fading out from the road shoulder
+
+const Y = { verge: 0.012, shoulder: 0.018, base: 0.03, pad: 0.034, crown: 0.036, line: 0.046, cross: 0.05, puddle: 0.052 };
 const SHOULDER = { paved: 0.7, hwy: 1.6, dirt: 0.9, path: 0.45, walk: 0.25 };
 
 export function rebuildRoads() {
   if (!NODES) return;
   for (const c of group.children.slice()) { group.remove(c); c.geometry.dispose(); }
   roadInfo.tris = 0;
-  const asph = new Buf(), walk = new Buf(), dirt = new Buf(), grass = new Buf(), paint = new Buf(), shoulder = new Buf(), gravel = new Buf(), puddle = new Buf(), cross = new Buf();
+  const asph = new Buf(patchy), walk = new Buf(), dirt = new Buf(dusty), grass = new Buf(), paint = new Buf(worn), shoulder = new Buf(), gravel = new Buf(dusty), puddle = new Buf(), cross = new Buf(worn);
   // incident edges per node, sorted by angle
   const inc = NODES.map(() => []);
   EDGES.forEach((e, k) => {
@@ -160,11 +193,15 @@ export function rebuildRoads() {
     // shoulder (runs the full length, under the pads too, so corners stay soft)
     const soft = T === 'dirt' || T === 'path';
     strip(soft ? shoulder : gravel, A.x, A.z, B.x, B.z, -h - sh, h + sh, Y.shoulder, soft ? 0xe0d8a0 : T === 'hwy' ? 0xd6d0c0 : T === 'walk' ? 0xb0aca0 : 0xcac2ae, 3, 2);
-    if (T === 'dirt') strip(dirt, ax, az, bx, bz, -h, h, Y.base, 0xd8ccb4, 5, 3);   // one wide lane, no centre strip
+    if (T !== 'walk' && T !== 'path') for (const sd of [-1, 1]) {   // dusty verge: the shoulder fades into the grass instead of a hard edge
+      const i0 = sd * (h + sh), i1 = sd * (h + sh + VERGE), vin = soft ? [0.9, 0.88, 0.7] : VERGE_IN;
+      strip(grass, A.x, A.z, B.x, B.z, Math.min(i0, i1), Math.max(i0, i1), Y.verge, 0xffffff, 6, 1, { lanes: sd < 0 ? [[i1, 1], [i0, vin]] : [[i0, vin], [i1, 1]] });
+    }
+    if (T === 'dirt') strip(dirt, ax, az, bx, bz, -h, h, Y.base, 0xd8ccb4, 5, 3, { lanes: rutWear(h) });   // one wide lane, no centre strip
     else if (T === 'path') strip(dirt, ax, az, bx, bz, -h, h, Y.base, 0xf0e4c8, 4, 1);
     else if (T === 'walk') strip(walk, ax, az, bx, bz, -h, h, Y.base, 0xe8e4dc, 3, 1);
     else {
-      strip(asph, ax, az, bx, bz, -h, h, Y.base, T === 'hwy' ? 0xe4e4ea : 0xffffff, 5, 4);
+      strip(asph, ax, az, bx, bz, -h, h, Y.base, T === 'hwy' ? 0xe4e4ea : 0xffffff, 5, 4, { lanes: laneWear(h) });
       // markings stop at the junction pads
       const mx0 = A.x + dx * ta, mz0 = A.z + dz * ta, mx1 = B.x - dx * tb, mz1 = B.z - dz * tb;
       const yel = 0xe0c040, wht = 0xe8e8e0;
