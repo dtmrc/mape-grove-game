@@ -402,7 +402,7 @@ export function makePost(renderer) {
         c = c / (1.0 + c * 0.35);
         float l = dot(c, vec3(0.299,0.587,0.114));
         c = mix(vec3(l), c, 1.08);
-        c += vec3(0.012, 0.0, 0.03) * (1.0 - l) * (0.5 + night);
+        c += vec3(0.0, 0.006, 0.03) * (1.0 - l) * (0.5 + night);
         c = pow(max(c, 0.0), vec3(1.0/2.2));
         // vignette, interlace, grain
         float v = smoothstep(1.05, 0.35, length((uv - 0.5) * vec2(1.1, 1.0)));

@@ -187,7 +187,7 @@ export function makeDev(o) {
   function placeProp(p) {
     p.mesh = buildProp(p.type); scene.add(p.mesh);
     p.col = { id: 'prop:' + p.id, q: {}, prop: p, flags: { prop: true } };
-    if (p.type === 'lamp') { p.light = { x: 0, y: 5.4, z: 0, c: 0xffd8a8, i: 1 }; lights.push(p.light); p.halo = makeHalo(0xc8a8ff, 3.2); }
+    if (p.type === 'lamp') { p.light = { x: 0, y: 5.4, z: 0, c: 0xffd8a8, i: 1 }; lights.push(p.light); p.halo = makeHalo(0xffc890, 3.2); }
     props.push(p); syncProp(p); return p;
   }
   function syncProp(p) {
