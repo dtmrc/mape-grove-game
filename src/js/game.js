@@ -1651,7 +1651,7 @@ const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff,
 // meows: Goobles voice (src/js/meows.js)
 const meows = makeMeows({ P, G });
 // yardcats: lady cats in the Estates front yards to flirt with (src/js/yardcats.js)
-const yardcats = makeYardCats({ scene, G, P, places, collide, fishing, say, toast, banner, Sfx, addCash, addHeat, light: catLight, mission: () => mission, inside: () => INT.inside, px, pz });
+const yardcats = makeYardCats({ scene, G, P, places, collide, fishing, say, toast, banner, Sfx, addCash, addHeat, hurt, puff, light: catLight, mission: () => mission, inside: () => INT.inside, px, pz });
 const radio = makeRadio({ P, G, hit, isTouch }); // radio: car stations + police scanner (src/js/radio.js)
 // cave: the Hollow Deep easter egg (src/js/cave.js)
 const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
