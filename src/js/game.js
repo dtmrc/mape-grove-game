@@ -39,7 +39,7 @@ import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // re
 import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeDynGrid } from './dyngrid.js'; // broad phase for cars + peds
 import { makePrewarm } from './prewarm.js'; // shaders + textures ready behind the title screen
-import { updateHouseTex, houseTexReset, houseTexState } from './houses.js'; // full-size house atlases only near the player
+import { updateHouseTex, houseTexReset, houseTexState, MODE as HOUSE_TEX } from './houses.js'; // full-size house atlases only near the player
 import { makeSceneCull } from './scenecull.js'; // skip hidden / far objects in the per-frame scene walk
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
 import { makeSpawnView } from './spawnview.js'; // cars spawn / despawn out of sight
@@ -1739,7 +1739,7 @@ const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, place
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
 quests.init({ G, P, hit, pressed, hud, checkMark, giverMarks, fishing, jail, ui, Sfx, toast, isTouch, px, pz, mission: () => mission, dev: () => dev }); window.__G.quests = quests; // quests
-Object.assign(window.__G, { makeFig: { human: makeHuman, raccoon: makeRaccoon }, dyn: { cars: CARG, peds: PEDG }, scull: SCULL, prewarm: PW, houseTexState, updateHouseTex, spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
+Object.assign(window.__G, { makeFig: { human: makeHuman, raccoon: makeRaccoon }, dyn: { cars: CARG, peds: PEDG }, scull: SCULL, prewarm: PW, houseTexState, houseTex: HOUSE_TEX, spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
 
 // P17: pre-warm the shader programs that would otherwise compile mid-game (first officer, HP bar, muzzle flash, tracer,
 // plane, contrail, waypoint beam): hidden stand-ins go into the scene for one renderer.compile against the HDR target.

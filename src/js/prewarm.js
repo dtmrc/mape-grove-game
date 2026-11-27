@@ -1,7 +1,7 @@
 // prewarm.js: pay for shaders and textures behind the title screen instead of in the middle of play (2026-11-27).
 // three.js compiles a material's shader and uploads a texture the first time something using it is drawn, which is
 // a dropped frame or several the first time you turn towards a shop sign, a car model or an interior. This walks the
-// whole scene (hidden things too), asks the driver to compile every shader program in the background, and uploads
+// whole scene (hidden things too), hands every shader program to the driver to build in the background, and uploads
 // the textures a few milliseconds per frame. It re-scans a few times so things built late (interiors) are covered.
 export function makePrewarm({ renderer, scene, camera, budgetMs = 6, scans = 10, every = 1.5 }) {
   const seenTex = new WeakSet(), seenMat = new WeakSet(), queue = [];
@@ -25,10 +25,9 @@ export function makePrewarm({ renderer, scene, camera, budgetMs = 6, scans = 10,
     });
     for (const t of tex) if (!seenTex.has(t)) { if (usable(t)) { seenTex.add(t); queue.push(t); } }   // not loaded yet: the next scan picks it up
     S.materials += newMat;
-    if (newMat && !S.compiling && renderer.compileAsync) {
-      S.compiling = true;
-      try { renderer.compileAsync(scene, camera).then(() => { S.compiling = false; }, () => { S.compiling = false; }); } catch (e) { S.compiling = false; }
-    }
+    // compile() hands every new shader to the driver without waiting for it: the driver builds them on its own
+    // threads while the title screen is up, and the first draw that needs one finds it ready
+    if (newMat) { try { renderer.compile(scene, camera); } catch (e) { /* the first draw compiles it instead */ } }
   }
   /** Once a frame. Cheap when there is nothing left to do. */
   function tick(dt) {

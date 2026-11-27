@@ -98,19 +98,21 @@ export function houseTex(id, aniso = 4) {
 }
 let busy = false;
 function toLow(L) { if (L.state === 'lo') return; L.t.onUpdate = null; if (L.hi && L.hi.data) L.hi.data.src = ''; L.hi = null; L.state = 'lo'; L.t.source = L.lo; L.t.needsUpdate = true; }
-/** Call a few times a second with the player's position: swaps full / half atlases by distance. `all`: full for every model (photo mode, tests). */
-export function updateHouseTex(x, z, all = false) {
+/** Tests / photo mode: MODE.force = 'full' | 'half' pins every model to one atlas, null = by distance. */
+export const MODE = { force: null, near: NEAR, far: FAR };
+/** Call a few times a second with the player's position: swaps full / half atlases by distance. */
+export function updateHouseTex(x, z) {
   for (const id in LOD) {
     const L = LOD[id]; if (!L.t) continue;
     let d = 1e9; for (const [sx, sz] of L.spots) d = Math.min(d, Math.hypot(sx - x, sz - z));
-    if (all) d = 0;
-    if (L.state === 'lo' && d < NEAR && !busy) {
+    if (MODE.force) d = MODE.force === 'full' ? 0 : 1e9;
+    if (L.state === 'lo' && d < MODE.near && !busy) {
       busy = true; L.state = 'loading';
       const img = new Image(); img.src = TEX[id];
       const done = (ok) => { busy = false; if (L.state !== 'loading') return; if (!ok) { L.state = 'lo'; return; } L.hi = new THREE.Source(img); L.t.source = L.hi; L.t.needsUpdate = true; L.state = 'hi';
         L.t.onUpdate = () => { L.t.onUpdate = null; if (L.state === 'hi' && L.hi && L.hi.data === img) img.src = ''; }; };   // uploaded: the decoded copy (16 MB) can go, the GPU has it
       if (img.decode) img.decode().then(() => done(true), () => done(false)); else { img.onload = () => done(true); img.onerror = () => done(false); }
-    } else if (L.state !== 'lo' && d > FAR) toLow(L);
+    } else if (L.state !== 'lo' && d > MODE.far) toLow(L);
   }
 }
 /** After a lost WebGL context every texture is uploaded again from its image: go back to the half atlases (always in memory). */
