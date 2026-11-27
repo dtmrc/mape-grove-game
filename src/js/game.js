@@ -37,6 +37,7 @@ import { makeCarPhys } from './carphys.js'; // driving
 import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // remodeled cars (src/models/vehicles)
 import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
+import { makeSpawnView } from './spawnview.js'; // cars spawn / despawn out of sight
 import { makeOfficer } from './officer.js';
 import { waterPolys } from './ground.js';
 import { makeUI } from './ui.js'; // ui: pause menu, settings, full map
@@ -285,6 +286,7 @@ const cars = [];
 const TC = makeTraffic({ scene, NODES, ADJ, cars, heightAt: TER.heightAt, G, isPath: RD.isPath, onRoads: RD.onRoads }); // driving: traffic control (traffic.js)
 const CP = makeCarPhys({ scene, puff, heightAt: TER.heightAt, nearestRoad: RD.nearestRoad, edges: () => CP_EDGES, nodes: NODES, Sfx }); // driving: GTA IV style handling (carphys.js)
 registerVehicles(CAR_TYPES);
+const SV_ = makeSpawnView({ camera, scene, px: () => (P.car ? P.car.x : P.x), pz: () => (P.car ? P.car.z : P.z) }); // spawnview.js
 const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway', goobtruck: 'F-15 Prairie' };
 const PAINT = [0xc0392b, 0x2e6fbf, 0xe8e8e8, 0x2a2a2e, 0x3a8f5a, 0xe0b030, 0x8e5bb0, 0xa04020, 0x6a8090, 0xd86a9a];
 function spawnCar(type, x, z, yaw, o = {}) {
@@ -340,7 +342,7 @@ function spawnTraffic(type) {
     const t = 0.3 + Math.random() * 0.4;
     const x = A.x + (B.x - A.x) * t - dz * a.off, z = A.z + (B.z - A.z) * t + dx * a.off;
     if (!Number.isFinite(x) || !Number.isFinite(z)) continue; // zero-length edge or edge without a width (rescued/deleted roads): NaN would spread to every car via collisions
-    if (Math.hypot(x - P.x, z - P.z) < 25 || cars.some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue;
+    if (!SV_.hidden(x, z, 35) || cars.some((c) => Math.hypot(c.x - x, c.z - z) < 10)) continue; // spawnview.js: out of sight (was 25 m from where Goobles last stood, even while driving)
     const c = spawnCar(type, x, z, Math.atan2(dx, dz), { driver: 'ai' });
     c.ai = { ...a, cruise: 8 + Math.random() * 4 };
     return c;
@@ -502,7 +504,7 @@ function spawnPatrol() {
   const opts = [];
   for (let i = 0; i < NN; i++) {
     const d = Math.hypot(NODES[i].x - P.x, NODES[i].z - P.z);
-    if (d > 55 && d < 120 && roadOpts(i, -1).length) opts.push(i);
+    if (d > 55 && d < 120 && roadOpts(i, -1).length && SV_.hidden(NODES[i].x, NODES[i].z, 45)) opts.push(i);
   }
   if (!opts.length) return;
   const n = opts[(Math.random() * opts.length) | 0], N0 = NODES[n];
@@ -1452,7 +1454,7 @@ function updateHeat(dt) {
   } else {
     G.bustT = 0; G.hideT = 0;
     // patrols go home: far ones vanish, near ones turn back into traffic
-    for (const c of patrolList) { if (Math.hypot(c.x - px(), c.z - pz()) > 70) removeCar(c); else if (Math.random() < dt * 0.3) retirePatrol(c); }
+    for (const c of patrolList) { if (Math.hypot(c.x - px(), c.z - pz()) > 70 && SV_.hidden(c.x, c.z, 70)) removeCar(c); else if (Math.random() < dt * 0.3) retirePatrol(c); }
     patrolList = patrols();
     // Suds N Paws repair at 0 stars lives in shops.js (E in the wash bay)
   }
@@ -1489,7 +1491,7 @@ function updateCars(dt) {
   }
   // keep traffic topped up, clear wrecks far away
   let ai = 0, walkers = 0;
-  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90) || (c.driver === 'ai' && !c.role && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
+  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90 && SV_.hidden(c.x, c.z, 90)) || (c.driver === 'ai' && !c.role && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
   if (!cars.some((c) => c.role === 'goob' && !c.dead) && Math.hypot(places.goobTruck.x - px(), places.goobTruck.z - pz()) > 80 && !cars.some((c) => Math.hypot(c.x - places.goobTruck.x, c.z - places.goobTruck.z) < 4)) goobTruck();
   if (ai < 12 && Math.random() < dt) spawnTraffic(['sedan', 'hatch', 'pickup', 'wagon'][(Math.random() * 4) | 0]);
   for (let i = 0; i < peds.length; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human') walkers++; }
@@ -1497,7 +1499,7 @@ function updateCars(dt) {
   // cap the crowd (carjack victims pile up): drop far-off walkers over the cap, and cars the player left far behind
   let over = walkers - 22;
   if (over > 0) for (let i = 0; i < peds.length && over > 0; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human' && Math.hypot(p.x - px(), p.z - pz()) > 90) { removePed(p); over--; i--; } }
-  if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110) { removeCar(c); i--; } }
+  if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110 && SV_.hidden(c.x, c.z, 110)) { removeCar(c); i--; } }
 }
 
 let districtT = 0, district = '';
@@ -1591,6 +1593,7 @@ function frame(now) {
   cat.position.set(P.x, P.y - (P.swim ? SWIM_SINK - Math.sin(G.time * 3) * 0.03 : 0), P.z); cat.rotation.y = P.yaw;
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
   if (!dev.camera(Math.max(dt, 0.001)))   updateCamera(Math.max(dt, 0.001));
+  SV_.ready();
   sky.mesh.position.copy(camera.position);
   radio.update(dt); // radio
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
@@ -1660,7 +1663,7 @@ const haunted = makeHaunted({ scene, G, P, cat, places, NPC, fishing, quests, ca
 const otters = makeOtters({ scene, G, P, T, Sfx, blocked, places, camera, px: () => px(), pz: () => pz(), inside: () => INT.inside || jail.active() });
 window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
-const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
+const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time, hidden: SV_.hidden });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block

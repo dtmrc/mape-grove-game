@@ -260,7 +260,7 @@ export function makePolice(A) {
     const opts = [];
     for (let i = 0; i < NODES.length; i++) {
       const d = Math.hypot(NODES[i].x - px(), NODES[i].z - pz());
-      if (d > 50 && d < 115 && A.roadOpts(i, -1).length) opts.push(i);
+      if (d > 50 && d < 115 && A.roadOpts(i, -1).length && (!A.hidden || A.hidden(NODES[i].x, NODES[i].z, 50))) opts.push(i); // spawnview.js: out of sight
     }
     if (!opts.length) return null;
     const n = opts[(Math.random() * opts.length) | 0], N0 = NODES[n];
@@ -694,7 +694,7 @@ export function makePolice(A) {
       if (!c.pd || !c.pd.unit || c.driver === 'player') continue;
       const far = Math.hypot(c.x - px(), c.z - pz());
       const crewHome = c.pd.crew.every((o) => o.state === 'inside' || o.state === 'out');
-      if ((c.pd.state === 'leave' && far > 60 && crewHome) || (c.dead && far > 80)) { A.removeCar(c); dirtyCruisers(); for (const o of c.pd.crew) if (o.state === 'inside') { scene.remove(o.mesh); dropBar(o); if (cops.includes(o)) cops.splice(cops.indexOf(o), 1); } }
+      if (((c.pd.state === 'leave' && far > 60 && crewHome) || (c.dead && far > 80)) && (!A.hidden || A.hidden(c.x, c.z, 60))) { A.removeCar(c); dirtyCruisers(); for (const o of c.pd.crew) if (o.state === 'inside') { scene.remove(o.mesh); dropBar(o); if (cops.includes(o)) cops.splice(cops.indexOf(o), 1); } }
     }
     // officers
     for (const o of cops.slice()) {
