@@ -423,6 +423,7 @@ function buildRV(ctx) {
       { id: 'bed', x: 3.0, z: -0.25, r: 0.9, label: 'Sleep (save)' },
       { id: 'nap', x: -3.3, z: -0.55, r: 0.7, label: 'Nap on the bunk (save)' },
       { id: 'bowl', x: -1.2, z: 0.6, r: 0.55, label: 'Kibble' },
+      { id: 'wardrobe', x: 2.8, z: 0.6, r: 0.45, label: 'Wardrobe (clothes)' }, // wardrobe.js
     ],
   };
 }
