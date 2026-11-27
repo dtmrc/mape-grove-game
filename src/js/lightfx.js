@@ -19,9 +19,9 @@ const FS = `
   uniform float uNight;
   varying vec3 vCol; varying float vT, vOn, vEdge, vDist;
   void main(){
-    float a = uNight * vOn * (0.05 + 0.55 * vT * vT) * pow(vEdge, 1.6);
+    float a = uNight * vOn * (0.05 + 0.55 * vT * vT) * pow(clamp(vEdge, 0.0001, 1.0), 1.6);   // clamped: with MSAA a varying can be extrapolated below 0 at a triangle edge, and pow of a negative is NaN (iPhone: white blocks through the bloom)
     a *= smoothstep(1.5, 6.0, vDist) * (1.0 - smoothstep(55.0, 95.0, vDist));
-    gl_FragColor = vec4(vCol * a, 1.0);
+    gl_FragColor = vec4(max(vCol, 0.0) * clamp(a, 0.0, 1.0), 1.0);
   }`;
 
 export function makeLightFX({ scene, camera, lights }) {
