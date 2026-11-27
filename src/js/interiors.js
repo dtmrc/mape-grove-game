@@ -721,6 +721,7 @@ export function makeInteriors(ctx) {
       };
     },
     ready: roomsReady,
+    bakeUniforms: BAKE_UNIFORMS,   // debug: uDynW (live weight per point light in render order), uBakeTint
     _addDoor: addDoor,
     _place: () => { for (const e of entries) placeEntry(e); },
   };
