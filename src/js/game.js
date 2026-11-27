@@ -359,18 +359,23 @@ function attachPed(p) {
 }
 function removePed(p) { scene.remove(p.mesh); if (p.bar) scene.remove(p.bar.sp); peds.splice(peds.indexOf(p), 1); }
 function spawnPed(o = {}) {
+  let at = o.at, lane = null;
+  if (!at) { // a walker on a town street, somewhere Goobles can't see it pop in (spawnview.js)
+    for (let tries = 0; tries < 12 && !lane; tries++) {
+      let a = null; for (let k = 0; !a; k++) a = randomLane(k < 40);   // walkers stay on town streets (no sidewalks out in the country)
+      const A = NODES[a.from], B = NODES[a.to], t = Math.random();
+      const L = Math.hypot(B.x - A.x, B.z - A.z) || 1, side = (Math.random() < 0.5 ? 1 : -1) * (a.w / 2 + 1.3);
+      const x = A.x + (B.x - A.x) * t - (B.z - A.z) / L * side, z = A.z + (B.z - A.z) * t + (B.x - A.x) / L * side;
+      if (!SV_.hidden(x, z, 25)) continue;
+      at = { x, z }; lane = { ped: true, from: a.from, to: a.to, w: a.w, side: Math.sign(side), off: side };
+    }
+    if (!lane) return null; // nowhere out of sight right now: the top-up tries again later
+  }
   const mesh = o.mesh || makeHuman(o.look || {});
   scene.add(mesh);
   const p = { mesh, kind: o.kind || 'human', x: 0, z: 0, yaw: 0, state: o.state || 'walk', t: 0, ph: Math.random() * 6, speed: 1.2 + Math.random() * 0.5,
     r: o.r || 0.35, npc: o.npc || null, home: o.home || null, vx: 0, vz: 0, spin: 0 };
-  if (o.at) { p.x = o.at.x; p.z = o.at.z; }
-  else {
-    let a = null; for (let k = 0; !a; k++) a = randomLane(k < 40);   // walkers stay on town streets (no sidewalks out in the country)
-    const A = NODES[a.from], B = NODES[a.to], t = Math.random();
-    const L = Math.hypot(B.x - A.x, B.z - A.z) || 1, side = (Math.random() < 0.5 ? 1 : -1) * (a.w / 2 + 1.3);
-    p.x = A.x + (B.x - A.x) * t - (B.z - A.z) / L * side; p.z = A.z + (B.z - A.z) * t + (B.x - A.x) / L * side;
-    p.lane = { ped: true, from: a.from, to: a.to, w: a.w, side: Math.sign(side), off: side };
-  }
+  p.x = at.x; p.z = at.z; if (lane) p.lane = lane;
   if (p.state === 'walk' && !p.lane) attachPed(p);
   if (o.yaw !== undefined) p.yaw = o.yaw;
   peds.push(p);
@@ -1498,7 +1503,7 @@ function updateCars(dt) {
   if (walkers < 20 && Math.random() < dt * 0.5) spawnPed({});
   // cap the crowd (carjack victims pile up): drop far-off walkers over the cap, and cars the player left far behind
   let over = walkers - 22;
-  if (over > 0) for (let i = 0; i < peds.length && over > 0; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human' && Math.hypot(p.x - px(), p.z - pz()) > 90) { removePed(p); over--; i--; } }
+  if (over > 0) for (let i = 0; i < peds.length && over > 0; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human' && Math.hypot(p.x - px(), p.z - pz()) > 90 && SV_.hidden(p.x, p.z, 90)) { removePed(p); over--; i--; } }
   if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110 && SV_.hidden(c.x, c.z, 110)) { removeCar(c); i--; } }
 }
 
