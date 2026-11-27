@@ -1751,9 +1751,13 @@ Object.assign(window.__G, { makeFig: { human: makeHuman, raccoon: makeRaccoon },
   tmp.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })));
   tmp.add(new THREE.Mesh(bx, new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })));
   tmp.add(new THREE.Mesh(bx, new THREE.MeshLambertMaterial({ color: 0xdfe3ea, fog: false, transparent: true })));
-  tmp.add(new THREE.Mesh(bx, new THREE.MeshBasicMaterial({ map: T.glow, vertexColors: true, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide })));
+  const trailG = new THREE.BoxGeometry(1, 1, 1); trailG.setAttribute('color', new THREE.BufferAttribute(new Float32Array(trailG.attributes.position.count * 4).fill(1), 4)); // contrail colours are RGBA (USE_COLOR_ALPHA): compiled on the lake shore otherwise
+  tmp.add(new THREE.Mesh(trailG, new THREE.MeshBasicMaterial({ map: T.glow, vertexColors: true, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide })));
   scene.add(tmp);
   const was = checkMark.visible; checkMark.visible = true;
+  const idle = []; scene.traverse((o) => { if (o.isInstancedMesh && !o.visible && o.count === 0) idle.push(o); }); // empty pools (fence debris...): compiled now, not on the first break
+  for (const o of idle) o.visible = true;
   renderer.setRenderTarget(post.rt); renderer.compile(scene, camera); renderer.setRenderTarget(null);
-  checkMark.visible = was; scene.remove(tmp); bx.dispose(); barT.dispose();
+  for (const o of idle) o.visible = false;
+  checkMark.visible = was; scene.remove(tmp); bx.dispose(); trailG.dispose(); barT.dispose();
 }

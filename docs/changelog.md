@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-27: the Hollow Deep becomes a branching cave (on main, test page only)
+- diet: "more cave detail and ground foliage, mist or smoke, ground water pools, spookier dwelling" and "right now it's
+  more of a mining tunnel rather than an organic cave with multiple forks and other ways to get lost".
+- src/js/cavegen.js: the tunnel is generated from a 2D distance field (passage splines + chamber blobs + rock noise,
+  columns cut out). One main route to the rope pit, two loops, five dead ends, eleven chambers. Floor, walls and roof
+  are one skin on a 0.7 m grid, cut into 14 m tiles that hide beyond 24 m. Collision and the camera probe use the same
+  field (new `collide` / `solid` room hooks in interiors.js). Dressing per tile: boulders, stalagmites and stalactites,
+  moss, ferns, glowing and plain mushrooms, crystal gardens with baked light, roots near the mouth, John's signs.
+- Cues for the way down: ghost-blue wisps drift along the main route, the feather trail follows it, signs at the forks.
+- src/js/cavefx.js: ground mist (one flat layer, noise in the shader), water pools (drip rings, paw ripples, torch glint),
+  one billboard batch per room for wisps, candle flames, eyes that shut when the cat comes close, falling drips, smoke.
+- src/js/cavedress.js: the dwelling (mist, pools under a moonlit shaft, candle shrines, cobwebs, embers, eyes in the
+  corners, colder fog) and the cave mouth (ferns, moss, mushrooms, roots over the opening, puddle, mist, undergrowth and
+  a feather trail along the approach from the trail). Quiet drip and hum sounds underground.
+- Cost: cave 28k -> 9k triangles in view, frame time unchanged in `qa perf room:cave room:cavelair`.
+  Views: `node tools/qa/qa.cjs run tools/qa/scenarios/cave-look.cjs`.
+
 ## Unreleased (2026-11-09): grey mannequin base (NOT published)
 - diet: "make a new model: take the chest and hips out, genderless, grey, unclothed; use the boxy arms/legs/body principles"
   from a Legends reference picture. npcgen.js exports buildMannequin({height, color, name}): chamfered-box torso tapering
