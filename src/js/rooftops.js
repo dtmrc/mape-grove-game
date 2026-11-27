@@ -5,14 +5,42 @@
 // Load cost: one pass over the static triangles that sit over a building. Runtime: one bilinear lookup per collider hit.
 
 const CELL = 0.25;          // grid spacing (m)
+const K = 8, key = (i, j) => (i + 1024) * 4096 + j + 1024;   // coarse 8 m spatial index
+const SCELL = 0.25, SLABS = [], SIX = new Map();          // overhang slabs: Int16 cm heights, -1 = nothing to stand on
 const SKIP = new Set(['leaves', 'shadow', 'shadowR', 'grass', 'road', 'asphalt', 'crosswalk', 'sidewalk', 'dirt', 'puddle', 'creek', 'lamp']);
 
 /** c.rg = { x0, z0, nx, nz, H } (ground-relative heights, world-axis grid over the collider's bounds). */
 export function buildRoofs(colliders, buckets, bounds) {
   const T = colliders.filter((c) => c.bld && !c.poly && !c.water);
   if (!T.length) return 0;
+  // overhangs (2026-11-27, diet: "on houses where there is a porch overhang, i should be able to climb onto that roof
+  // overhang"): one slab grid per cluster of building colliders, 3.5 m past the walls, holding every roof surface 2 m+ up
+  // that has no wall under it (porch roofs, eaves, awnings). Standable only (slabTop), never a wall.
+  SLABS.length = 0; SIX.clear();
+  const PAD = 3.5, boxes = T.map((c) => { const [a, b, d, e] = bounds(c); return { a: a - PAD, b: b + PAD, d: d - PAD, e: e + PAD }; });
+  const par = boxes.map((_, i) => i), find = (i) => (par[i] === i ? i : (par[i] = find(par[i])));
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const A = boxes[i], B = boxes[j];
+    if (A.a < B.b && B.a < A.b && A.d < B.e && B.d < A.e) par[find(i)] = find(j);
+  }
+  const groups = new Map();
+  boxes.forEach((B, i) => { const r = find(i), g = groups.get(r); if (!g) groups.set(r, { ...B }); else { g.a = Math.min(g.a, B.a); g.b = Math.max(g.b, B.b); g.d = Math.min(g.d, B.d); g.e = Math.max(g.e, B.e); } });
+  for (const g of groups.values()) {
+    if ((g.b - g.a) * (g.e - g.d) > 120 * 120) continue;   // a whole block merged together: skip rather than allocate a huge grid
+    const nx = Math.ceil((g.b - g.a) / SCELL) + 1, nz = Math.ceil((g.e - g.d) / SCELL) + 1;
+    const S = { slab: true, x0: g.a, z0: g.d, x1: g.b, z1: g.e, nx, nz, H: new Int16Array(nx * nz).fill(-1), L: new Int16Array(nx * nz).fill(32767) };   // highest + lowest surface per cell (a porch roof under the eave)
+    SLABS.push(S);
+  }
+  for (const S of SLABS) for (let i = Math.floor(S.x0 / K); i <= Math.floor(S.x1 / K); i++) for (let j = Math.floor(S.z0 / K); j <= Math.floor(S.z1 / K); j++) {
+    const k = key(i, j); (SIX.get(k) || SIX.set(k, []).get(k)).push(S);
+  }
   // coarse 8 m index of the targets
-  const IX = new Map(), K = 8, key = (i, j) => (i + 1024) * 4096 + j + 1024;
+  const IX = new Map();
+  for (const S of SLABS) {
+    for (let i = Math.floor(S.x0 / K); i <= Math.floor(S.x1 / K); i++) for (let j = Math.floor(S.z0 / K); j <= Math.floor(S.z1 / K); j++) {
+      const k = key(i, j); (IX.get(k) || IX.set(k, []).get(k)).push(S);
+    }
+  }
   for (const c of T) {
     const [a, b, d, e] = bounds(c);
     const nx = Math.max(1, Math.ceil((b - a) / CELL) + 1), nz = Math.max(1, Math.ceil((e - d) / CELL) + 1);
@@ -45,7 +73,26 @@ export function buildRoofs(colliders, buckets, bounds) {
         const L = Math.hypot(nx, ny, nz); if (L < 1e-9 || Math.abs(ny) < 0.5 * L) continue;   // walls and steep faces
         const det = ux * vz - uz * vx; if (Math.abs(det) < 1e-9) continue;
         const tx0 = Math.min(ax, bx, cx), tx1 = Math.max(ax, bx, cx), tz0 = Math.min(az, bz, cz), tz1 = Math.max(az, bz, cz);
+        const hi = Math.max(ay, by, cy) >= 2.0;
         for (const c of cs) {
+          if (c.slab) {   // overhang slab: surfaces 2 m+ up, nearest cell, cm
+            if (!hi) continue;
+            const S = c;
+            if (tx1 < S.x0 || tz1 < S.z0 || tx0 > S.x1 || tz0 > S.z1) continue;
+            const i0 = Math.max(0, Math.ceil((tx0 - S.x0) / SCELL)), i1 = Math.min(S.nx - 1, Math.floor((tx1 - S.x0) / SCELL));
+            const j0 = Math.max(0, Math.ceil((tz0 - S.z0) / SCELL)), j1 = Math.min(S.nz - 1, Math.floor((tz1 - S.z0) / SCELL));
+            for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+              const px = S.x0 + i * SCELL - ax, pz = S.z0 + j * SCELL - az;
+              const s2 = (px * vz - pz * vx) / det, q2 = (ux * pz - uz * px) / det;
+              if (s2 < -1e-4 || q2 < -1e-4 || s2 + q2 > 1.0001) continue;
+              const y = ay + s2 * uy + q2 * vy, o = j * S.nx + i;
+              if (y < 2.0) continue;
+              const cm = Math.min(32000, Math.round(y * 100));
+              if (cm > S.H[o]) S.H[o] = cm;
+              if (cm < S.L[o]) S.L[o] = cm;
+            }
+            continue;
+          }
           const R = c.rg;
           if (tx1 < R.x0 || tz1 < R.z0 || tx0 > R.x0 + (R.nx - 1) * CELL || tz0 > R.z0 + (R.nz - 1) * CELL) continue;
           const i0 = Math.max(0, Math.ceil((tx0 - R.x0) / CELL)), i1 = Math.min(R.nx - 1, Math.floor((tx1 - R.x0) / CELL));
@@ -81,6 +128,21 @@ export function buildRoofs(colliders, buckets, bounds) {
   }
   return T.length;
 }
+
+/** The highest overhang surface (porch roof, eave, awning) at x,z that the cat can stand on from height y (steps up
+ *  0.5 m), else 0. Slabs never block: colliders still do the walls. */
+export function slabTop(x, z, y) {
+  const l = SIX.get(key(Math.floor(x / K), Math.floor(z / K)));
+  let best = 0;
+  if (l) for (const S of l) {
+    if (x < S.x0 || x > S.x1 || z < S.z0 || z > S.z1) continue;
+    const o = Math.round((z - S.z0) / SCELL) * S.nx + Math.round((x - S.x0) / SCELL);
+    let h = S.H[o] / 100; if (h > y + 0.5) h = S.L[o] / 100;
+    if (h > best && h <= y + 0.5) best = h;
+  }
+  return best;
+}
+export const slabStats = () => ({ n: SLABS.length, cells: SLABS.reduce((s, S) => s + S.H.length, 0) });
 
 /** The roof height of collider c at x,z (clamped to its grid); the box top if it has no grid or was moved in the editor. */
 export function roofTop(c, x, z) {

@@ -34,7 +34,7 @@ export function makeTraffic(api) {
   const lampGeo = new THREE.CircleGeometry(0.11, 10);
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true, toneMapped: false });
   let meshes = [];
-  let stopList = [], stopP = null, stopS = null, gen = 0;   // breakables: every stop sign (pole + face instance) a car can knock down
+  let stopList = [], stopP = null, stopS = null, gen = 0, footPoles = [];   // footPoles: signal + stop sign poles the cat can't walk through   // breakables: every stop sign (pole + face instance) a car can knock down
   const inst = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, Math.max(1, n)); m.count = n; m.userData.noLift = true; m.frustumCulled = false; scene.add(m); meshes.push(m); return m; };
 
   const LAMP_ON = [new THREE.Color(0xff2a1a), new THREE.Color(0xffb21a), new THREE.Color(0x2aff6a)];
@@ -60,7 +60,7 @@ export function makeTraffic(api) {
   // ---------------- build from the road graph ----------------
   function build() {
     for (const m of meshes) { scene.remove(m); m.dispose(); }
-    meshes = []; J = new Map(); lampList = []; stopList = []; gen++;
+    meshes = []; J = new Map(); lampList = []; stopList = []; footPoles = []; gen++;
     const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _e = new THREE.Euler();
     const poles = [], signs = [], heads = [], lampsM = [];
     for (let n = 0; n < NODES.length; n++) {
@@ -91,10 +91,10 @@ export function makeTraffic(api) {
         const face = Math.atan2(dx, dz); // the sign / signal faces oncoming (incoming) traffic
         if (kind !== 'light') {
           stopList.push({ x: px, z: pz, h, face, pi: poles.length, si: signs.length, gen: gen + 0 });
-          poles.push([px, h, pz, 2.1]);
+          poles.push([px, h, pz, 2.1]); footPoles.push({ x: px, z: pz, st: stopList[stopList.length - 1] });
           signs.push([px, h + 2.05, pz, face]);
         } else {
-          poles.push([px, h, pz, 3.2]);
+          poles.push([px, h, pz, 3.2]); footPoles.push({ x: px, z: pz, st: null });
           heads.push([px, h + 2.95, pz, face]);
           for (let k = 0; k < 3; k++) { lampsM.push([px + Math.sin(face) * 0.08, h + 3.25 - k * 0.3, pz + Math.cos(face) * 0.08, face]); lampList.push({ j, ap, k }); }
         }
@@ -195,7 +195,16 @@ export function makeTraffic(api) {
     stopP.instanceMatrix.needsUpdate = stopS.instanceMatrix.needsUpdate = true;
     return true;
   }
-  const T = { build, update, limit, queued, signal, junctions: () => J, stops: () => stopList, hideStop, stopParts: { poleGeo, poleMat, signGeo, signMat } };
+  /** Keep the cat (P, radius r) out of standing signal and stop sign poles (they have no world colliders: cars hit stops via breakables). */
+  function footBlock(P, r) {
+    const m = 0.1 + r;
+    for (const p of footPoles) {
+      const dx = P.x - p.x, dz = P.z - p.z;
+      if (dx > m || dx < -m || dz > m || dz < -m || (p.st && p.st.down) || P.y > 3.3) continue;
+      const d = Math.hypot(dx, dz); if (d < m && d > 1e-4) { P.x = p.x + dx / d * m; P.z = p.z + dz / d * m; }
+    }
+  }
+  const T = { footBlock, build, update, limit, queued, signal, junctions: () => J, stops: () => stopList, hideStop, stopParts: { poleGeo, poleMat, signGeo, signMat } };
   if (typeof window !== 'undefined') window.__TC = T;
   return T;
 }

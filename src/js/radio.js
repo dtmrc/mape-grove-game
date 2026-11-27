@@ -344,10 +344,11 @@ export function makeRadio({ P, G, hit, isTouch }) {
   let eng = null, list = null, idx = 0, last = 0, inCar = null, nameT = 0, shownSong = null, capShown = null, muted = false;
   let pick0 = Math.floor(Math.random() * 4);   // first civilian car starts on a random music station
   const el = document.createElement('div'); el.id = 'radio';
-  el.style.cssText = `position:absolute;left:50%;top:${isTouch ? 100 : 58}px;transform:translateX(-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity .3s;font-size:30px;line-height:1;white-space:nowrap;`;
+  el.style.cssText = `position:absolute;left:50%;${isTouch ? '' : 'top:58px;'}transform:translateX(-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity .3s;font-size:30px;line-height:1;white-space:nowrap;`;
   const nm = document.createElement('div'), sub = document.createElement('div'), cap = document.createElement('div');
   sub.style.cssText = 'font-size:20px;color:#e8e8e8;margin-top:2px;';
-  cap.style.cssText = `position:fixed;left:50%;bottom:${isTouch ? 210 : 70}px;transform:translateX(-50%);max-width:min(620px,86vw);white-space:normal;font-size:21px;color:#f4f4dc;background:rgba(0,0,0,.45);padding:3px 10px;display:none;`;
+  cap.id = 'radiocap'; // on touch the layout block in style.css places it
+  cap.style.cssText = `position:fixed;${isTouch ? '' : 'left:50%;bottom:70px;transform:translateX(-50%);'}max-width:min(620px,86vw);white-space:normal;font-size:21px;color:#f4f4dc;background:rgba(0,0,0,.45);padding:3px 10px;display:none;`;
   el.append(nm, sub); (document.getElementById('hud') || document.body).append(el, cap);
   // touch: tapping the station name switches; a small RADIO tag stays while driving
   const btn = document.createElement('button'); btn.id = 'radiobtn'; btn.textContent = 'RADIO'; // placed by the touch layout in style.css

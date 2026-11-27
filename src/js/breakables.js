@@ -326,5 +326,17 @@ export function update(dt) {
     }
   }
 }
+/** On foot (2026-11-27, diet: "i'm also able to run through street lights"): a knocked pole that bent but stayed rooted,
+ *  a snapped lamp's stump and a knocked hydrant's base still block the cat (their world colliders were dropped so cars pass). */
+export function footBlock(P, r) {
+  for (const e of live) {
+    if (!(e.kind === 'lamp' || e.kind === 'sign' || e.kind === 'hydrant') || e.x === undefined) continue;
+    const dx = P.x - e.x, dz = P.z - e.z;
+    if (dx * dx + dz * dz > 1) continue;
+    const solid = e.kind === 'hydrant' ? 0.2 : !e.snapped ? 0.15 : e.stump ? 0.36 : 0, high = !e.snapped && e.kind !== 'hydrant' ? 3 : 0.5;
+    const m = solid + r, d = Math.hypot(dx, dz);
+    if (solid && P.y < high && d < m && d > 1e-4) { P.x = e.x + dx / d * m; P.z = e.z + dz / d * m; }
+  }
+}
 /** Put everything back now (new game / load). */
 export function resetAll() { for (const e of live) e.t = 1e9; const c = ctx && ctx.camera; if (c) { const p = c.position.clone(); c.position.set(1e6, 0, 1e6); update(0); c.position.copy(p); } }
