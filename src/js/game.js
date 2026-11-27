@@ -1024,7 +1024,7 @@ function updatePlayer(dt) {
   P.vy -= 14 * dt; P.y = Math.max(P.fl || 0, P.y + P.vy * dt); if (P.y === (P.fl || 0) && TER.floorHit && TER.floorHit.bounce) { P.vy = Math.min(16, Math.max(4.5, -P.vy * 0.92 + (down(' ') ? 2.6 : 0))); P.jumps = 1; Sfx.blip(180 + P.vy * 20); } else if (P.y === (P.fl || 0)) { /* engine: decks + trampolines (hold Space to bounce higher) */ P.vy = Math.max(0, P.vy); P.jumps = 0; }
   if (P.flip > 0) { P.flip = P.y > 0 ? P.flip - dt : 0; cat.userData.body.rotation.x = P.flip > 0 ? -Math.PI * 2 * (1 - P.flip / 0.55) : 0; }
   const q = (INT.inside ? INT.collide : collide)(P.x, P.z, 0.22, P.y, SWIM_OK); P.x = q.x; P.z = q.z;
-  if (!INT.inside) climb.afterMove(q, mx, mz, camYaw, dt); // climb
+  climb.afterMove(q, mx, mz, camYaw, dt, INT.inside); // climb (+ four-legged up high)
   // car bodies are solid on foot
   for (const c of cars) for (const [cx, cz] of carCircles(c)) {
     const dx = P.x - cx, dz = P.z - cz, d = Math.hypot(dx, dz), m = c.spec.wid / 2 + 0.22;
