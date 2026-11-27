@@ -264,7 +264,7 @@ export function makeJail(ctx) {
   const zMats = { snore: new THREE.SpriteMaterial({ map: zTex('Z z z', '#cfe6ff'), transparent: true, depthTest: false }), mumble: new THREE.SpriteMaterial({ map: zTex('. . .', '#ffd23f'), transparent: true, depthTest: false }), stir: new THREE.SpriteMaterial({ map: zTex('!', '#ff4040'), transparent: true, depthTest: false }) };
   const zz = new THREE.Sprite(zMats.snore); zz.scale.set(0.7, 0.35, 1); zz.position.set(5.0, 1.75, 1.8); zz.renderOrder = 5; room.add(zz);
   // the fly
-  const fly = new THREE.Group(); room.add(fly);
+  const fly = new THREE.Group(); room.add(fly); fly.scale.setScalar(1.8);   // 2026-11-27: 1.8x, it was a speck on a phone screen
   mesh(box(0.035, 0.03, 0.05), MDark, 0, 0, 0, fly);
   const wings = [mesh(new THREE.PlaneGeometry(0.05, 0.03), basic({ color: 0xbfd0e0, transparent: true, opacity: 0.6, side: THREE.DoubleSide }), -0.03, 0.015, 0, fly), mesh(new THREE.PlaneGeometry(0.05, 0.03), basic({ color: 0xbfd0e0, transparent: true, opacity: 0.6, side: THREE.DoubleSide }), 0.03, 0.015, 0, fly)];
   wings.forEach((w) => { w.rotation.x = -Math.PI / 2; });
@@ -399,7 +399,7 @@ export function makeJail(ctx) {
     if (st && st.door) { ox = st.door.x - Math.sin(st.door.yaw) * 14; oz = st.door.z - Math.cos(st.door.yaw) * 14; oy = st.door.yaw + Math.PI; }
     else if (st) { ox = st.x; oz = st.z + 12; }
     else { ox = -60; oz = 30; }
-    P.x = ox; P.z = oz; P.y = 0; P.vy = 0; P.vx = P.vz = 0; P.yaw = oy;
+    P.x = ox; P.z = oz; P.y = 0; P.vy = 0; P.vx = P.vz = 0; okLx = NaN; P.yaw = oy;
     G.heat = Math.max(G.heat, 1); G.seenT = 0; G.bustT = 0;
     hudEl('minimap').style.visibility = '';
     objective(''); room.visible = false; S.active = false; S.stage = 'off'; window.__camO = null;
@@ -417,7 +417,7 @@ export function makeJail(ctx) {
   }
   function placeCatInCell() {
     const [wx, wz] = L2W(cellSpawn.x, cellSpawn.z);
-    P.x = wx; P.z = wz; P.y = 0; P.vy = 0; P.vx = P.vz = 0; P.yaw = 0; P.punch = 0; P.down = 0;
+    P.x = wx; P.z = wz; P.y = 0; P.vy = 0; P.vx = P.vz = 0; okLx = NaN; P.yaw = 0; P.punch = 0; P.down = 0;
   }
   function caught(kind) {
     // kind: 'frog' | 'cat' | 'buzz' | 'vent'
@@ -466,7 +466,7 @@ export function makeJail(ctx) {
   function crawl() {
     S.control = 'none';
     fadeOut(() => {
-      const [wx, wz] = L2W(2.25, -4.7); P.x = wx; P.z = wz; P.yaw = Math.PI; P.y = 0; P.vx = P.vz = 0;
+      const [wx, wz] = L2W(2.25, -4.7); P.x = wx; P.z = wz; P.yaw = Math.PI; P.y = 0; P.vx = P.vz = 0; okLx = NaN;
       setStage('evidence'); S.control = 'cat';
       setTimeout(() => { fadeIn(1.5); say(LINES.evidence); }, 500);
     }, 2.2);
@@ -529,10 +529,19 @@ export function makeJail(ctx) {
     for (const d of doors) { const want = d.open ? -1.75 : 0; d.ang += (want - d.ang) * Math.min(1, dt * 5); d.g.rotation.y = d.ang; }
   }
   // the cat inside the block: our own collisions, stealth, actions
-  let prevLx = 0, prevLz = 0;
+  let prevLx = 0, prevLz = 0, okLx = NaN, okLz = NaN;
   function updateCat(dt) {
     let [lx, lz] = PL();
-    [lx, lz] = pushOut(lx, lz, 0.22, false);
+    // swept: walk from the last resolved spot in short steps, so a fast frame (sprint, triple jump, low fps on phones,
+    // dt up to 0.05) can't carry the cat past the middle of the 10 cm bars or a 40 cm wall and pop him out the far side
+    const mv = Math.hypot(lx - okLx, lz - okLz);
+    if (Number.isFinite(mv) && mv > 0.06 && mv < 1.2) {
+      const n = Math.ceil(mv / 0.06), sx = (lx - okLx) / n, sz = (lz - okLz) / n;
+      let x = okLx, z = okLz;
+      for (let k = 0; k < n; k++) [x, z] = pushOut(x + sx, z + sz, 0.22, false);
+      lx = x; lz = z;
+    } else [lx, lz] = pushOut(lx, lz, 0.22, false);
+    okLx = lx; okLz = lz;
     [P.x, P.z] = L2W(lx, lz);
     const [top] = platTop(lx, lz, 0.1);
     if (P.y < top && top > 0) { if (P.y > top - 0.3 && P.vy <= 0) { P.y = top; P.vy = 0; } }
@@ -611,7 +620,7 @@ export function makeJail(ctx) {
   }
   function placeCatIdle() {
     const [wx, wz] = L2W(cellSpawn.x, cellSpawn.z);
-    P.x = wx; P.z = wz; P.vx = P.vz = 0; P.yaw = Math.PI * 0.1; P.y = 0.002; P.vy = 0;
+    P.x = wx; P.z = wz; P.vx = P.vz = 0; okLx = NaN; P.yaw = Math.PI * 0.1; P.y = 0.002; P.vy = 0;
     animBiped(cat, 0, 0, G.time, 0);
   }
   function updateFrogMesh(dt) {
@@ -670,14 +679,15 @@ export function makeJail(ctx) {
     const go = () => {
       if (to === 'frog') { flyS.caught = true; fly.visible = false; startFrogRun(); }
       if (to === 'keys') { flyS.caught = true; fly.visible = false; frogHome(); keysM.visible = false; S.catKeys = true; S.control = 'cat'; setStage('keys'); }
-      if (to === 'vent') { flyS.caught = true; fly.visible = false; frogHome(); keysM.visible = false; S.catKeys = true; S.control = 'cat'; setDoor(1, true); setDoor(2, true); setStage('vent'); const [wx, wz] = L2W(2.3, -2.6); P.x = wx; P.z = wz; P.yaw = Math.PI; }
-      if (to === 'evidence') { flyS.caught = true; fly.visible = false; frogHome(); keysM.visible = false; S.catKeys = true; S.control = 'cat'; grate.visible = false; ventCol.off = true; const [wx, wz] = L2W(2.25, -4.7); P.x = wx; P.z = wz; P.yaw = Math.PI; setStage('evidence'); }
+      if (to === 'vent') { flyS.caught = true; fly.visible = false; frogHome(); keysM.visible = false; S.catKeys = true; S.control = 'cat'; setDoor(1, true); setDoor(2, true); setStage('vent'); const [wx, wz] = L2W(2.3, -2.6); P.x = wx; P.z = wz; P.yaw = Math.PI; okLx = NaN; }
+      if (to === 'evidence') { flyS.caught = true; fly.visible = false; frogHome(); keysM.visible = false; S.catKeys = true; S.control = 'cat'; grate.visible = false; ventCol.off = true; const [wx, wz] = L2W(2.25, -4.7); P.x = wx; P.z = wz; P.yaw = Math.PI; okLx = NaN; setStage('evidence'); }
       if (G.dialog) { G.dialog = null; document.getElementById('dialog').style.display = 'none'; }
     };
     setTimeout(go, S.active && S.stage !== 'intro' ? 0 : 1800);
   }
   const api = {
     start, end, skip, update, active: () => S.active, prompt: () => S.prompt || '', btn: () => S.btn || 'USE',
+    origin: () => [JX, JZ],
     state: () => ({ stage: S.stage, control: S.control, cop: cop$.phase, frog: { ...F }, fails: S.fails, catKeys: S.catKeys, evidence: S.evidence }),
     room, frog, cop, F, S, cop$, perched: () => perched, setCop: (ph) => { cop$.phase = ph; cop$.t = 0; cop$.dur = ph === 'snore' ? 60 : 60; }, makeFrog,
   };
