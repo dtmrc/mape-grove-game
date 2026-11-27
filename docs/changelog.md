@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-27: performance pass, same picture for less work (on main, test page only)
+- diet: collision that scales to more objects, better data structures where it pays, smaller house textures, preload
+  behind the title screen, slower minimap redraw, and "simplify without reducing graphical appearance".
+- src/js/dyngrid.js: cars and pedestrians sit in an 8 m hash grid, refilled per update phase. Every dynamic pair loop
+  (car x car, car x ped, cat x car, cat x ped, punches, explosions, traffic spacing, police) asks the grid, and results
+  come back in list order so behaviour is identical. Suite `dyngrid`: candidates per car stay near 4 from 25 to 196 cars.
+- src/js/scenecull.js: the scene stops walking matrices of hidden top-level objects; cars and people beyond the far
+  plane leave the scene graph until they come back.
+- world.js: distToPath uses a per-path segment grid, estate lot fitting prefilters; same world hash as before.
+- src/js/houses.js: house atlases start as half-size copies (`*.half.webp`, tools/house-atlas-half.py) and the full
+  atlas is swapped in within 85 m, back to half beyond 110 m. Decoded images are released after upload. Suite `housetex`.
+- src/js/prewarm.js: shaders compile and textures upload behind the title screen under a per-frame budget.
+- Minimap redraws at 10 Hz (20 Hz while the camera turns).
+- src/js/rigmerge.js: a figure built from rigid pieces on pivots becomes a few rigidly skinned meshes (one pivot per
+  vertex, colour folded into vertex colours). Walker 17 draws -> 5, raccoon 13 -> 5, shadow man 27 -> 2, car wheels
+  4 -> 1 (a car is 4 draws). `staticMerge` for props that do not move (firepit 26 -> a few). Suite `rigmerge` builds each
+  both ways (`window.__RIG.on`) and compares the frames pixel by pixel: 0 to 3 pixels differ.
+- Left alone: world chunks, trees, poles, signs, fences (already one draw per material per chunk, breakables stay
+  separate), otters and hens (already instanced), cave (62 draws in total), Goob's truck (20 body parts with 20
+  different textures, needs a re-baked atlas in Tracebench), shop sign planes (one texture each).
+
 ## 2026-11-27: the Hollow Deep becomes a branching cave (on main, test page only)
 - diet: "more cave detail and ground foliage, mist or smoke, ground water pools, spookier dwelling" and "right now it's
   more of a mining tunnel rather than an organic cave with multiple forks and other ways to get lost".
