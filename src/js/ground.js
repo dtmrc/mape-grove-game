@@ -219,7 +219,7 @@ export function rebuildWater(force = false) {
     const g = new THREE.ShapeGeometry(sh, 2); g.rotateX(-Math.PI / 2);
     const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 8, uv.getY(i) / 8);
     const mesh = new THREE.Mesh(g, WMAT.userData.forPoly ? WMAT.userData.forPoly(P) : WMAT); mesh.position.y = y + 0.06;
-    mesh.userData.noLift = true; mesh.frustumCulled = false; mesh.renderOrder = 1;
+    mesh.userData.noLift = true; mesh.frustumCulled = false; mesh.renderOrder = -1;   // opaque: drawn first so the depth test skips the lake bed under it
     waterGroup.add(mesh);
   }
 }

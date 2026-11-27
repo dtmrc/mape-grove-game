@@ -49,6 +49,7 @@ import * as PDST from './pdstation.js'; // police station interior
 import { bindWater, updateWater } from './water.js'; // lake water shader
 import { makeLightFX } from './lightfx.js'; // lamp light cones + glows
 import { makeSunShadow } from './sunshadow.js'; // cached sun/moon shadow map
+import * as WARD from './wardrobe.js'; // wearable clothes (Bev's Threads, Hank's gloves, raccoon-skin crafts)
 import { worldChunks as W_CHUNKS } from './world.js'; // sun shadows: casters
 
 // ---------------- renderer ----------------
@@ -1606,6 +1607,7 @@ function frame(now) {
   }
   cat.position.set(P.x, P.y - (P.swim ? SWIM_SINK - Math.sin(G.time * 3) * 0.03 : 0), P.z); cat.rotation.y = P.yaw;
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
+  WARD.update(); // wardrobe: clothes mesh follows what he wears
   if (!dev.camera(Math.max(dt, 0.001)))   updateCamera(Math.max(dt, 0.001));
   SV_.ready();
   sky.mesh.position.copy(camera.position);
@@ -1689,6 +1691,7 @@ const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, remove
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
 PIZZA.init({ G, places, fishing, toast, addCash, Sfx }); // Pizza City interior
 STORES.init({ G, places, fishing, toast, addCash, Sfx }); // Bev's Threads + Hank's Hardware interiors
+WARD.init({ cat, fishing, Sfx, toast }); // wardrobe
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
@@ -1712,9 +1715,13 @@ Object.assign(window.__G, { spawnCar, removeCar, districtAt, hurt, addCash, px, 
   tmp.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })));
   tmp.add(new THREE.Mesh(bx, new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })));
   tmp.add(new THREE.Mesh(bx, new THREE.MeshLambertMaterial({ color: 0xdfe3ea, fog: false, transparent: true })));
-  tmp.add(new THREE.Mesh(bx, new THREE.MeshBasicMaterial({ map: T.glow, vertexColors: true, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide })));
+  const trailG = new THREE.BoxGeometry(1, 1, 1); trailG.setAttribute('color', new THREE.BufferAttribute(new Float32Array(trailG.attributes.position.count * 4).fill(1), 4)); // contrail colours are RGBA (USE_COLOR_ALPHA): compiled on the lake shore otherwise
+  tmp.add(new THREE.Mesh(trailG, new THREE.MeshBasicMaterial({ map: T.glow, vertexColors: true, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide })));
   scene.add(tmp);
   const was = checkMark.visible; checkMark.visible = true;
+  const idle = []; scene.traverse((o) => { if (o.isInstancedMesh && !o.visible && o.count === 0) idle.push(o); }); // empty pools (fence debris...): compiled now, not on the first break
+  for (const o of idle) o.visible = true;
   renderer.setRenderTarget(post.rt); renderer.compile(scene, camera); renderer.setRenderTarget(null);
-  checkMark.visible = was; scene.remove(tmp); bx.dispose(); barT.dispose();
+  for (const o of idle) o.visible = false;
+  checkMark.visible = was; scene.remove(tmp); bx.dispose(); trailG.dispose(); barT.dispose();
 }

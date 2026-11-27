@@ -142,7 +142,7 @@ export function makeGoobles(o = {}) {
     model.traverse((n) => { n.layers.mask = root.layers.mask; });
     ready = true;
     play('Idle', 0);
-    u.model = model; u.bones = bones; u.clips = clips;
+    u.model = model; u.bones = bones; u.clips = clips; u.mats = mats;
   }, (e) => { console.error('Goobles GLB failed to load', e); if (o.legacy) { const old = o.legacy(); swapIn(root, old); } });
   return root;
 }
