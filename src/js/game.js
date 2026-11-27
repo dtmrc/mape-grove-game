@@ -43,6 +43,8 @@ import { makeClimb } from './climb.js'; // climb: trees, wall scrambles, ledge p
 import { colliders as W_COLS } from './world.js'; // climb: test handle
 import { makeGamepad } from './gamepad.js'; // ui: gamepad
 import * as PDST from './pdstation.js'; // police station interior
+import { bindWater, updateWater } from './water.js'; // lake water shader
+import { makeLightFX } from './lightfx.js'; // lamp light cones + glows
 
 // ---------------- renderer ----------------
 const canvas = document.getElementById('c');
@@ -1263,6 +1265,8 @@ function updateSky(dt) {
 }
 
 const fx = makeFX({ scene, camera, sky, hemi, sun, moon, M: WM, lights, T, G, renderHeight: () => RES[resIdx] });
+bindWater({ sky, sun, moon, hemi, camera, lights });
+const lightfx = makeLightFX({ scene, camera, lights, T });
 
 const events = makeEvents({ scene, camera, G, pos: () => ({ x: px(), z: pz() }), onFoot: () => !P.car });
 
@@ -1515,6 +1519,7 @@ function frame(now) {
     updateSky(dt);
     updateLights(dt);
     fx.update(dt, nightK, G.time);
+    updateWater(dt, nightK, G.time); lightfx.update(dt, nightK);
     INT.env(dt);
     for (const a of animated) a.fn(G.time);
     updateParts(dt);

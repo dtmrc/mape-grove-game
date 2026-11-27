@@ -16,6 +16,8 @@
 // the new north + east edges and Old Mill Rd to the south edge (bridge out). Roads, trees, fences, fields: no buildings.
 // The town is chunk 0 and the countryside eight 45 degree sectors (terrain.js chunkOf): each chunk merges and culls alone.
 import * as THREE from 'three';
+import { makeWaterMaterial, patchCreek } from './water.js';
+import { buildDock } from './dock.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
 import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex } from './houses.js';
@@ -445,7 +447,7 @@ function streetLamp(x, z, ry) {
   colliders.push({ cx: x, cz: z, r: 0.2, h: 6, brk: 'lamp', ry });
   lamps.push([ax, az]);
   lights.push({ x: ax, y: 5.4, z: az, c: 0xffd8a8, i: 1 });
-  halos.push({ x: ax, y: 5.8, z: az, s: 3.2, c: 0xc8a8ff });
+  halos.push({ x: ax, y: 5.8, z: az, s: 3.2, c: 0xffc890 }); // warm sodium corona
 }
 /** Street lamp beside the road through node `a` toward `b`, at distance t along it, on side s. */
 function lampAlong(a, b, t, s = 1) {
@@ -806,6 +808,7 @@ export function buildWorld(scene, T) {
   };
   for (const id of MODEL_IDS) M['h_' + id] = lambert({ map: houseTex(id), vertexColors: true });   // Tracebench houses + the gate sign
   M.window.userData.night = T.windowLit; M.window.userData.day = T.window;
+  patchCreek(M.creek); // water.js: flowing creek
   nightMats.push(M.window, M.lamp);
   places.drives = [];
   places.doors = [];
@@ -1363,19 +1366,14 @@ function buildLake(scene, T) {
     if (key) addS(g, key, col, 0, y, 0); return g;
   };
   // the sandy shore is painted ground and the water surface follows the water collider (ground.js), so both are editable
-  WATER_MAT = lambert({ map: T.water });
+  WATER_MAT = makeWaterMaterial(); // water.js: sky reflection, glints, shore foam
   animated.push({ obj: null, fn: (t) => { T.water.offset.set(Math.sin(t * 0.3) * 0.05, t * 0.02); } });
   MAP.push({ t: 'poly', col: '#4a8ac8', pts: lakePts(1) });
   // dock on the north shore
   const dx = -20, dz0 = 64, dz1 = 82;
-  addS(boxUV(2.4, 0.2, dz1 - dz0, 0.5), 'wood', 0xc8b090, dx, 0.25, (dz0 + dz1) / 2);
-  for (let z = dz0 + 2; z <= dz1; z += 3) for (const s of [-1, 1]) addS(new THREE.CylinderGeometry(0.12, 0.12, 1.2, 6), 'wood', 0x8a7060, dx + s * 1.15, 0, z);
+  buildDock({ addS, boxUV, lights, halos, scene, animated }, dx, dz0, dz1); // dock.js: planks, pilings, rails, ladder, lantern, rowboat
   places.dock = { x: dx, z: dz1 - 1 };
   floors.push({ top: 0.35, x0: dx - 1.2, x1: dx + 1.2, z0: dz0, z1: dz1 + 0.1 }); // engine: walk on the dock
-  // rowboat tied to the dock
-  const boat = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.45, 3.4, 6, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI), lambert({ color: 0xa04a2a }));
-  boat.position.set(dx + 2.4, 0.4, 76); scene.add(boat);
-  animated.push({ obj: boat, fn: (t) => { boat.position.y = 0.38 + Math.sin(t * 1.3) * 0.05; boat.rotation.z = Math.sin(t * 0.9) * 0.05; } });
   // water collider: one polygon that follows the shoreline, with a notch so the dock stays walkable
   {
     const shore = (a) => { const r = lakeR(a) * 0.97; return [LAKE.x + Math.cos(a) * LAKE.rx * r, LAKE.z + Math.sin(a) * LAKE.rz * r]; };

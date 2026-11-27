@@ -148,6 +148,42 @@ export function makeDayNight(o) {
     if (ic !== lastIcon) { lastIcon = ic; mg.clearRect(0, 0, 40, 40); phaseIcon(mg, 20, 20, 16, phase); }
   }
 
+  const fog = o.scene && o.scene.fog;
+  // ---- light grade (2026-11-27): one place that sets the final sun, moon, ambient, sky and fog colours from the
+  // sun's height, so noon is crisp, the golden hour really glows, and night is a readable moonlit blue (not purple mud).
+  const C = (r, g, b) => new THREE.Color().setRGB(r, g, b);
+  const LG = {
+    sunNoon: C(1.0, 0.95, 0.86), sunGold: C(1.0, 0.52, 0.24),
+    skyDay: C(0.70, 0.80, 0.98), skyDusk: C(0.86, 0.62, 0.62), skyNight: C(0.30, 0.38, 0.66),
+    gndDay: C(0.42, 0.42, 0.30), gndDusk: C(0.30, 0.22, 0.20), gndNight: C(0.06, 0.07, 0.12),
+    nightTop: C(0.004, 0.008, 0.026), nightHor: C(0.03, 0.05, 0.11), nightCloud: C(0.035, 0.045, 0.08),
+    moon: C(0.62, 0.70, 1.0),
+  };
+  const _a = new THREE.Color(), _b = new THREE.Color();
+  const ss = THREE.MathUtils.smoothstep;
+  function grade(e, low, moonLit, nightK) {
+    const dayK = ss(e, -0.06, 0.32);               // 0 night .. 1 full day
+    const gold = ss(e, -0.04, 0.04) * (1 - ss(e, 0.06, 0.4)); // the golden hour, sun near the horizon
+    sun.color.copy(LG.sunNoon).lerp(LG.sunGold, Math.min(1, gold * 1.2 + low * 0.3));
+    sun.intensity = 2.35 * ss(e, -0.03, 0.22) + gold * 0.4;
+    moon.color.copy(LG.moon);
+    moon.intensity = nightK * (0.16 + 0.6 * moonLit);
+    // ambient: sky above, bounce below
+    _a.copy(LG.skyNight).lerp(LG.skyDusk, ss(e, -0.32, -0.04)).lerp(LG.skyDay, ss(e, 0.05, 0.3));
+    hemi.color.copy(_a);
+    _b.copy(LG.gndNight).lerp(LG.gndDusk, ss(e, -0.32, -0.04)).lerp(LG.gndDay, ss(e, 0.05, 0.3));
+    hemi.groundColor.copy(_b);
+    hemi.intensity = 0.42 + 0.12 * moonLit + ss(e, -0.3, -0.02) * 0.2 + dayK * 0.85;
+    // night sky: deep navy instead of the old violet, keeping the dusk glow on the sun's side
+    const nk = 1 - ss(e, -0.45, -0.2);   // full night only once the afterglow is gone
+    u.uTop.value.lerp(LG.nightTop, nk * 0.85); u.uHor.value.lerp(LG.nightHor, nk * 0.85); u.uCloud.value.lerp(LG.nightCloud, nk * 0.8);
+    if (fog) {
+      // fog matches the horizon so far things melt into the sky, a touch darker at night for depth
+      fog.color.copy(u.uHor.value).multiplyScalar(0.55 + dayK * 0.4);
+      fog.near = 30 + dayK * 25; fog.far = 140 + dayK * 40;
+    }
+  }
+
   const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3(), warm = new THREE.Color(), pale = new THREE.Color(0xffe8c8);
   const api = {
     get day() { return day; },
@@ -181,12 +217,8 @@ export function makeDayNight(o) {
       u.uMoonGlow.value = nightK * lit * mUp;
       // lights follow the bodies
       sun.position.copy(sunDir).multiplyScalar(100); sun.position.y = Math.max(8, sun.position.y);
-      sun.color.lerp(warm.setRGB(1, 0.6, 0.38), low * 0.6);
       moon.position.copy(moonDir).multiplyScalar(100); moon.position.y = Math.max(6, moon.position.y);
-      moon.intensity = nightK * (0.12 + 0.55 * lit * mUp);
-      hemi.intensity *= 1 - nightK * 0.25 * (1 - lit * mUp);
-      // dawn/dusk tint on the ambient light
-      hemi.color.lerp(warm.setRGB(1.0, 0.62, 0.5), u.uGlow.value.r * low * 0.35);
+      grade(e, low, lit * mUp, nightK);
       drawHud(h, phase);
     },
   };

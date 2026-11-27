@@ -206,7 +206,7 @@ export function rebuildWater(force = false) {
   const sig = polys.map(({ q }) => [q.cx, q.cz, q.rot, q.pts.map((p) => p.join(',')).join(';')].join('|')).join('#');
   if (!force && sig === lastSig) return;
   lastSig = sig;
-  for (const c of waterGroup.children.slice()) { waterGroup.remove(c); c.geometry.dispose(); }
+  for (const c of waterGroup.children.slice()) { waterGroup.remove(c); c.geometry.dispose(); WMAT.userData.disposePoly?.(c.material); }
   for (const { q } of polys) {
     const P = TER.polyEngine(q).poly; if (P.length < 3) continue;
     let y = 1e9;
@@ -218,7 +218,7 @@ export function rebuildWater(force = false) {
     const sh = new THREE.Shape(v2);
     const g = new THREE.ShapeGeometry(sh, 2); g.rotateX(-Math.PI / 2);
     const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 8, uv.getY(i) / 8);
-    const mesh = new THREE.Mesh(g, WMAT); mesh.position.y = y + 0.06;
+    const mesh = new THREE.Mesh(g, WMAT.userData.forPoly ? WMAT.userData.forPoly(P) : WMAT); mesh.position.y = y + 0.06;
     mesh.userData.noLift = true; mesh.frustumCulled = false; mesh.renderOrder = 1;
     waterGroup.add(mesh);
   }

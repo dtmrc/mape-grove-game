@@ -36,7 +36,8 @@ class Session {
     this.ctx = await this.browser.newContext({ viewport: { width: this.o.width, height: this.o.height }, deviceScaleFactor: this.o.scale });
     this.page = await this.ctx.newPage();
     const cfg = { seed: this.o.seed === 'random' ? null : +this.o.seed, world: readWorld(this.o.world) };
-    let save = this.o.save; if (typeof save === 'string') save = JSON.parse(fs.readFileSync(save, 'utf8'));
+    let save = this.o.save; if (typeof save === 'string' && !fs.existsSync(save)) save = null; // perf --save names an output file
+    if (typeof save === 'string') save = JSON.parse(fs.readFileSync(save, 'utf8'));
     await this.page.addInitScript(({ cfg, save }) => {
       window.__QA_CFG = cfg;
       if (save) { try { localStorage.setItem('maple-grove-offleash-v1', JSON.stringify(save)); } catch (e) { /* ignore */ } }
