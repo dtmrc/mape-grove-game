@@ -1211,8 +1211,32 @@ function buildNanaAndRV(scene) {
 
 // ---------- Hollow Woods: the haunted forest ----------
 const TRAIL = [[-110, 38], [-121, 46], [-129, 62], [-133, 80], [-126, 98], [-112, 112], [-98, 124]];
-function distToPath(x, z, P) {
+// `cut`: the caller only cares about distances up to `cut` (it compares against a threshold or clamps), so only the
+// segments in the grid cells around the point are measured (same result up to `cut`, any value >= `cut` beyond it).
+// The world builder asks this ~1 M times at load; without the grid every call walked the whole path.
+const _pathGrids = new WeakMap(), PCELL = 16;
+function pathGrid(P) {
+  let g = _pathGrids.get(P); if (g) return g;
+  g = new Map();
+  for (let i = 0; i < P.length - 1; i++) {
+    const i0 = Math.floor(Math.min(P[i][0], P[i + 1][0]) / PCELL), i1 = Math.floor(Math.max(P[i][0], P[i + 1][0]) / PCELL), j0 = Math.floor(Math.min(P[i][1], P[i + 1][1]) / PCELL), j1 = Math.floor(Math.max(P[i][1], P[i + 1][1]) / PCELL);
+    for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) { const k = (a + 512) * 4096 + (b + 512); let l = g.get(k); if (!l) g.set(k, l = []); l.push(i); }
+  }
+  _pathGrids.set(P, g); return g;
+}
+function distToPath(x, z, P, cut) {
   let best = 1e9;
+  if (cut !== undefined) {
+    const g = pathGrid(P), i0 = Math.floor((x - cut) / PCELL), i1 = Math.floor((x + cut) / PCELL), j0 = Math.floor((z - cut) / PCELL), j1 = Math.floor((z + cut) / PCELL);
+    for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) {
+      const l = g.get((a + 512) * 4096 + (b + 512)); if (!l) continue;
+      for (let q = 0; q < l.length; q++) {
+        const i = l[q], [ax, az] = P[i], [bx, bz] = P[i + 1], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+        best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
+      }
+    }
+    return best;
+  }
   for (let i = 0; i < P.length - 1; i++) {
     const [ax, az] = P[i], [bx, bz] = P[i + 1], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
     best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
@@ -1300,7 +1324,7 @@ function woodsRelief(x, z, fb, h0) {
     const b = 1 - sstep(40, 80, rv.d);
     h += b * (6 + 1.2 * fb(x / 70 - 1.3, z / 70 + 6.1, 2) + edgeRise(x, z) - h);
   }
-  if (d > -2) h = h0 + (h - h0) * (0.4 + 0.6 * sstep(2, 18, distToPath(x, z, HOLLOW_TRAIL)));   // the trail keeps to easy ground
+  if (d > -2) h = h0 + (h - h0) * (0.4 + 0.6 * sstep(2, 18, distToPath(x, z, HOLLOW_TRAIL, 18.5)));   // the trail keeps to easy ground
   if (rv && rv.d < 70) h = Math.min(h, ravFloor(rv.s) + ravWall(rv.d, rv.s, x, z, fb));
   if (rr && rr.d < 45) h = Math.min(h, rivFloor(rr.s) + rivBank(rr.d, x, z));
   return h;
@@ -1331,7 +1355,7 @@ function buildForest() {
   colliders.push({ cx: wl[0] + 2, cz: wl[1] + 2, r: 1.2, h: 1 });
   lights.push({ x: wl[0] + 2, y: 1.5, z: wl[1] + 2, c: 0x90a0ff, i: 0.9, always: true, flicker: true });
   // trees: dense dark pines, twisted dead trees, keeping the trail and clearing open
-  const keep = (x, z) => distToPath(x, z, TRAIL) < 3.2 || Math.hypot(x - cl.x, z - cl.z) < 10 || Math.hypot(x - wl[0] - 2, z - wl[1] - 2) < 4;
+  const keep = (x, z) => distToPath(x, z, TRAIL, 3.5) < 3.2 || Math.hypot(x - cl.x, z - cl.z) < 10 || Math.hypot(x - wl[0] - 2, z - wl[1] - 2) < 4;
   let n = 0;
   WOODS_CLIP = true;
   for (let x = -146; x < 50; x += 5.2) for (let z = -40; z < 146; z += 5.2) {
@@ -1532,18 +1556,23 @@ function estateLots() {
   const fits = (L) => {
     const { r } = L, pts = [];
     for (let x = r.x0; x <= r.x1 + 0.01; x += Math.max(1, (r.x1 - r.x0) / Math.ceil((r.x1 - r.x0) / 2))) for (let z = r.z0; z <= r.z1 + 0.01; z += Math.max(1, (r.z1 - r.z0) / Math.ceil((r.z1 - r.z0) / 2))) pts.push(rot(L.cx, L.cz, x, z, L.ry));
+    if (LOTS.some((o) => rectsOverlap(o, L))) return false;   // cheapest test first (all of these are yes / no, the order doesn't change the answer)
     const near = EDGES.filter((e) => segNearR(NODES[e.a], NODES[e.b], L.cx, L.cz) < 60);
+    // only the bulbs and colliders that can reach this lot at all (was: every one of them against every sample point)
+    let R = 0; for (const [x, z] of pts) R = Math.max(R, Math.hypot(x - L.cx, z - L.cz)); R += 0.5;
+    const bulbs = NODES.filter((n) => n.bulb && Math.hypot(L.cx - n.x, L.cz - n.z) < n.bulb + 2.3 + R);
+    const cols = ECOLS.filter((c) => c.r !== undefined ? Math.hypot(L.cx - c.cx, L.cz - c.cz) < c.r + 0.3 + R : L.cx > c.x0 - 0.3 - R && L.cx < c.x1 + 0.3 + R && L.cz > c.z0 - 0.3 - R && L.cz < c.z1 + 0.3 + R);
     for (const [x, z] of pts) {
       if (x < -246 || x > -44 || z < -176 || z > -41) return false;
       if (inWoods(x, z) || fieldHit(x, z)) return false;
       if (ESTATE_KEEP.some((k) => x > k.x0 && x < k.x1 && z > k.z0 && z < k.z1)) return false;
       for (const e of near) if (segNearR(NODES[e.a], NODES[e.b], x, z) < e.w / 2 + (SHOULDER_W[e.t] ?? 0.7) + 1.3) return false;
-      for (const n of NODES) if (n.bulb && Math.hypot(x - n.x, z - n.z) < n.bulb + 2.3) return false;
-      for (const c of ECOLS) {
+      for (const n of bulbs) if (Math.hypot(x - n.x, z - n.z) < n.bulb + 2.3) return false;
+      for (const c of cols) {
         if (c.r !== undefined ? Math.hypot(x - c.cx, z - c.cz) < c.r + 0.3 : c.x0 !== undefined ? x > c.x0 - 0.3 && x < c.x1 + 0.3 && z > c.z0 - 0.3 && z < c.z1 + 0.3 : false) return false;
       }
     }
-    return !LOTS.some((o) => rectsOverlap(o, L));
+    return true;
   };
   // Gary's lot first (placed by buildEstates)
   const g = homes[homes.length - 1]; LOTS.push({ cx: g.x, cz: g.z, ry: g.ry, r: lotRect('beaumont', false) });
@@ -2175,7 +2204,7 @@ function woodsNoise(x, z) {  // 0..1, smooth, ~40-90 m wavelengths plus a little
 export function woodsD(x, z) { return woodsBase(x, z) + (x > -117 && z < 112 ? 3 : 8) - 30 * woodsNoise(x, z); }   // town side bulges out less
 const hash2 = (x, z) => { const h = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return h - Math.floor(h); };
 /** Thin the trees within ~9 m of the edge: true = no tree here. */
-function woodsCut(x, z) { const d = woodsD(x, z); return d < 0 || distToPath(x, z, HOLLOW_TRAIL) < 3.2 || hash2(x, z) > 0.25 + 0.75 * Math.min(1, d / 9) || badGround(x, z); }
+function woodsCut(x, z) { const d = woodsD(x, z); return d < 0 || distToPath(x, z, HOLLOW_TRAIL, 3.5) < 3.2 || hash2(x, z) > 0.25 + 0.75 * Math.min(1, d / 9) || badGround(x, z); }
 /** No trees in the creek or on rock faces (approx slope over ~45 degrees). */
 function badGround(x, z) { const c = pathProj(x, z, RIV_I); if (c && c.d < 4.5) return true; const v = pathProj(x, z, RAV_I); if (v && v.d < 5) return true; return (woodsD(x, z) > -2 || v) && approxSlope(x, z) > 0.95; }
 /** Forest-floor paint weight 0..1, feathered ~8 m either side of the edge. */
@@ -2447,7 +2476,7 @@ function buildWildWoods(R, r) {
     if (wd < 4 && !(rv && rv.d < 60)) continue;
     const sl = approxSlope(px, pz); if (sl < 0.75 || R() > 0.5) continue;
     const c = pathProj(px, pz, RIV_I);
-    if ((c && c.d < 4) || (rv && rv.d < 4.5) || distToPath(px, pz, HOLLOW_TRAIL) < 4 || Math.hypot(px + 121, pz - 84) < 16 || onRoad(px, pz, 2)) continue;
+    if ((c && c.d < 4) || (rv && rv.d < 4.5) || distToPath(px, pz, HOLLOW_TRAIL, 4.5) < 4 || Math.hypot(px + 121, pz - 84) < 16 || onRoad(px, pz, 2)) continue;
     const e = 1, gx = approxH(px + e, pz) - approxH(px - e, pz), gz = approxH(px, pz + e) - approxH(px, pz - e), ry = Math.atan2(gx, gz) + Math.PI / 2;   // long side along the contour
     const s = r(0.8, 1.4) * (sl > 1.3 ? 1.2 : 1), sink = Math.min(1.2, sl) * 0.45 * s;
     addS(new THREE.DodecahedronGeometry(0.6 * s, 0).scale(r(1.4, 2.0), r(0.7, 1.0), r(0.9, 1.2)), 'plain', [0x6e6a62, 0x77736b, 0x66625a, 0x7e7a70][(R() * 4) | 0], px, 0.3 * s - sink, pz, ry);
@@ -2458,7 +2487,7 @@ function buildWildWoods(R, r) {
   for (let k = 0; k < 60; k++) {
     const onRav = k < 30, I = onRav ? RAV_I : RIV_I, [px, pz, tx, tz] = pathAt(I, r(onRav ? 6 : 20, I.len - 2)), side = R() < 0.5 ? -1 : 1, off = onRav ? r(2.8, 4.2) : r(2.3, 3.4);
     const x = px - tz * off * side, z = pz + tx * off * side;
-    if (Math.max(Math.abs(x), Math.abs(z)) > LIMIT - 2 || distToPath(x, z, HOLLOW_TRAIL) < 3.5) continue;
+    if (Math.max(Math.abs(x), Math.abs(z)) > LIMIT - 2 || distToPath(x, z, HOLLOW_TRAIL, 4) < 3.5) continue;
     const s = r(0.6, onRav ? 1.7 : 1.1);
     addS(new THREE.DodecahedronGeometry(0.6 * s, 0).scale(1.1, 0.75, 1), 'plain', 0x7a766c, x, 0.15 * s, z, R() * 6);
     colliders.push({ cx: x, cz: z, r: 0.6 * s, h: 0.55 * s, top: 0.55 * s, ng: true, nf: true });
@@ -2498,7 +2527,7 @@ function buildCountry() {
   const clear = (x, z, m) => !onRoad(x, z, m) && !FIELDS.some((f) => { const c = Math.cos(f.ry), s = Math.sin(f.ry), dx = x - f.x, dz = z - f.z; return Math.abs(dx * c - dz * s) < f.w / 2 + 2 && Math.abs(dx * s + dz * c) < f.d / 2 + 2; })
     && !homes.some((h) => Math.abs(x - h.x) < 12 && Math.abs(z - h.z) < 12)
     && !KEEP_OUT.some((r) => x > r.x0 - 2 && x < r.x1 + 2 && z > r.z0 - 2 && z < r.z1 + 2)
-    && distToPath(x, z, HOLLOW_TRAIL) > 3.2 + (m || 0)
+    && distToPath(x, z, HOLLOW_TRAIL, 3.5 + (m || 0)) > 3.2 + (m || 0)
     && !badGround(x, z);   // the ravine's walls and the woods' rock faces are bare rock; nothing in the creek
   const look = (kind) => kind === 'pine' ? { kind: 'pine', tint: [0x7a9480, 0x86a088, 0x92a890][(R() * 3) | 0] }
     : kind === 'dark' ? (R() < 0.75 ? { kind: 'pine', tint: 0x7a9480 } : { kind: 'round', tint: 0x8a9a70 })
@@ -2658,7 +2687,7 @@ export function drawMap(g, o, s) {
     g.beginPath(); g.moveTo(o(A.x), o(A.z)); g.lineTo(o(B.x), o(B.z)); g.stroke();
   }
   g.fillStyle = '#5c5c62';
-  for (const n of NODES) if (n.bulb && ADJ[NODES.indexOf(n)].length) { g.beginPath(); g.arc(o(n.x), o(n.z), n.bulb * s, 0, 7); g.fill(); }
+  for (let ni = 0; ni < NODES.length; ni++) { const n = NODES[ni]; if (n.bulb && ADJ[ni].length) { g.beginPath(); g.arc(o(n.x), o(n.z), n.bulb * s, 0, 7); g.fill(); } }
   g.fillStyle = '#d8cca8';
   for (const c of colliders) {
     if (!c.bld) continue;
