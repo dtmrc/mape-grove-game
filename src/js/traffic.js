@@ -34,6 +34,7 @@ export function makeTraffic(api) {
   const lampGeo = new THREE.CircleGeometry(0.11, 10);
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true, toneMapped: false });
   let meshes = [];
+  let stopList = [], stopP = null, stopS = null, gen = 0;   // breakables: every stop sign (pole + face instance) a car can knock down
   const inst = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, Math.max(1, n)); m.count = n; m.userData.noLift = true; m.frustumCulled = false; scene.add(m); meshes.push(m); return m; };
 
   const LAMP_ON = [new THREE.Color(0xff2a1a), new THREE.Color(0xffb21a), new THREE.Color(0x2aff6a)];
@@ -59,7 +60,7 @@ export function makeTraffic(api) {
   // ---------------- build from the road graph ----------------
   function build() {
     for (const m of meshes) { scene.remove(m); m.dispose(); }
-    meshes = []; J = new Map(); lampList = [];
+    meshes = []; J = new Map(); lampList = []; stopList = []; gen++;
     const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _e = new THREE.Euler();
     const poles = [], signs = [], heads = [], lampsM = [];
     for (let n = 0; n < NODES.length; n++) {
@@ -89,6 +90,7 @@ export function makeTraffic(api) {
         const px = N.x + dx * (line + 0.3) + dz * side, pz = N.z + dz * (line + 0.3) - dx * side, h = heightAt(px, pz);
         const face = Math.atan2(dx, dz); // the sign / signal faces oncoming (incoming) traffic
         if (kind !== 'light') {
+          stopList.push({ x: px, z: pz, h, face, pi: poles.length, si: signs.length, gen: gen + 0 });
           poles.push([px, h, pz, 2.1]);
           signs.push([px, h + 2.05, pz, face]);
         } else {
@@ -105,6 +107,8 @@ export function makeTraffic(api) {
     _s.set(1, 1, 1);
     const S = inst(signGeo, signMat, signs.length);
     put(S, signs, (r) => { _p.set(r[0], r[1], r[2]); _q.setFromEuler(_e.set(0, r[3], 0)); });
+    stopP = P; stopS = S;
+    for (const st of stopList) { st.mp = new THREE.Matrix4(); P.getMatrixAt(st.pi, st.mp); st.ms = new THREE.Matrix4(); S.getMatrixAt(st.si, st.ms); }
     const H = inst(headGeo, headMat, heads.length);
     put(H, heads, (r) => { _p.set(r[0], r[1], r[2]); _q.setFromEuler(_e.set(0, r[3], 0)); });
     lamps = inst(lampGeo, lampMat, lampsM.length);
@@ -182,7 +186,16 @@ export function makeTraffic(api) {
 
   build();
   if (api.onRoads) api.onRoads.push(build);
-  const T = { build, update, limit, queued, signal, junctions: () => J };
+  const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+  /** breakables: knock a stop sign out (on) or stand it back up. A record from before a rebuild is ignored. */
+  function hideStop(st, on) {
+    if (!st || st.gen !== gen || !stopP) return false;
+    st.down = !!on;
+    stopP.setMatrixAt(st.pi, on ? ZERO : st.mp); stopS.setMatrixAt(st.si, on ? ZERO : st.ms);
+    stopP.instanceMatrix.needsUpdate = stopS.instanceMatrix.needsUpdate = true;
+    return true;
+  }
+  const T = { build, update, limit, queued, signal, junctions: () => J, stops: () => stopList, hideStop, stopParts: { poleGeo, poleMat, signGeo, signMat } };
   if (typeof window !== 'undefined') window.__TC = T;
   return T;
 }
