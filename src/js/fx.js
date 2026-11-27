@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { makeDayNight, makeTimeDebug } from './daynight.js';
 import { makePlanes } from './planes.js';
+import { Sfx, glide } from './sfx.js';
 import { heightAt, heightTex, TX0, TZ0, TCELL, TN } from './terrain.js';
 
 // GLSL: bilinear terrain height from the engine's heightfield texture (matches terrain.js heightAt)
@@ -74,9 +75,10 @@ function makeAudio() {
   function gain(v = 0) { const g = ctx.createGain(); g.gain.value = v; return g; }
   const A = {
     unlock() {
-      if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+      if (ctx) { Sfx.unlock(); return; }
       try {
-        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        Sfx.unlock(); const sh = Sfx.audio(); if (!sh) return;   // the game's one shared AudioContext (sfx.js)
+        ctx = sh.ctx;
         master = gain(on ? 1 : 0); master.connect(ctx.destination);
         const s1 = loopNoise(2.3), s2 = loopNoise(3.1, true), s3 = loopNoise(4.2, true);
         rainHi = gain(); rainLo = gain(); wind = gain(); windF = filt('bandpass', 350, 0.9);
@@ -92,12 +94,12 @@ function makeAudio() {
     set(rain, w, gust) {
       if (!ctx) return;
       const t = ctx.currentTime;
-      rainHi.gain.setTargetAtTime(rain * 0.11, t, 0.4);
-      rainLo.gain.setTargetAtTime(rain * 0.16, t, 0.4);
-      wind.gain.setTargetAtTime(w * (0.25 + gust * 0.75) * 0.22, t, 0.3);
-      windF.frequency.setTargetAtTime(220 + gust * 520, t, 0.3);
+      glide(rainHi.gain, rain * 0.11, t, 0.4);
+      glide(rainLo.gain, rain * 0.16, t, 0.4);
+      glide(wind.gain, w * (0.25 + gust * 0.75) * 0.22, t, 0.3);
+      glide(windF.frequency, 220 + gust * 520, t, 0.3);
     },
-    plane(v) { if (ctx) planeG.gain.setTargetAtTime(v * 0.2, ctx.currentTime, 0.8); },
+    plane(v) { if (ctx) glide(planeG.gain, v * 0.2, ctx.currentTime, 0.8); },
     thunder(dist) { // dist 0 (overhead) .. 1 (far)
       if (!ctx || !on) return;
       const t = ctx.currentTime, dur = 3.5 + dist * 2.5, n = Math.floor(ctx.sampleRate * dur);
