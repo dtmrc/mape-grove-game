@@ -289,6 +289,7 @@ const DISTRICTS = [
   ['Lake Juniper', (x, z) => x > -84 && x < 48 && z > 50],
   ['Maple Grove High', (x, z) => x > 62 && z < -8],
   ['Old Mill Farm', (x, z) => x > -30 && x <= 62 && z < -50],
+  ['Main Street', (x, z) => x > 62 && x < 124 && z > -8 && z < 23],
   ['Pine Hollow', (x, z) => x > 48 && z > 6],
   ['Downtown Maple Grove', () => true],
 ];
@@ -697,6 +698,8 @@ function home(x, z, ry, spec) {
   }
   extras(F, w, d, h, spec.extras || [], spec);
   homes.push({ x, z, ry, spec });
+  const mob = st === 'mobile', garage = !mob && spec.garage !== false && !['farm', 'cottage', 'colonial'].includes(st) && w >= 9;
+  lots.push({ x, z, ry, w, d, dl: spec.drive ?? 5, doorX: mob ? -3.5 : garage ? -0.8 : 0, driveX: mob ? 4.5 : w / 2 - 1.9, porch: st === 'farm' || !!spec.porch, extras: spec.extras || [], fence: spec.fence });
   places.doors.push(info.door);
   places.drives.push({ x: info.drive[0], z: info.drive[1], ry });
   return info;
@@ -734,6 +737,9 @@ export function buildWorld(scene, T) {
     plain: lambert({ vertexColors: true }),
     lamp: basic({ vertexColors: true, color: 0x888888 }),
     vending: basic({ map: T.vending }),
+    picket: lambert({ map: T.picket, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+    chain: lambert({ map: T.chain, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+    iron: lambert({ map: T.iron, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
   };
   for (const id of MODEL_IDS) M['h_' + id] = lambert({ map: houseTex(id), vertexColors: true });   // Tracebench houses + the gate sign
   M.window.userData.night = T.windowLit; M.window.userData.day = T.window;
@@ -757,9 +763,11 @@ export function buildWorld(scene, T) {
   buildFarm();
   buildSchool();
   buildPineHollow();
+  { const s0 = rndSeed.get(); buildMainStreet(); rndSeed.set(s0); }   // Main Street shops: the town's random sequence stays as it was
   buildPoles(scene);
   buildFireStation();
   buildHospital();
+  buildFences();   // lot fences round every home() yard (the Estates' Tracebench houses get their own fence plan later)
   buildCountry();   // after every town builder: it uses its own random sequence so the town's layout never shifts
 
   // merge buckets
@@ -1698,9 +1706,9 @@ function buildSchool() {
 // ---------- Pine Hollow (the older country neighbourhood) ----------
 function buildPineHollow() {
   const H = [
-    // facing north onto Main St
-    [80, 14.5, Math.PI, { style: 'farm', wall: 0xf0f0ea, roof: 0x6a2a2a, w: 10, drive: 5, gravel: true, extras: ['tractor', 'woodpile', 'flag'], flag: 0x2a5a2a }],
-    [112, 15, Math.PI, { style: 'mobile', wall: 0xe0e8f0, roof: 0x8a9098, trim: 0x2a6ab0, drive: 5, extras: ['flamingos', 'junker'], junk: 0x4a6a8a }],
+    // (the two homes that faced Main St moved when the shops went in: the farmhouse to Lake Rd, the trailer across Hollow Ln)
+    [15, 33, -Math.PI / 2, { style: 'farm', wall: 0xf0f0ea, roof: 0x6a2a2a, w: 10, drive: 3, gravel: true, extras: ['woodpile', 'flag'], flag: 0x2a5a2a, fence: 'rail' }],
+    [141, 22, -Math.PI / 2, { style: 'mobile', wall: 0xe0e8f0, roof: 0x8a9098, trim: 0x2a6ab0, drive: 3.5, extras: ['flamingos', 'junker'], junk: 0x4a6a8a, fence: 'chain' }],
     // facing south onto Hollow Ln
     [74, 32, 0, { style: 'cottage', wall: 0xf4d9a8, roof: 0x5a3a2a, drive: 4, extras: ['garden', 'scarecrow', 'chimney'] }],
     [112, 32, 0, { style: 'ranch', wall: 0xc8d8c0, roof: 0x3f4f3f, w: 10.5, drive: 4, porch: true, extras: ['hoop', 'tramp', 'dish'] }],
@@ -1721,11 +1729,298 @@ function buildPineHollow() {
     home(x, z, ry, s);
   }
   // country details: mailboxes on posts, a few big oaks, a hand-painted sign
-  for (const [x, z] of [[96, 20], [138, 70], [66, 75], [100, 88], [120, 28]]) tree(x, z, 1.4 + rnd() * 0.4, { kind: 'round' });
+  for (const [x, z] of [[90, 26], [138, 70], [66, 75], [100, 88], [120, 28]]) tree(x, z, 1.4 + rnd() * 0.4, { kind: 'round' });
   const F = frame(...offRoad(64, 40, 0.9), Math.PI / 4);
   F.box(0, 0.7, 0, 0.12, 1.4, 0.12, 'wood', 0xffffff);
   F.sign('FRESH EGGS $3', '#f4f0e0', '#8a3a2a', 1.6, 0.5, 1.3, 0.08);
   hydrant(66, 50); hydrant(122, 90);
+}
+
+// ---------- Main Street: the shops between School Rd and Hollow Ln ----------
+// South side of Main St (Hwy 9), x 66..124. Every storefront faces north onto the sidewalk; its front wall sits at z = 9.5.
+const SHOP_FRONT = 9.5;
+function storefront(cx, w, d, o) {
+  const cz = SHOP_FRONT + d / 2, F = frame(cx, cz, Math.PI), h = o.h || 4.4, fz = d / 2 + 0.03;
+  F.box(0, h / 2, 0, w, h, d, o.brick ? 'brick' : 'siding', o.wall);
+  F.bld(0, 0, w, d, h + 0.8);
+  F.box(0, h + 0.4, fz - 0.17, w + 0.1, 0.8, 0.3, 'plain', o.trim);        // false-front parapet
+  F.box(0, h + 0.03, 0, w + 0.24, 0.18, d + 0.24, 'plain', o.trim);         // cornice
+  F.box(0, 0.2, 0, w + 0.1, 0.4, d + 0.1, 'plain', 0x8a8478);               // foundation
+  for (const s of [-1, 1]) F.box(s * (w / 2 - 0.12), h / 2, fz + 0.06, 0.32, h, 0.14, 'plain', o.trim); // pilasters
+  const dx = o.doorX ?? 0, dw = o.doorW ?? 1.3;
+  F.face(dx, 1.15, fz + 0.01, dw, 2.3, 'door', o.door ?? 0x99c4e0);
+  for (const [x, ww] of o.wins) {
+    F.face(x, 1.65, fz + 0.01, ww, 1.8, 'storeWin', o.winCol ?? 0xffffff);
+    F.box(x, 0.4, fz + 0.05, ww + 0.2, 0.5, 0.1, 'plain', o.trim);           // kick plate under the glass
+  }
+  if (h > 5.5) for (let x = -w / 2 + 1.8; x <= w / 2 - 1.7; x += 2.4) F.face(x, h - 1.5, fz + 0.01, 1.2, 1.4, 'window', 0xffffff);
+  if (o.awning) { // striped canvas awning
+    const aw = w - 0.7, n = Math.max(2, Math.round(aw / 0.75)), sw = aw / n;
+    for (let k = 0; k < n; k++) F.geo(new THREE.BoxGeometry(sw, 0.06, 1.8).rotateX(0.36), 'plain', o.awning[k % 2], -aw / 2 + (k + 0.5) * sw, 3.0, fz + 0.86);
+    F.box(0, 2.66, fz + 1.72, aw, 0.3, 0.04, 'plain', o.awning[0]);          // valance
+  }
+  F.sign(o.name, o.signBg, o.signFg, o.signW || Math.min(w - 1.2, 8), 0.85, o.signY ?? 3.95, fz + 0.06, { tw: 512, th: 64, glow: o.glow });
+  F.light(0, 3.2, fz + 1.6, o.lightCol ?? 0xffe0b0, 0.7);
+  F.halo(0, o.signY ?? 3.95, fz + 0.3, 2.4, o.lightCol ?? 0xffe0b0);
+  return F;
+}
+function barberPole(x, z) {
+  const c = document.createElement('canvas'); c.width = 32; c.height = 64;
+  const g = c.getContext('2d');
+  for (let k = -4; k < 8; k++) { g.fillStyle = ['#d02828', '#f4f4f4', '#2848b0', '#f4f4f4'][(k + 8) % 4]; g.beginPath(); g.moveTo(0, k * 12); g.lineTo(32, k * 12 + 16); g.lineTo(32, k * 12 + 28); g.lineTo(0, k * 12 + 12); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 1.4);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.9, 10), basic({ map: t }));
+  m.position.set(x, 2.1, z); SCENE.add(m);
+  animated.push({ obj: m, fn: (tt) => { t.offset.y = -tt * 0.5; } });
+  addS(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10), 'metal', 0xd8d8d8, x, 2.61, z);
+  addS(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10), 'metal', 0xd8d8d8, x, 1.59, z);
+  addS(new THREE.SphereGeometry(0.15, 8, 5), 'metal', 0xf0f0f0, x, 2.74, z);
+}
+/** lumber bundle on a pallet: boards stacked, two steel bands */
+function lumberStack(F, lx, lz, len, w, h, col = 0xf2d8a8, rr = 0) {
+  F.box(lx, 0.07, lz, w + 0.1, 0.14, len - 0.4, 'wood', 0x9a7a58, rr);
+  F.box(lx, 0.14 + h / 2, lz, w, h, len, 'wood', col, rr);
+  for (const s of [-1, 1]) { const [bx, bz] = [lx + Math.sin(rr) * s * len * 0.3, lz + Math.cos(rr) * s * len * 0.3]; F.box(bx, 0.14 + h / 2, bz, w + 0.03, h + 0.03, 0.05, 'metal', 0x6a6a70, rr); }
+  F.col(lx, lz, w + 0.1, len, h + 0.14, rr);
+}
+function buildMainStreet() {
+  // the sidewalk in front of the shops
+  frame(95, 7.9, 0).flat(0, 0, 58, 3.4, 'sidewalk', 0xe4e0d8, 0.065, '#b8b4ac');
+  // ---- Bev's Threads: clothing, two storeys of pale brick ----
+  {
+    const F = storefront(72.5, 12, 11, { h: 7.2, brick: true, wall: 0xf4e4d8, trim: 0x5a2a4a, door: 0x5a2a4a, wins: [[-3.5, 3.4], [3.5, 3.4]], winCol: 0xffe8f0,
+      awning: [0x7a2a5a, 0xf4e8f0], name: "BEV'S THREADS", signBg: '#5a2a4a', signFg: '#f8e8c8', signY: 4.3, lightCol: 0xffb0d0 });
+    // a rolling rack of shirts and a SALE sandwich board out front
+    const z = 5.5 + 1.2;
+    F.box(-3.6, 1.55, z, 2.2, 0.05, 0.05, 'metal', 0xc0c0c8);
+    for (const s of [-1, 1]) F.box(-3.6 + s * 1.05, 0.8, z, 0.05, 1.55, 0.5, 'metal', 0xc0c0c8);
+    for (let k = 0; k < 7; k++) F.box(-4.5 + k * 0.3, 1.1, z, 0.08, 0.8, 0.5, 'plain', [0xd04a4a, 0x3a6ad0, 0xf0c040, 0x3aa060, 0xf4f4f4, 0x8a3ac0, 0x222222][k]);
+    F.col(-3.6, z, 2.3, 0.6, 1.6);
+    F.geo(new THREE.BoxGeometry(0.8, 1.0, 0.05).rotateX(0.22), 'plain', 0xf4f0e0, 3.6, 0.5, z + 0.2);
+    F.geo(new THREE.BoxGeometry(0.8, 1.0, 0.05).rotateX(-0.22), 'plain', 0xf4f0e0, 3.6, 0.5, z - 0.2);
+    F.sign('SALE', '#f4f0e0', '#c02040', 0.7, 0.4, 0.62, z + 0.33, { tw: 128, th: 64, lx: 3.6, rr: -0.22 });
+    F.col(3.6, z, 0.9, 0.6, 1);
+    places.clothing = (([x, z]) => ({ x, z, name: "Bev's Threads" }))(F.at(0, 7.5));
+  }
+  // ---- Sal's Barber Shop ----
+  {
+    const F = storefront(82, 7, 10, { wall: 0xe8e4d8, trim: 0x1e3a6a, door: 0xf4f4f4, doorX: 1.6, wins: [[-1.4, 3.0]], awning: [0x1e3a6a, 0xf4f4f4],
+      name: "SAL'S BARBER", signBg: '#f4f4f4', signFg: '#1e3a6a', signW: 5.6 });
+    barberPole(...F.at(2.9, 5.2));
+    bench(F, -1.4, 6.9, Math.PI);
+    places.barber = (([x, z]) => ({ x, z, name: "Sal's Barber" }))(F.at(0, 7.5));
+  }
+  // ---- Lucky Pawn ----
+  {
+    const F = storefront(89, 7, 10, { h: 4.6, brick: true, wall: 0xd8c8a8, trim: 0x2a3a2a, door: 0x6a5a3a, doorX: -2, wins: [[1.4, 3.6]], winCol: 0xfff0b0,
+      name: 'LUCKY PAWN', signBg: '#111111', signFg: '#ffd040', glow: true, signW: 5.6, lightCol: 0xffd060 });
+    for (let k = 0; k < 7; k++) F.box(-0.25 + k * 0.55, 1.65, 5.12, 0.05, 1.8, 0.05, 'metal', 0x444448); // bars on the window
+    F.sign('GOLD  GUITARS  TVs', '#111111', '#ff5060', 3.2, 0.32, 2.95, 5.14, { tw: 512, th: 52, glow: true, lx: 1.4 });
+    places.pawn = (([x, z]) => ({ x, z, name: 'Lucky Pawn' }))(F.at(0, 7.5));
+  }
+  // ---- Hank's Hardware (the lumber yard is next door through the side gate) ----
+  {
+    const F = storefront(99.5, 14, 12, { h: 5.4, wall: 0xb84a3a, trim: 0xf4f0e4, door: 0x9ac0d8, doorW: 2.4, wins: [[-4.4, 4.2], [4.4, 4.2]],
+      awning: [0x2a6a3a, 0xf0f0e0], name: "HANK'S HARDWARE", signBg: '#2a6a3a', signFg: '#fff4c0', signW: 9, signY: 4.35, lightCol: 0xfff0c8 });
+    // the side door into the yard (east wall = local -x, since the frame faces north)
+    F.face(-7.03, 1.15, 2.5, 1.2, 2.3, 'door', 0xe0e0e0, 3);
+    F.sign('LUMBER YARD  ->', '#2a6a3a', '#fff4c0', 2.4, 0.4, 2.7, 2.5, { tw: 256, th: 44, lx: -7.06, rr: -Math.PI / 2 });
+    // sidewalk display: wheelbarrows, bagged mulch, propane cage, shrubs for sale
+    for (const x of [4.6, 5.9]) {
+      F.geo(new THREE.CylinderGeometry(0.55, 0.3, 0.4, 8, 1, true).scale(1, 1, 1.4), 'metal', 0x2a7a3a, x, 0.75, 6.8);
+      F.geo(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 10).rotateZ(Math.PI / 2), 'plain', 0x1a1a1a, x, 0.22, 7.6);
+      F.box(x, 0.45, 6.2, 0.5, 0.05, 1.4, 'metal', 0x555555);
+      F.col(x, 6.9, 0.9, 1.6, 1);
+    }
+    F.box(1.6, 0.07, 6.9, 1.3, 0.14, 1.1, 'wood', 0x9a7a58);
+    for (let k = 0; k < 4; k++) F.box(1.6, 0.25 + k * 0.17, 6.9, 1.15, 0.16, 0.95, 'plain', k % 2 ? 0x6a4a2a : 0x7a5a32);
+    F.col(1.6, 6.9, 1.3, 1.1, 0.9);
+    F.box(-4.6, 0.8, 6.9, 1.6, 1.6, 0.9, 'metal', 0xb8bcc4); F.col(-4.6, 6.9, 1.6, 0.9, 1.6); // propane cage
+    for (let k = 0; k < 3; k++) F.geo(new THREE.CylinderGeometry(0.17, 0.17, 0.6, 8), 'plain', 0x3a6ab0, -5.1 + k * 0.5, 0.45, 6.95);
+    F.sign('PROPANE', '#b8bcc4', '#c02020', 1.2, 0.3, 1.45, 7.36, { tw: 128, th: 32, lx: -4.6 });
+    for (let k = 0; k < 3; k++) { const [bx, bz] = F.at(-1.5 - k * 0.9, 6.8); F.geo(new THREE.CylinderGeometry(0.22, 0.17, 0.3, 8), 'plain', 0x8a4a2a, -1.5 - k * 0.9, 0.15, 6.8); bush(bx, bz, 0.5); }
+    places.hardware = (([x, z]) => ({ x, z, name: "Hank's Hardware" }))(F.at(0, 8));
+  }
+  // ---- the lumber yard, attached on the east side (x 106.5..124) ----
+  {
+    const cx = 115.3, cz = 15.3, F = frame(cx, cz, Math.PI); // local: +z north (Main St), +x west (the store)
+    F.flat(0, 0, 17.6, 13.6, 'dirt', 0xe0d4bc, 0.05, '#a89880');
+    // chain link round the yard, gate open onto Main St
+    const yard = [[8.7, 6.7], [2.6, 6.7]], yard2 = [[-3.4, 6.7], [-8.7, 6.7], [-8.7, -6.6], [8.7, -6.6]];
+    { const [a, b] = F.at(...yard[0]), [c, d] = F.at(...yard[1]); fenceRun(a, b, c, d, 'chain'); }
+    for (let k = 0; k < yard2.length - 1; k++) { const [a, b] = F.at(...yard2[k]), [c, d] = F.at(...yard2[k + 1]); fenceRun(a, b, c, d, 'chain'); }
+    for (const x of [2.6, -3.4]) { F.box(x, 1.6, 6.7, 0.14, 3.2, 0.14, 'metal', 0xa8acb2); F.post(x, 6.7, 0.1, 3.2); }
+    F.box(-0.4, 3.1, 6.7, 6.2, 0.1, 0.1, 'metal', 0xa8acb2);
+    F.sign("HANK'S LUMBER", '#2a6a3a', '#fff4c0', 4.4, 0.7, 3.6, 6.72, { tw: 512, th: 64, lx: -0.4, double: true });
+    { const [a, b] = F.at(-3.6, 7.1), [c, d] = F.at(-8.4, 7.1); fenceRun(a, b, c, d, 'chain'); }     // the rolled-back gate
+    // open lumber shed along the back: steel posts, a sloped roof, board racks underneath
+    for (const x of [-7.8, -2.6, 2.6, 7.8]) for (const z of [-1.4, -6.1]) { F.box(x, 2.1, z, 0.16, 4.2, 0.16, 'metal', 0x8a9098); F.post(x, z, 0.12, 4.2); }
+    F.geo(new THREE.BoxGeometry(16.6, 0.1, 5.8).rotateX(-0.12), 'metal', 0x9aa8b0, 0, 4.35, -3.75);
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) F.box(-5.2 + r * 5.2, 0.45 + k * 0.62, -3.75, 4.6, 0.5, 3.2 - k * 0.35, 'wood', [0xf2d8a8, 0xe8c890, 0xf4e0b8][(r + k) % 3]);
+    for (let r = 0; r < 3; r++) F.col(-5.2 + r * 5.2, -3.75, 4.6, 3.2, 2.6);
+    F.sign('2x4  2x6  4x4  PLYWOOD', '#f4f0e0', '#2a6a3a', 6, 0.5, 3.75, -1.3, { tw: 512, th: 44 });
+    // bundles on pallets in the yard, a plywood stack, and the forklift
+    lumberStack(F, -6.4, 3.2, 4.8, 1.3, 0.9);
+    lumberStack(F, 6.2, 1.5, 4.2, 1.2, 0.8, 0xe8c890, Math.PI / 2);
+    lumberStack(F, 6.2, 3.4, 4.2, 1.2, 1.1, 0xf4e0b8, Math.PI / 2);
+    F.box(2.2, 0.5, 0.2, 2.4, 0.9, 1.25, 'wood', 0xd8b880); F.box(2.2, 0.07, 0.2, 2.5, 0.14, 1.3, 'wood', 0x9a7a58); F.col(2.2, 0.2, 2.5, 1.3, 1.0); // plywood sheets
+    {
+      const fx = -1.8, fz = 3.6;
+      F.box(fx, 0.85, fz, 1.2, 0.9, 1.9, 'plain', 0xf0b020);
+      F.box(fx, 1.5, fz + 0.4, 1.05, 0.08, 1.0, 'plain', 0x2a2a2a);
+      for (const s of [-1, 1]) { F.box(fx + s * 0.5, 1.9, fz - 0.3, 0.06, 1.3, 0.06, 'plain', 0x2a2a2a); F.box(fx + s * 0.35, 2.9, fz + 1.05, 0.12, 2.6, 0.12, 'metal', 0x555555); }
+      F.box(fx, 2.55, fz - 0.1, 1.2, 0.06, 1.0, 'plain', 0x2a2a2a);
+      for (const s of [-1, 1]) for (const z2 of [fz - 0.6, fz + 0.6]) F.geo(new THREE.CylinderGeometry(0.3, 0.3, 0.25, 10).rotateZ(Math.PI / 2), 'plain', 0x1a1a1a, fx + s * 0.62, 0.3, z2);
+      for (const s of [-1, 1]) F.box(fx + s * 0.3, 0.15, fz + 1.7, 0.12, 0.05, 1.1, 'metal', 0x555555);
+      F.col(fx, fz + 0.3, 1.3, 2.6, 1.6);
+    }
+    F.light(0, 4, -3.5, 0xfff0d0, 0.9); F.halo(0, 4.1, -1.3, 2.2, 0xfff0d0);
+    places.lumber = (([x, z]) => ({ x, z, name: "Hank's Lumber Yard" }))(F.at(-0.4, 5));
+  }
+  // ---- Duke's Auto Repair: the mechanic's garage on the School Rd corner, south of Rosie's ----
+  {
+    const cx = 46, cz = 31, F = frame(cx, cz, Math.PI / 2);   // front (local +z) faces east onto School Rd
+    const w = 13, d = 9, h = 5;
+    F.flat(-0.5, 6.5, 15.5, 5.6, 'asphalt', 0xd8d8d8, 0.04, '#6a6a70');
+    F.box(0, h / 2, 0, w, h, d, 'brick', 0xd8d4cc); F.bld(0, 0, w, d, h + 0.6);
+    F.box(0, h + 0.35, d / 2 - 0.15, w + 0.1, 0.7, 0.3, 'plain', 0x2a4a7a);
+    F.box(0, h + 0.03, 0, w + 0.2, 0.16, d + 0.2, 'plain', 0x2a4a7a);
+    for (const x of [-4, 0]) { F.face(x, 1.65, d / 2 + 0.03, 3.4, 3.3, 'garage', 0xf0f0f0); F.box(x, 3.4, d / 2 + 0.06, 3.6, 0.18, 0.12, 'plain', 0x2a4a7a); }
+    F.face(4.4, 1.15, d / 2 + 0.03, 1.1, 2.3, 'door', 0x2a4a7a);
+    F.face(4.4, 3.4, d / 2 + 0.03, 2.2, 1.0, 'storeWin', 0xffffff);
+    F.sign("DUKE'S AUTO REPAIR", '#2a4a7a', '#f4f0e0', 9, 0.9, 4.2, d / 2 + 0.06, { tw: 512, th: 64 });
+    F.light(-2, 3.6, d / 2 + 1.5, 0xf0f4ff, 1.0); F.halo(-2, 4.2, d / 2 + 0.4, 2.6, 0xf0f4ff);
+    // a sedan up on the two-post lift in front of bay 1, hood up on the junker by the wall
+    {
+      const lx = -4, lz = d / 2 + 2.2;
+      for (const s of [-1, 1]) { F.box(lx + s * 1.25, 1.5, lz, 0.25, 3, 0.25, 'plain', 0xe0b020); F.post(lx + s * 1.25, lz, 0.18, 3); F.box(lx + s * 0.8, 1.3, lz, 0.9, 0.1, 0.15, 'metal', 0x666666); }
+      F.box(lx, 1.7, lz, 1.8, 0.7, 4.0, 'plain', 0x8a2a2a); F.box(lx, 2.3, lz - 0.2, 1.65, 0.55, 2.0, 'plain', 0x8a2a2a);
+      F.face(lx, 2.3, lz + 0.91, 1.5, 0.45, 'window', 0x9aa0a8);
+      for (const s of [-1, 1]) for (const z2 of [lz - 1.3, lz + 1.3]) F.geo(new THREE.CylinderGeometry(0.33, 0.33, 0.22, 10).rotateZ(Math.PI / 2), 'plain', 0x1a1a1a, lx + s * 0.85, 1.35, z2);
+      F.col(lx, lz, 2.8, 4.1, 1.2);
+    }
+    for (let k = 0; k < 2; k++) for (let j = 0; j < 4 - k; j++) F.geo(new THREE.CylinderGeometry(0.36, 0.36, 0.24, 10), 'plain', 0x1e1e1e, 7.8, 0.12 + j * 0.25, d / 2 + 1 + k * 0.9);
+    F.col(7.8, d / 2 + 1.45, 0.9, 1.8, 1);
+    for (const [x, z, c] of [[-7.6, -2, 0x2a5aa0], [-7.6, -0.9, 0xc03030], [-7.6, 1.6, 0x3a3a3a]]) barrel(...F.at(x, z), c);
+    F.geo(new THREE.BoxGeometry(0.8, 1.0, 0.05).rotateX(0.22), 'plain', 0xf4f0e0, 6.5, 0.5, d / 2 + 3.8);
+    F.geo(new THREE.BoxGeometry(0.8, 1.0, 0.05).rotateX(-0.22), 'plain', 0xf4f0e0, 6.5, 0.5, d / 2 + 3.4);
+    F.sign('OIL $29', '#f4f0e0', '#2a4a7a', 0.7, 0.4, 0.62, d / 2 + 3.93, { tw: 128, th: 64, lx: 6.5, rr: 0.22 });
+    F.col(6.5, d / 2 + 3.6, 0.9, 0.6, 1);
+    places.mechanic = (([x, z]) => ({ x, z, name: "Duke's Auto Repair" }))(F.at(2, d / 2 + 2.5));
+  }
+  // lamps and a hydrant for the new block
+  for (const t of [38, 58]) lampAlong('M1', 'M2', t, 1);
+  hydrant(96.5, 7.5);
+}
+
+// ---------- lot fences ----------
+// Every home gets a fenced yard (the RV lot stays open): a low front fence with gaps for the driveway and the front walk,
+// taller sides and back. Fences are alpha-cut quads (one per run) or plank boxes, with a box collider per run (jumpable).
+const FENCE = {
+  picket: { h: 1.0, key: 'picket', col: 0xffffff, post: 'plain', postCol: 0xf2f0ea },
+  chain: { h: 1.25, key: 'chain', col: 0xffffff, post: 'metal', postCol: 0xa8acb2, uv: 1.5, pw: 0.07 },
+  iron: { h: 1.4, key: 'iron', col: 0xffffff, post: 'brick', postCol: 0xffffff, pw: 0.5, every: 5, cap: 0.3 },
+  privacy: { h: 1.8, box: true, col: 0xf0e8d8 },
+  rail: { h: 1.05, rail: true, col: 0xc8b090, pw: 0.15 },
+};
+function fenceRun(x0, z0, x1, z1, kind, col) {
+  const K = FENCE[kind], len = Math.hypot(x1 - x0, z1 - z0); if (!K || len < 0.4) return;
+  const ry = Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, h = K.h, c = col ?? K.col;
+  if (K.box) {
+    const g = new THREE.BoxGeometry(len, h, 0.08), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * len / 3);
+    addS(g, 'fence', c, mx, h / 2, mz, ry);
+  } else if (K.rail) {
+    for (const y of [0.45, 0.88]) addS(new THREE.BoxGeometry(len, 0.11, 0.07), 'wood', c, mx, y, mz, ry);
+  } else {
+    const g = new THREE.PlaneGeometry(len, h), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * len * (K.uv || 1));
+    addS(g, K.key, c, mx, h / 2, mz, ry);
+  }
+  const n = Math.max(1, Math.round(len / (K.every || 2.4))), pw = K.pw || 0.11, ph = h + (K.cap || 0.05);
+  for (let k = 0; k <= n; k++) {
+    const t = k / n;
+    addS(new THREE.BoxGeometry(pw, ph, pw), K.post || 'wood', K.postCol ?? c, x0 + (x1 - x0) * t, ph / 2, z0 + (z1 - z0) * t, ry);
+  }
+  colBox(mx, mz, len + 0.1, 0.24, h, ry, { fence: kind });
+}
+const lots = [];
+const NO_FENCE = [{ x0: -115, x1: -93, z0: 30, z1: 50 }];   // the RV lot
+function lotBox(L) {
+  const has = (k) => L.extras.includes(k), W = L.w / 2, D = L.d / 2;
+  let r = W + 2.6, l = W + 2.6, b = D + 4;
+  if (has('boat')) r = Math.max(r, W + 3.6);
+  if (has('junker')) r = Math.max(r, W + 4.8);
+  if (has('shed')) { r = Math.max(r, W + 4.6); b = Math.max(b, D + 4.6); }
+  if (has('tractor')) { r = Math.max(r, W + 5.4); b = Math.max(b, D + 5.2); }
+  if (has('tramp')) { l = Math.max(l, W + 3.4); b = Math.max(b, D + 6); }
+  if (has('swing')) { l = Math.max(l, W + 5); b = Math.max(b, D + 5); }
+  if (has('coop')) l = Math.max(l, W + 4);
+  if (has('scarecrow')) l = Math.max(l, W + 3.4);
+  if (has('pool')) b = Math.max(b, D + 7.6);
+  if (has('garden')) b = Math.max(b, D + 5.2);
+  const f = Math.max(D + L.dl - 0.4, D + (L.porch ? 3.9 : 2));
+  return { l: -l, r, b: -b, f };
+}
+function toLocal(L, x, z) { const dx = x - L.x, dz = z - L.z, c = Math.cos(L.ry), s = Math.sin(L.ry); return [dx * c - dz * s, dx * s + dz * c]; }
+function inBld(x, z, pad) {
+  for (const c of colliders) {
+    if (!c.bld) continue;
+    if (c.ob) { const dx = x - c.cx, dz = z - c.cz; if (Math.abs(dx * c.c - dz * c.s) < c.hw + pad && Math.abs(dx * c.s + dz * c.c) < c.hd + pad) return true; }
+    else if (x > c.x0 - pad && x < c.x1 + pad && z > c.z0 - pad && z < c.z1 + pad) return true;
+  }
+  return false;
+}
+function lotStyle(L, i) {
+  if (L.fence) return typeof L.fence === 'string' ? { front: L.fence, side: L.fence, back: L.fence } : L.fence;
+  const dist = districtAt(L.x, L.z);
+  if (dist === 'Maple Grove Estates') return { front: 'picket', side: 'privacy', back: 'privacy' };
+  if (dist === "Nana's Place") return { front: 'picket', side: 'rail', back: 'rail' };
+  const k = ['chain', 'rail', 'picket', 'chain', 'rail', 'picket'][i % 6];
+  return { front: k, side: k, back: k, col: k === 'picket' ? 0xe8e0cc : undefined };
+}
+function buildFences() {
+  const B = lots.map(lotBox);
+  lots.forEach((L, i) => {
+    const S = lotStyle(L, i), bx = B[i], F = frame(L.x, L.z, L.ry);
+    if (L.extras.includes('pickets') || L.extras.includes('hedges')) S.front = null;
+    const gaps = [[L.driveX - 1.9, L.driveX + 1.9], [L.doorX - 0.85, L.doorX + 0.85]];
+    // corners: front-left -> front-right -> back-right -> back-left -> front-left
+    const edges = [
+      [[bx.l, bx.f], [bx.r, bx.f], S.front, true],
+      [[bx.r, bx.f], [bx.r, bx.b], S.side],
+      [[bx.r, bx.b], [bx.l, bx.b], S.back],
+      [[bx.l, bx.b], [bx.l, bx.f], S.side],
+    ];
+    for (const [[ax, az], [qx, qz], kind, front] of edges) {
+      if (!kind) continue;
+      const len = Math.hypot(qx - ax, qz - az), n = Math.max(1, Math.round(len / 1.2));
+      const keep = [];
+      for (let k = 0; k < n; k++) {
+        const t0 = k / n, t1 = (k + 1) / n, tm = (t0 + t1) / 2, lx = ax + (qx - ax) * tm, lz = az + (qz - az) * tm;
+        const [wx, wz] = F.at(lx, lz);
+        let ok = true;
+        if (front && gaps.some(([g0, g1]) => lx > g0 - 0.6 && lx < g1 + 0.6)) ok = false;
+        else if (onRoad(wx, wz, 0.25) || inBld(wx, wz, 0.35)) ok = false;
+        else if (NO_FENCE.some((q) => wx > q.x0 && wx < q.x1 && wz > q.z0 && wz < q.z1)) ok = false;
+        else for (let j = 0; j < i; j++) {   // an earlier yard already fences this ground
+          if (Math.hypot(lots[j].x - L.x, lots[j].z - L.z) > 40) continue;
+          const [px, pz] = toLocal(lots[j], wx, wz), q = B[j];
+          if (px > q.l + 0.3 && px < q.r - 0.3 && pz > q.b + 0.3 && pz < q.f - 0.3) { ok = false; break; }
+        }
+        keep.push(ok);
+      }
+      // join kept pieces into runs of at most ~7 m
+      let k = 0;
+      while (k < n) {
+        if (!keep[k]) { k++; continue; }
+        let e = k; while (e + 1 < n && keep[e + 1] && (e + 2 - k) * len / n <= 7.2) e++;
+        const [x0, z0] = F.at(ax + (qx - ax) * k / n, az + (qz - az) * k / n), [x1, z1] = F.at(ax + (qx - ax) * (e + 1) / n, az + (qz - az) * (e + 1) / n);
+        fenceRun(x0, z0, x1, z1, kind, S.col);
+        k = e + 1;
+      }
+    }
+  });
 }
 
 // ---------- utility poles with sagging wires ----------
