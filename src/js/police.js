@@ -254,7 +254,7 @@ export function makePolice(A) {
   // P12: the cruiser list is filtered once per frame (G.time tag) and reused by carAI, level(), update, the HUD, blips and game.js;
   // police.js invalidates it after its own spawns / removals (game.js removes cars before police.update runs)
   let cruList = null, cruTag = -1, frameN = 0, copN = 0;
-  function cruisers() { const t = A.time(); if (!cruList || cruTag !== t) { cruTag = t; cruList = cars.filter((c) => c.pd && c.pd.unit && !c.dead && cars.includes(c) && c.driver !== 'player'); } return cruList; }
+  function cruisers() { const t = A.time(); if (!cruList || cruTag !== t) { cruTag = t; cruList = cars.filter((c) => c.pd && c.pd.unit && !c.dead && c.driver !== 'player'); } return cruList; }
   const dirtyCruisers = () => { cruList = null; };
   function spawnCruiser() {
     const opts = [];
@@ -524,7 +524,7 @@ export function makePolice(A) {
       return;
     } else if (o.state === 'return') {
       const c = o.car;
-      if (!c || c.dead || !cars.includes(c) || c.driver === 'player') { o.state = 'walkoff'; }
+      if (!c || c.dead || c.gone || c.driver === 'player') { o.state = 'walkoff'; }
       else {
         const s = o.side, w = c.spec.wid / 2 + 0.6, gx = c.x + Math.cos(c.yaw) * w * s, gz = c.z - Math.sin(c.yaw) * w * s;
         yawMove = Math.atan2(gx - o.x, gz - o.z); sp = 4;
@@ -536,7 +536,7 @@ export function makePolice(A) {
       if (G.heat >= PD_HEAT && d < 22) o.state = 'engage';
     } else if (o.state === 'engage') {
       const lv = level();
-      const carOk = o.car && !o.car.dead && cars.includes(o.car) && o.car.driver !== 'player';
+      const carOk = o.car && !o.car.dead && !o.car.gone && o.car.driver !== 'player';
       o.lost = los0 && !hiding ? 0 : (o.lost || 0) + dt;
       if (G.heat < PD_HEAT || (P.car && d > 26 && carOk) || d > 30 || o.lost > (hiding ? (sawIn ? 7 : 2) : 5)) { o.state = carOk ? 'return' : 'walkoff'; if (o.lost > 5 || d > 30) say(`Officer ${o.name}`, 'lost'); }
       else if (bust) { sp = 0; }
@@ -773,7 +773,7 @@ export function makePolice(A) {
     G.heat = 0; G.seenT = 0; provoked = 0; lostT = 20; contact = false; escT = 0; sawIn = false; hideT = 0;
     if (cuff) endCuff(true);
     for (const c of cruisers()) { c.pd.state = 'leave'; c.pd.goal = null; }
-    for (const o of cops) if (o.state === 'engage' || o.state === 'exit') { const ok = o.car && !o.car.dead && cars.includes(o.car) && o.car.driver !== 'player'; o.state = ok ? 'return' : 'walkoff'; }
+    for (const o of cops) if (o.state === 'engage' || o.state === 'exit') { const ok = o.car && !o.car.dead && !o.car.gone && o.car.driver !== 'player'; o.state = ok ? 'return' : 'walkoff'; }
     A.banner(title, sub, 2.6, 'pass'); SND.radio();
   }
   function escapeCheck(dt, CRU) {

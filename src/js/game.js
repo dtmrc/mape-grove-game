@@ -38,6 +38,9 @@ import { makeCarPhys } from './carphys.js'; // driving
 import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // remodeled cars (src/models/vehicles)
 import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeDynGrid } from './dyngrid.js'; // broad phase for cars + peds
+import { makePrewarm } from './prewarm.js'; // shaders + textures ready behind the title screen
+import { updateHouseTex, houseTexReset, houseTexState } from './houses.js'; // full-size house atlases only near the player
+import { makeSceneCull } from './scenecull.js'; // skip hidden / far objects in the per-frame scene walk
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
 import { makeSpawnView } from './spawnview.js'; // cars spawn / despawn out of sight
 import { makeOfficer } from './officer.js';
@@ -256,7 +259,7 @@ function flushInst(mesh, n) { mesh.count = n; mesh.instanceMatrix.needsUpdate = 
 let partN = 0; // live additive particles this frame; car halos are appended after them
 partMesh[1].onBeforeRender = () => {
   const mesh = partMesh[1]; let n = partN;
-  if (isNight) for (const c of cars) { const bm = c.mesh.userData.body.matrixWorld; for (const q of c.mesh.userData.glows) { if (n >= mesh.instanceMatrix.count) break; _pv.set(q.x, q.y, q.z).applyMatrix4(bm); setInst(mesh, n++, _pv.x, _pv.y, _pv.z, q.s, _pc.set(q.c).multiplyScalar(0.8), 1, 1); } }
+  if (isNight) for (const c of cars) { if (c._asleep) continue; const bm = c.mesh.userData.body.matrixWorld; for (const q of c.mesh.userData.glows) { if (n >= mesh.instanceMatrix.count) break; _pv.set(q.x, q.y, q.z).applyMatrix4(bm); setInst(mesh, n++, _pv.x, _pv.y, _pv.z, q.s, _pc.set(q.c).multiplyScalar(0.8), 1, 1); } }
   flushInst(mesh, n);
 };
 function puff(kind, x, y, z, vx = 0, vy = 1, vz = 0, size = 0.6, life = 1) {
@@ -301,7 +304,7 @@ function spawnCar(type, x, z, yaw, o = {}) {
   cars.push(c);
   return c;
 }
-function removeCar(c) { scene.remove(c.mesh); cars.splice(cars.indexOf(c), 1); const u = c.mesh.userData; u.paint.dispose(); if (u.bar) for (const b of u.bar) b.dispose(); }
+function removeCar(c) { c._asleep = false; c.gone = true; scene.remove(c.mesh); cars.splice(cars.indexOf(c), 1); const u = c.mesh.userData; u.paint.dispose(); if (u.bar) for (const b of u.bar) b.dispose(); }
 
 // road graph helpers (world.js NODES/ADJ: a hand-laid road network, not a grid)
 let NN = NODES.length; RD.onRoads.push(() => { NN = NODES.length; }); // engine: roads are editable
@@ -359,6 +362,10 @@ const peds = [];
 const CARG = makeDynGrid(8), PEDG = makeDynGrid(8);
 const _bTC = [], _bSp = [], _bEx = [], _bExP = [], _bLane = [], _bLaneP = [], _bFoot = [], _bPaw = [], _bCC = [], _bCP = [], _bCat = [], _bCop = [];
 function dynSync() { CARG.fill(cars); PEDG.fill(peds); }
+const SCULL = makeSceneCull({ scene, camera });
+const PW = makePrewarm({ renderer, scene, camera });
+canvas.addEventListener('webglcontextrestored', houseTexReset);
+let houseTexT = 0;
 TC.api.carsNear = (x, z, r) => CARG.near(x, z, r, _bTC);
 function attachPed(p) {
   // put a walker on the shoulder of the nearest road
@@ -366,7 +373,7 @@ function attachPed(p) {
   p.lane = { ped: true, from: n, to: e.n, w: e.w, side: Math.random() < 0.5 ? 1 : -1 };
   p.lane.off = p.lane.side * (e.w / 2 + 1.3);
 }
-function removePed(p) { scene.remove(p.mesh); if (p.bar) scene.remove(p.bar.sp); peds.splice(peds.indexOf(p), 1); }
+function removePed(p) { p._asleep = false; scene.remove(p.mesh); if (p.bar) scene.remove(p.bar.sp); peds.splice(peds.indexOf(p), 1); }
 function spawnPed(o = {}) {
   let at = o.at, lane = null;
   if (!at) { // a walker on a town street, somewhere Goobles can't see it pop in (spawnview.js)
@@ -1238,16 +1245,26 @@ const POOL = isTouch ? 5 : 10, pool = []; // P8: fewer per-fragment point lights
 for (let i = 0; i < POOL; i++) { const l = new THREE.PointLight(0xffffff, 0, 24, 1.6); scene.add(l); pool.push(l); }
 const head = new THREE.SpotLight(0xfff0d0, 0, 45, 0.55, 0.5, 1.2); scene.add(head, head.target);
 let poolT = 0, nightK = 1;
+const _ld = [], _ll = [];
 function updateLights(dt) {
   poolT -= dt;
   if (poolT <= 0) {
     poolT = 0.25;
     const cx = camera.position.x, cz = camera.position.z;
-    const list = lights.filter((L) => (L.always || nightK > 0.05) && L.i > 0).map((L) => [L, (L.x - cx) ** 2 + (L.z - cz) ** 2]).sort((a, b) => a[1] - b[1]);
+    // the POOL nearest lit sources, nearest first: one pass with a small insertion buffer (was filter + map + full sort, 4x a second)
+    let nb = 0;
+    for (let i = 0; i < lights.length; i++) {
+      const L = lights[i]; if (!((L.always || nightK > 0.05) && L.i > 0)) continue;
+      const d = (L.x - cx) ** 2 + (L.z - cz) ** 2;
+      if (nb === POOL && !(d < _ld[POOL - 1])) continue;
+      let j = nb < POOL ? nb++ : POOL - 1;
+      while (j > 0 && _ld[j - 1] > d) { _ld[j] = _ld[j - 1]; _ll[j] = _ll[j - 1]; j--; }
+      _ld[j] = d; _ll[j] = L;
+    }
     for (let i = 0; i < POOL; i++) {
-      const l = pool[i], e = list[i];
-      if (!e) { l.intensity = 0; l.userData.src = null; continue; }
-      const L = e[0]; l.position.set(L.x, L.y, L.z); l.color.set(L.c); l.userData.src = L;
+      const l = pool[i], L = i < nb ? _ll[i] : null;
+      if (!L) { l.intensity = 0; l.userData.src = null; continue; }
+      l.position.set(L.x, L.y, L.z); l.color.set(L.c); l.userData.src = L;
     }
   }
   for (const l of pool) {
@@ -1342,9 +1359,13 @@ function drawMapLayer(W, s) {
   mlg.drawImage(mapImg, 0, 0);
   mlg.restore();
 }
+let mmYaw = 0;
 function drawMinimap() {
   const W = mm.width, s = 1.64, now = performance.now();
-  if (now - mmT >= 50) { mmT = now; drawMapLayer(W, s); }
+  // 10 redraws a second (20 while the camera is turning, so the rotating map stays smooth); it was repainted every frame
+  const turn = Math.abs(Math.atan2(Math.sin(camYaw - mmYaw), Math.cos(camYaw - mmYaw)));
+  if (now - mmT < (turn > 0.015 ? 50 : 100) && now >= mmT) return;
+  mmT = now; mmYaw = camYaw; drawMapLayer(W, s);
   mg.clearRect(0, 0, W, W); mg.drawImage(mmLayer, 0, 0);
   const blip = (x, z, col, r = 4, label) => {
     let dx = (x - px()) * s * 250 / 256 * (256 / 250), dz = (z - pz()) * s;
@@ -1555,7 +1576,7 @@ function fpsHud() {
 // auto resolution: three slow 2-second windows in a row (under ~40 fps) drop the render height one step, down to 480p
 const AR = { t0: 0, n: 0, slow: 0 };
 function autoRes() {
-  if (window.QA || resManual || resIdx <= 1 || G.paused) { AR.n = 0; AR.t0 = 0; return; }
+  if (window.QA || resManual || resIdx <= 1 || G.paused || PW.stats.pending > 0) { AR.n = 0; AR.t0 = 0; return; }
   const t = performance.now();
   if (!AR.t0) { AR.t0 = t; AR.n = 0; return; }
   AR.n++;
@@ -1570,6 +1591,8 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (document.hidden) return;
   if (hit('p')) { resIdx = (resIdx + 1) % RES.length; resManual = true; resize(); toast(`Render height ${RES[resIdx]}p`); }
+  PW.tick(dt); // prewarm: a few ms of uploads per frame until everything is on the GPU
+  if ((houseTexT -= dt) <= 0) { houseTexT = 0.4; updateHouseTex(P.car ? P.car.x : P.x, P.car ? P.car.z : P.z); }
   autoRes(now); fpsHud();
   if (hit('m')) { const on = Sfx.toggle(); window.__pdMute = !on; toast(on ? 'Sound on' : 'Sound off'); }
   gamepad.update(dt); quests.input(); ui.update(dt); // ui: gamepad -> keys/touch, then pause menu / map (may set G.paused)
@@ -1589,6 +1612,7 @@ function frame(now) {
     updateCars(dt);
     TC.update(dt); // driving: signal lamps
     for (const p of peds) updatePed(p, dt);
+    SCULL.sleepFar(cars, camera.far); SCULL.sleepFar(peds, camera.far); // scenecull: beyond the far plane = out of the scene graph
     interactions(dt);
     if (mission) { mission.t += dt; mission.update(dt); if (mission && mission.timer !== undefined && mission.stage !== 'car') { setStyle(hud.timer, 'display', 'block'); setText(hud.timer, `${Math.floor(mission.timer / 60)}:${String(Math.floor(mission.timer % 60)).padStart(2, '0')}`); } }
     updateHeat(dt);
@@ -1715,7 +1739,7 @@ const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, place
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;
 quests.init({ G, P, hit, pressed, hud, checkMark, giverMarks, fishing, jail, ui, Sfx, toast, isTouch, px, pz, mission: () => mission, dev: () => dev }); window.__G.quests = quests; // quests
-Object.assign(window.__G, { dyn: { cars: CARG, peds: PEDG }, spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
+Object.assign(window.__G, { makeFig: { human: makeHuman, raccoon: makeRaccoon }, dyn: { cars: CARG, peds: PEDG }, scull: SCULL, prewarm: PW, houseTexState, updateHouseTex, spawnCar, removeCar, districtAt, hurt, addCash, px, pz }); // devcheats: dev-build handles
 
 // P17: pre-warm the shader programs that would otherwise compile mid-game (first officer, HP bar, muzzle flash, tracer,
 // plane, contrail, waypoint beam): hidden stand-ins go into the scene for one renderer.compile against the HDR target.

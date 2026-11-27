@@ -20,7 +20,7 @@ import { makeWaterMaterial, patchCreek } from './water.js';
 import { buildDock } from './dock.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
-import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex } from './houses.js';
+import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex, houseSpot } from './houses.js';
 import { buildRoofs, roofTop, slabTop } from './rooftops.js';   // walkable roofs
 import { roundCrown, pineCrown, bushCrown } from './trees.js';   // render pass: faceted, shaded tree crowns
 import { makeRV, makeCar } from './models.js';
@@ -1494,7 +1494,7 @@ function buildLake(scene, T) {
 /** The stone monument entrance sign. */
 function placeSign(cx, cz, ry, o = {}) {
   const F = frame(cx, cz, ry);
-  addS(houseGeo('sign'), 'h_sign', 0xffffff, cx, 0, cz, ry);
+  addS(houseGeo('sign'), 'h_sign', 0xffffff, cx, 0, cz, ry); houseSpot('sign', cx, cz);
   for (const [x0, z0, x1, z1, h] of SIGN.cols) F.col((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, Math.max(0.5, h), 0, h > 1.5 ? { bld: true, ...o } : { ng: true });
   for (const x of [-3.85, 3.85]) F.light(x, 3.25, 0, 0xffe0b0, 0.6);
   F.light(0, 0.6, 2.2, 0xfff0d0, 0.5);
@@ -1502,7 +1502,7 @@ function placeSign(cx, cz, ry, o = {}) {
 /** One Tracebench house at (cx,cz) facing ry. o.front: local z of the road edge (the driveway runs to it). */
 function placeHouse(id, cx, cz, ry, mirror = false, o = {}) {
   const H = HOUSES[id], F = frame(cx, cz, ry), mx = mirror ? -1 : 1;
-  addS(houseGeo(id, mirror), 'h_' + id, 0xffffff, cx, 0, cz, ry);
+  addS(houseGeo(id, mirror), 'h_' + id, 0xffffff, cx, 0, cz, ry); houseSpot(id, cx, cz);
   for (const [x0, z0, x1, z1, h] of H.cols) {
     const w = x1 - x0, d = z1 - z0, big = w * d >= 4 && h >= 2.4;
     F.col(mx * (x0 + x1) / 2, (z0 + z1) / 2, w, d, Math.max(0.6, h), 0, big ? { bld: true } : { ng: true });

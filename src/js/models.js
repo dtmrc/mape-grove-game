@@ -7,6 +7,7 @@ import GOOBTRUCK_WHEEL_GLB from '../models/goobtruck-wheel.glb';
 import { mat, lambert, phong, basic, faceTex } from './gfx.js';
 import { TUBE_FACE_PNG } from './tubeface.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { rigMerge } from './rigmerge.js'; // one draw per surface kind for jointed figures
 
 let T = null;
 export function setTextures(t) { T = t; }
@@ -338,6 +339,7 @@ export function makeHuman(o = {}) {
   addShadow(root, 0.9, 0.9);
   root.scale.setScalar(sc);
   root.userData = { body, torso, legs, arms, head, scale: sc, seed: Math.random() * 10 };
+  rigMerge(root);   // 15+ draw calls -> 5, same triangles and pose (rigmerge.js)
   return root;
 }
 
@@ -362,6 +364,7 @@ export function makeRaccoon() {
   mergedPart(tail, tp);
   addShadow(root, 0.7, 0.9);
   root.userData = { body, torso: body, legs, arms, head, scale: 0.5 };
+  rigMerge(root);
   return root;
 }
 
@@ -910,6 +913,7 @@ export function makeCastHuman(spec = {}) {
   addShadow(root, 0.8, 0.8);
   root.scale.setScalar(sc);
   root.userData = { body, torso, legs, arms, head, scale: sc, seed: Math.random() * 10 };
+  rigMerge(root);
   if (S.extras) S.extras({ root, body, torso, head, arms, legs, pmat, m, box, cyl, sph, block, hy, cloth });
   return root;
 }

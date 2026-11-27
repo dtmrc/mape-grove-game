@@ -23,6 +23,17 @@ import B_avery from '../models/houses/avery.bin';
 import T_avery from '../models/houses/avery.webp';
 import B_sign from '../models/houses/sign.bin';
 import T_sign from '../models/houses/sign.webp';
+import H_ashford from '../models/houses/ashford.half.webp';
+import H_sevilla from '../models/houses/sevilla.half.webp';
+import H_beaumont from '../models/houses/beaumont.half.webp';
+import H_harlow from '../models/houses/harlow.half.webp';
+import H_linden from '../models/houses/linden.half.webp';
+import H_kingsley from '../models/houses/kingsley.half.webp';
+import H_whitmore from '../models/houses/whitmore.half.webp';
+import H_hartwell from '../models/houses/hartwell.half.webp';
+import H_avery from '../models/houses/avery.half.webp';
+import H_sign from '../models/houses/sign.half.webp';
+const HALF = { ashford: H_ashford, sevilla: H_sevilla, beaumont: H_beaumont, harlow: H_harlow, linden: H_linden, kingsley: H_kingsley, whitmore: H_whitmore, hartwell: H_hartwell, avery: H_avery, sign: H_sign };   // half-size atlases (tools/house-atlas-half.py)
 const BIN = { ashford: B_ashford, sevilla: B_sevilla, beaumont: B_beaumont, harlow: B_harlow, linden: B_linden, kingsley: B_kingsley, whitmore: B_whitmore, hartwell: B_hartwell, avery: B_avery, sign: B_sign };
 const TEX = { ashford: T_ashford, sevilla: T_sevilla, beaumont: T_beaumont, harlow: T_harlow, linden: T_linden, kingsley: T_kingsley, whitmore: T_whitmore, hartwell: T_hartwell, avery: T_avery, sign: T_sign };
 
@@ -66,11 +77,42 @@ export function houseGeo(id, mirror = false) {
   return (geoCache[key] = g);
 }
 
+// ---- atlases: half size for everything, full size only for the models near the player (2026-11-27) ----
+// Each full atlas is 2048 x 2048 = 21 MB on the GPU with its mip chain; ten of them were 60% of all texture memory,
+// and most of the time no Estates house is anywhere near. Every model always has its half-size atlas (5 MB). When
+// the player comes within NEAR metres of a house of that model its full atlas is decoded off the main thread and
+// swapped in (one at a time), and dropped again past FAR. Beyond NEAR the GPU samples the smaller mip levels anyway,
+// which are the same pixels as the half-size atlas, so the picture doesn't change.
+const NEAR = 85, FAR = 110;
+const LOD = {};   // id -> { t, lo (Source), hi (Source | null), state: 'lo' | 'loading' | 'hi', spots: [[x, z]] }
+/** world.js: a house of this model stands at (x, z). */
+export function houseSpot(id, x, z) { (LOD[id] || (LOD[id] = { spots: [] })).spots.push([x, z]); }
 /** The model's atlas as a texture (decodes async; three uploads it once the image is in). */
 export function houseTex(id, aniso = 4) {
   const img = new Image(), t = new THREE.Texture(img);
   img.onload = () => { t.needsUpdate = true; };
-  img.src = TEX[id];
+  img.src = HALF[id];
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso;
+  Object.assign(LOD[id] || (LOD[id] = { spots: [] }), { t, lo: t.source, hi: null, state: 'lo' });
   return t;
 }
+let busy = false;
+function toLow(L) { if (L.state === 'lo') return; L.t.onUpdate = null; if (L.hi && L.hi.data) L.hi.data.src = ''; L.hi = null; L.state = 'lo'; L.t.source = L.lo; L.t.needsUpdate = true; }
+/** Call a few times a second with the player's position: swaps full / half atlases by distance. `all`: full for every model (photo mode, tests). */
+export function updateHouseTex(x, z, all = false) {
+  for (const id in LOD) {
+    const L = LOD[id]; if (!L.t) continue;
+    let d = 1e9; for (const [sx, sz] of L.spots) d = Math.min(d, Math.hypot(sx - x, sz - z));
+    if (all) d = 0;
+    if (L.state === 'lo' && d < NEAR && !busy) {
+      busy = true; L.state = 'loading';
+      const img = new Image(); img.src = TEX[id];
+      const done = (ok) => { busy = false; if (L.state !== 'loading') return; if (!ok) { L.state = 'lo'; return; } L.hi = new THREE.Source(img); L.t.source = L.hi; L.t.needsUpdate = true; L.state = 'hi';
+        L.t.onUpdate = () => { L.t.onUpdate = null; if (L.state === 'hi' && L.hi && L.hi.data === img) img.src = ''; }; };   // uploaded: the decoded copy (16 MB) can go, the GPU has it
+      if (img.decode) img.decode().then(() => done(true), () => done(false)); else { img.onload = () => done(true); img.onerror = () => done(false); }
+    } else if (L.state !== 'lo' && d > FAR) toLow(L);
+  }
+}
+/** After a lost WebGL context every texture is uploaded again from its image: go back to the half atlases (always in memory). */
+export function houseTexReset() { for (const id in LOD) if (LOD[id].t) toLow(LOD[id]); }
+export const houseTexState = () => Object.fromEntries(Object.entries(LOD).filter(([, L]) => L.t).map(([id, L]) => [id, L.state]));
