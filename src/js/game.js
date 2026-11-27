@@ -5,6 +5,7 @@ import { makeGoobles } from './goobles.js';
 import { setTextures, makeCat, makeHuman, makeRaccoon, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
 import { buildWorld, inTown, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
 import { Sfx } from './sfx.js';
+import { makeOtters } from './otters.js';
 import { makeCave } from './cave.js';
 import { makeHens } from './hens.js';
 import { makeHaunted } from './haunted.js';
@@ -1518,6 +1519,7 @@ function frame(now) {
     for (const a of animated) a.fn(G.time);
     updateParts(dt);
     events.update(dt);
+    otters.update(dt);
     meows.update(dt);
     yardcats.update(dt); // yardcats
     fires.update(dt);
@@ -1597,7 +1599,9 @@ const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hem
 const hens = makeHens({ scene, G, P, cat, places, NPC, fishing, quests, cave, say, toast, Sfx, addCash, isTouch });
 // haunted: Ghost of John parts B and C (src/js/haunted.js)
 const haunted = makeHaunted({ scene, G, P, cat, places, NPC, fishing, quests, cave, hens, say, toast, Sfx, addCash, addHeat, hit, isTouch });
-window.__G = { G, P, haunted, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
+// otters: ambient wildlife on the water (src/js/otters.js)
+const otters = makeOtters({ scene, G, P, T, Sfx, blocked, places, camera, px: () => px(), pz: () => pz(), inside: () => INT.inside || jail.active() });
+window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
