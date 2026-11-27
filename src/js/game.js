@@ -1555,6 +1555,7 @@ function frame(now) {
   if (hit('m')) { const on = Sfx.toggle(); window.__pdMute = !on; toast(on ? 'Sound on' : 'Sound off'); }
   gamepad.update(dt); quests.input(); ui.update(dt); // ui: gamepad -> keys/touch, then pause menu / map (may set G.paused)
   if (!G.dialog && fishing.menuOpen()) { fishing.menuInput(); dt = 0; }
+  if (!!G.dialog !== document.body.classList.contains('talking')) document.body.classList.toggle('talking', !!G.dialog); // touch: controls step aside for the dialog box
   if (G.dialog) {
     if (hit('e', 'f', 'enter', ' ', 'punch')) advanceDialog();
     dt = 0;

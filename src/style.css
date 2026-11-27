@@ -171,7 +171,7 @@ body.menu #dialog, body.menu #prompt, body.menu #waypoint, body.menu #markpoint,
    Safe areas (iPhone notch, home bar) come from env(); tools/qa/suites/21-touchui.cjs checks the layout
    at phone sizes by overriding --sa-*. Portrait: stick bottom left with PAUSE/MAP/QUEST above it,
    JUMP/PAW/USE bottom right with BAG and GUN stacked above them.
-   Wide (landscape phones, tablets): PAUSE/MAP/QUEST bottom centre between the stick and BAG/GUN, which sit left of JUMP/PAW. */
+   Wide (landscape phones, tablets): PAUSE/MAP/QUEST bottom centre between the stick and BAG/GUN, which sit left of JUMP/PAW; RADIO above JUMP. */
 :root {
   --sa-t: env(safe-area-inset-top, 0px); --sa-r: env(safe-area-inset-right, 0px);
   --sa-b: env(safe-area-inset-bottom, 0px); --sa-l: env(safe-area-inset-left, 0px);
@@ -187,12 +187,28 @@ body.touch #harmbtn { bottom: calc(var(--pad-b) + 268px); }
 body.touch #boobtn { bottom: calc(var(--pad-b) + 214px); }
 body.touch #minimap { left: calc(16px + var(--sa-l)); top: calc(12px + var(--sa-t)); }
 body.touch #tr { right: calc(16px + var(--sa-r)); top: calc(12px + var(--sa-t)); }
+/* text boxes keep clear of the controls: prompt sits above the PAUSE/MAP/QUEST row between the side columns,
+   the radio caption and car name go up top. While a dialog box is up (body.talking) the controls step aside. */
+body.touch #prompt { top: auto; bottom: calc(var(--pad-b) + 214px); left: calc(var(--pad-l) + 76px); right: calc(var(--btn-r) + 76px); transform: none; text-align: center; }
+body.touch #radiocap { left: calc(var(--pad-l) + 70px); right: calc(var(--btn-r) + 76px); top: calc(var(--sa-t) + 268px); margin: 0 auto; text-align: center; }
+body.touch #objective { top: calc(var(--sa-t) + 138px); left: calc(16px + var(--sa-l)); right: calc(16px + var(--sa-r)); max-width: none; transform: none; }
+body.touch #toast { top: calc(var(--sa-t) + 120px); left: calc(16px + var(--sa-l)); }
+body.touch #radio { top: calc(var(--sa-t) + 208px); }
+body.touch #carname { top: calc(var(--sa-t) + 268px); bottom: auto; right: auto; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+body.touch #dialog { bottom: calc(16px + var(--sa-b)); width: min(620px, calc(100% - 32px - var(--sa-l) - var(--sa-r))); }
+body.touch #storyui, body.touch #hensbt { bottom: calc(14px + var(--sa-b)); }
+body.talking #touchui, body.talking #bagbtn, body.talking #pdgunbtn, body.talking #radiobtn, body.talking #harmbtn, body.talking #boobtn,
+body.menu #pdgunbtn, body.menu #radiobtn, body.menu #harmbtn, body.menu #boobtn { display: none !important; }
 @media (min-width: 600px) {
+  body.touch #objective { top: calc(12px + var(--sa-t)); left: calc(128px + var(--sa-l)); right: calc(264px + var(--sa-r)); }
+  body.touch #carname { top: calc(var(--sa-t) + 75px); }
+  body.touch #radio { top: auto; bottom: calc(var(--btn-b) + 140px); left: calc(var(--pad-l) + 142px); right: calc(var(--btn-r) + 234px); transform: none; white-space: normal !important; }
+  body.touch #prompt, body.touch #radiocap { top: auto; bottom: calc(var(--btn-b) + 64px); left: calc(var(--pad-l) + 142px); right: calc(var(--btn-r) + 234px); }
   #menubtns { left: calc(var(--pad-l) + 130px); right: calc(var(--btn-r) + 222px); bottom: var(--btn-b); justify-content: center; }
   body.touch #bagbtn, body.touch #pdgunbtn { right: calc(var(--btn-r) + 162px); }
   body.touch #bagbtn { bottom: var(--btn-b); }
   body.touch #pdgunbtn { bottom: calc(var(--btn-b) + 72px); }
-  body.touch #radiobtn { right: calc(var(--btn-r) + 162px); bottom: calc(var(--btn-b) + 144px); }
+  body.touch #radiobtn { right: calc(var(--btn-r) + 83px); bottom: calc(var(--btn-b) + 160px); }
   body.touch #harmbtn { bottom: calc(var(--pad-b) + 184px); }
   body.touch #boobtn { bottom: calc(var(--pad-b) + 140px); }
 }
