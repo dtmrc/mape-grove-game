@@ -3,6 +3,7 @@
 // a pistol the cat can take off a downed officer, the busted cutscene and the hand-off to the jail / jailbreak quest.
 // Owned by the police thread. Wired into game.js by tools/police-hooks.mjs (makePolice(api) near the end of game.js).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeOfficer, makePawGun, makeCuffs } from './officer.js';
 import { animBiped } from './models.js';
 import { NODES } from './world.js';
@@ -51,7 +52,15 @@ export const JAIL_ROOM = {
     const L = (c, map) => new THREE.MeshLambertMaterial({ color: c, map: map || null });
     const box = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); g.add(o); return o; };
     const RW = 10, RD = 8, RH = 3.2;
-    const wallLo = L(0x5a6e60), wallHi = L(0xd8d2b8), floorM = L(0x8a8478), ceilM = L(0xe0ddd0), barM = L(0x3a3c42), wood = L(0x7a5434, T.wood);
+    // painted cinder block, sealed concrete with a drain, acoustic ceiling (2026-11-27: textured + merged + baked)
+    const tex = (key, w, h, draw, rx, ry) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); return t; };
+    let sd = 5; const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    const speck = (g2, w, h, n, a) => { for (let i = 0; i < n; i++) { g2.fillStyle = `rgba(0,0,0,${a * rr()})`; g2.fillRect(rr() * w, rr() * h, 1 + rr() * 2, 1 + rr() * 2); } };
+    const block = (base, mortar) => (g2, w, h) => { g2.fillStyle = mortar; g2.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 16) for (let x = (y / 16) % 2 ? -16 : 0; x < w; x += 32) { g2.fillStyle = base; g2.fillRect(x + 1, y + 1, 30, 14); g2.fillStyle = 'rgba(255,255,255,0.08)'; g2.fillRect(x + 1, y + 1, 30, 2); } speck(g2, w, h, 260, 0.12); };
+    const wallLo = L(0xffffff, tex('lo', 64, 64, block('#5e7464', '#4a5c50'), 6, 0.6)), wallHi = L(0xffffff, tex('hi', 64, 64, block('#ddd6bc', '#bdb59c'), 6, 1.2));
+    const floorM = L(0xffffff, tex('fl', 64, 64, (g2, w, h) => { g2.fillStyle = '#8c867a'; g2.fillRect(0, 0, w, h); speck(g2, w, h, 500, 0.16); g2.strokeStyle = 'rgba(40,36,30,0.35)'; g2.strokeRect(0.5, 0.5, w - 1, h - 1); g2.fillStyle = 'rgba(60,50,40,0.15)'; g2.beginPath(); g2.ellipse(40, 22, 14, 8, 0.3, 0, 7); g2.fill(); }, 5, 4));
+    const ceilM = L(0xffffff, tex('ce', 64, 64, (g2, w, h) => { g2.fillStyle = '#e4e0d4'; g2.fillRect(0, 0, w, h); speck(g2, w, h, 300, 0.12); g2.strokeStyle = '#a8a498'; g2.lineWidth = 2; g2.strokeRect(0, 0, w, h); }, 5, 4));
+    const barM = new THREE.MeshPhongMaterial({ color: 0x3a3c42, shininess: 60, specular: 0x555555 }), wood = L(0x7a5434, T.wood);
     box(RW, 0.1, RD, floorM, 0, -0.05, 0);
     box(RW, 0.1, RD, ceilM, 0, RH + 0.05, 0);
     for (const [w, d, x, z] of [[RW, 0.2, 0, -RD / 2], [RW, 0.2, 0, RD / 2], [0.2, RD, -RW / 2, 0], [0.2, RD, RW / 2, 0]]) {
@@ -77,6 +86,29 @@ export const JAIL_ROOM = {
     { const r = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 4, 10), L(0xd8b040)); keys.add(r); for (let i = 0; i < 3; i++) { const k = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.01), L(0xd8b040)); k.position.set(-0.04 + i * 0.04, -0.1, 0); k.rotation.z = (i - 1) * 0.3; keys.add(k); } }
     box(0.8, 0.06, 0.8, L(0xf4f4ff), 0, RH - 0.03, -0.5); box(0.8, 0.06, 0.8, L(0xf4f4ff), -3, RH - 0.03, -2);   // fluorescent panels
     box(1.2, 2.2, 0.08, L(0x6a5038), 0, 1.1, RD / 2 - 0.08);           // exit door
+    box(1.36, 0.1, 0.1, L(0x4a4c52), 0, 2.25, RD / 2 - 0.1); for (const e of [-1, 1]) box(0.08, 2.25, 0.1, L(0x4a4c52), e * 0.64, 1.12, RD / 2 - 0.1);
+    box(0.16, 0.04, 0.16, barM, 0.42, 1.0, RD / 2 - 0.14);             // door handle
+    box(3.4, 0.12, 0.55, L(0xd8d0a8), -3, 0.51, -3.6);                  // thin mattress on the bench
+    box(0.5, 0.14, 0.38, L(0xe8e8ec), -4.62, 0.86, -2.6); box(0.06, 0.5, 0.06, L(0xb8b8c0), -4.62, 0.6, -2.6);   // steel sink
+    for (let i = 0; i < 9; i++) box(0.018, 0.22, 0.01, L(0x2a2a2a), -4.2 + i * 0.05 + (i % 5 === 4 ? 0.02 : 0), 1.55, -3.89);   // tally marks
+    box(0.5, 0.01, 0.5, L(0x5a5650), -2.2, 0.006, -1.2); for (let i = 0; i < 5; i++) box(0.4, 0.012, 0.03, L(0x2a2826), -2.2, 0.01, -1.38 + i * 0.09);   // floor drain
+    box(0.36, 0.36, 0.06, L(0xf4f4f0), 0, 2.55, -3.92); box(0.02, 0.12, 0.01, L(0x111111), 0, 2.6, -3.88); box(0.1, 0.02, 0.01, L(0x111111), 0.04, 2.55, -3.88);   // clock
+    box(1.0, 0.04, 0.3, L(0x9aa0a8), 3.4, 1.5, -3.85); for (let i = 0; i < 4; i++) box(0.22, 0.3, 0.24, L([0xc8a878, 0xa8b8c8, 0xc8a878, 0x8a9070][i]), 3.05 + i * 0.24, 1.67, -3.85);   // evidence boxes on a shelf
+    box(RW, 0.08, 0.03, L(0x3a4a40), 0, 1.2, -RD / 2 + 0.115);         // chair rail
+    // merge the static meshes per material (bars were ~70 draw calls); vertex colours let the room bake light them
+    { const byMat = new Map();
+      for (const o of [...g.children]) {
+        if (!o.isMesh) continue;
+        o.updateMatrix(); let geo = o.geometry.clone().applyMatrix4(o.matrix); if (geo.index) geo = geo.toNonIndexed();
+        const n = geo.attributes.position.count, c = o.material.color, col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) geo.deleteAttribute(k);
+        const key = (o.material.isMeshPhongMaterial ? 'p:' : 'l:') + (o.material.map ? o.material.map.uuid : '-');
+        if (!byMat.has(key)) byMat.set(key, { m: o.material, list: [] });
+        byMat.get(key).list.push(geo); g.remove(o);
+      }
+      for (const { m, list } of byMat.values()) { const mm = m.clone(); mm.color.set(0xffffff); mm.vertexColors = true; g.add(new THREE.Mesh(mergeGeometries(list, false), mm)); } }
     g.userData = {
       cellDoor, keys, lockBox,
       openCell(k = 1) { cellDoor.position.x = 1.15 * Math.max(0, Math.min(1, k)); },  // slides toward +x behind the right bars

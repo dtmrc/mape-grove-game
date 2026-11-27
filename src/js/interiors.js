@@ -29,6 +29,8 @@
 import * as THREE from 'three';
 import * as TER from './terrain.js';
 import { setText, setStyle } from './dom.js';
+import { bakeRoom, BAKE_UNIFORMS } from './roombake.js';
+const BAKE_ON = !/[?&]bake=0/.test((typeof location !== 'undefined' && location.search) || '');   // ?bake=0: old live-lit rooms
 
 // ---------------- module-level registry (usable before the game creates the instance) ----------------
 const registry = new Map();   // id -> { room, entries: [{x,z,yaw,kind,inside}], builtin }
@@ -213,6 +215,7 @@ export function makeInteriors(ctx) {
       group.position.set(origin.x, 0, origin.z); group.rotation.set(0, 0, 0);
       group.userData.noLift = true; group.visible = false;
       group.traverse((o) => { o.layers.set(1); o.userData.noLift = true; });
+      if (BAKE_ON) { try { rec.bake = bakeRoom(THREE, group, out); } catch (e) { console.error(`[interiors] room "${id}" light bake failed`, e); rec.bake = { error: String(e) }; } }
       // exit ring inside
       const exitM = marker(1); exitM.userData.arrow.visible = false; group.add(exitM);
       const ex = out.exit || { x: 0, z: size[1] / 2 - 0.4, r: 0.6 };
@@ -413,7 +416,7 @@ export function makeInteriors(ctx) {
     S.ret = opts.returnTo ? { x: +opts.returnTo.x, z: +opts.returnTo.z, yaw: +opts.returnTo.yaw || 0 } : null;
     if (opts.locked) locks.add(id);
     S.inside = true; S.id = id; S.room = R; R.group.visible = true;
-    setRoomFloors(R);
+    setRoomFloors(R); S.plT = 0;
     S.entry = opts._entry || null;
     roomWindows(R, id);
     const win = S.entry && S.entry.kind === 'window' ? R.windows.find((w) => w.entry === S.entry) : null;
@@ -573,6 +576,15 @@ export function makeInteriors(ctx) {
       l.color.set(L.c ?? 0xfff0d8);
       l.intensity = 16 * (L.i ?? 1) * (L.flicker ? 0.85 + Math.random() * 0.3 : 1);
     }
+    // baked rooms: pool lights that are already in the vertex light only light the cat and the NPCs
+    // (uDynW is indexed by render order: the visible point lights on the camera's layers, in scene order)
+    const baked = R.bake && R.bake.meshes > 0, W = BAKE_UNIFORMS.uDynW.value, set = [], pw = [];
+    if (!S.plT || (S.plT -= 1) <= 0) { S.plT = 20; S.pls = []; scene.traverseVisible((o) => { if (o.isPointLight && o.layers.test(camera.layers)) S.pls.push(o); }); }
+    for (let i = 0; i < pool.length; i++) {
+      const L = R.lights[i], l = pool[i];
+      pw[i] = !baked || !L || L.dyn || L.bake === false ? 1 : L.flicker ? 0.3 : 0;
+      set.push([l.position.x, l.position.z, l.intensity, l.color.r, l.color.g, l.color.b]);
+    }
     if (R.out && typeof R.out.update === 'function') { try { R.out.update(G.time || 0); } catch (e) { R.out.update = null; console.error('[interiors] room update', e); } }
     if (ctx.hemi) { ctx.hemi.intensity = 0.55; ctx.hemi.color.set(0xfff2e0); ctx.hemi.groundColor.set(0x4a4038); }
     if (ctx.sun) ctx.sun.intensity = 0;
@@ -580,6 +592,20 @@ export function makeInteriors(ctx) {
     if (scene.fog) { scene.fog.near = 80; scene.fog.far = 300; }
     if (ctx.post && ctx.post.comp) ctx.post.comp.uniforms.night.value = 0.25;
     emit('env', S.id, R);   // listeners may override the indoor light pool / fog after this (firestarter.js smoke + flames)
+    // a listener that moved a baked slot (fire) makes it live; dimmed / recoloured baked lights tint the baked light
+    if (baked && BAKE_UNIFORMS.uBakeTint.value) {
+      let tr = 0, tg = 0, tb = 0, n = 0;
+      for (let i = 0; i < pool.length; i++) {
+        const l = pool[i], s0 = set[i];
+        if (Math.abs(l.position.x - s0[0]) > 0.01 || Math.abs(l.position.z - s0[1]) > 0.01) { pw[i] = 1; continue; }
+        if (pw[i] >= 1 || s0[2] <= 0) continue;
+        const k = l.intensity / s0[2];
+        tr += k * l.color.r / Math.max(0.02, s0[3]); tg += k * l.color.g / Math.max(0.02, s0[4]); tb += k * l.color.b / Math.max(0.02, s0[5]); n++;
+      }
+      if (n) BAKE_UNIFORMS.uBakeTint.value.setRGB(tr / n, tg / n, tb / n); else BAKE_UNIFORMS.uBakeTint.value.setRGB(1, 1, 1);
+    }
+    W.fill(1);
+    for (let j = 0; j < S.pls.length && j < W.length; j++) { const i = pool.indexOf(S.pls[j]); if (i >= 0) W[j] = pw[i]; }
   }
   function camDist(d) { return S.room ? Math.min(d, S.room.cam.maxDist) : d; }
   function clampCam(v) {
@@ -695,6 +721,7 @@ export function makeInteriors(ctx) {
       };
     },
     ready: roomsReady,
+    bakeUniforms: BAKE_UNIFORMS,   // debug: uDynW (live weight per point light in render order), uBakeTint
     _addDoor: addDoor,
     _place: () => { for (const e of entries) placeEntry(e); },
   };

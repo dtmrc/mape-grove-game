@@ -21,6 +21,7 @@ import { makeGhost, animGhost, ghostAlpha, bronzeBust } from './cave.js';
 import { makeGary, makeNana, makeHuman, makeRaccoon } from './models.js';
 import { makeFrog } from './jailbreak.js';
 import { makeStoryUI } from './storyui.js';
+import { KIT } from './rooms.js';
 
 const KEY = 'mg-haunted-v1';
 const JOHN = 'GHOST OF JOHN';
@@ -327,21 +328,73 @@ export function makeHaunted(ctx) {
   function buildHall() {
     const root = new THREE.Group(), cols = [], W = HALL.W, D = HALL.D, H = 3.2;
     const p = [];
-    p.push(tint(at(box(W, 0.1, D), 0, -0.05, 0), 0x6a5a4a));
-    for (let x = -W / 2 + 1; x < W / 2; x += 2) for (let z = -D / 2 + 1; z < D / 2; z += 2) if (((x + z) / 2) % 2 === 0) p.push(tint(at(box(2, 0.02, 2), x, 0.01, z), 0x76655a));
-    p.push(tint(at(box(W, H, 0.2), 0, H / 2, -D / 2), 0xd8cfb8), tint(at(box(W, H, 0.2), 0, H / 2, D / 2), 0xd8cfb8), tint(at(box(0.2, H, D), -W / 2, H / 2, 0), 0xcfc6ae), tint(at(box(0.2, H, D), W / 2, H / 2, 0), 0xcfc6ae));
-    p.push(tint(at(box(W, 1.0, 0.24), 0, 0.5, -D / 2 + 0.02), 0x5a4030), tint(at(box(W, 1.0, 0.24), 0, 0.5, D / 2 - 0.02), 0x5a4030));
+    // the set: carpet tiles + runner, beige wallpaper over walnut wainscot, drop ceiling with fluorescent troffers
+    // (the shell had no ceiling before 2026-11-27; built with the rooms.js KIT so the room bake reads like the others)
+    const { ctex, grime, makeBuilder, shell, framedPicture, signTex: kSign } = KIT;
+    KIT.reseed(77);
+    const B = makeBuilder(THREE, null);
+    const carpet = ctex(THREE, 'hoa:carpet', 64, 64, (g) => {
+      for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { g.fillStyle = (x + y) % 2 ? '#7a6a5a' : '#706050'; g.fillRect(x * 32, y * 32, 32, 32); }
+      for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${KIT.rnd() < 0.5 ? '40,30,20' : '200,180,150'},${0.12 * KIT.rnd()})`; g.fillRect(KIT.rnd() * 64, KIT.rnd() * 64, 1, 1); }
+      g.strokeStyle = 'rgba(0,0,0,0.18)'; g.strokeRect(0.5, 0.5, 63, 63); g.fillStyle = 'rgba(60,40,20,0.22)'; g.beginPath(); g.ellipse(44, 18, 6, 4, 0.4, 0, 7); g.fill();   // coffee
+    });
+    const runner = ctex(THREE, 'hoa:runner', 32, 64, (g) => { g.fillStyle = '#1e2a44'; g.fillRect(0, 0, 32, 64); g.fillStyle = '#c8a030'; g.fillRect(2, 0, 2, 64); g.fillRect(28, 0, 2, 64); grime(g, 32, 64, 160, 0.18); });
+    const paper = ctex(THREE, 'hoa:paper', 64, 64, (g) => {
+      g.fillStyle = '#e2d6b8'; g.fillRect(0, 0, 64, 64);
+      for (let x = 0; x < 64; x += 16) { g.fillStyle = 'rgba(150,120,80,0.16)'; g.fillRect(x, 0, 6, 64); }
+      for (let y = 8; y < 64; y += 16) for (let x = 11; x < 64; x += 16) { g.fillStyle = 'rgba(140,110,70,0.28)'; g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x + 2, y); g.lineTo(x, y + 3); g.lineTo(x - 2, y); g.fill(); }
+      grime(g, 64, 64, 80, 0.07);
+    });
+    const panel = ctex(THREE, 'hoa:panel', 64, 64, (g) => {
+      g.fillStyle = '#5a3a24'; g.fillRect(0, 0, 64, 64);
+      for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${KIT.rnd() < 0.5 ? '30,18,8' : '110,74,44'},0.35)`; g.fillRect(0, KIT.rnd() * 64, 64, 1); }
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, 0, 2, 64); g.fillStyle = 'rgba(255,220,170,0.12)'; g.fillRect(2, 0, 2, 64);
+      g.strokeStyle = 'rgba(0,0,0,0.3)'; g.lineWidth = 2; g.strokeRect(10, 8, 44, 48); g.strokeStyle = 'rgba(255,210,160,0.12)'; g.strokeRect(12, 10, 40, 44);
+    });
+    const tiles = ctex(THREE, 'hoa:ceil', 64, 64, (g) => { g.fillStyle = '#ece6da'; g.fillRect(0, 0, 64, 64); for (let i = 0; i < 300; i++) { g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(KIT.rnd() * 64, KIT.rnd() * 64, 1, 1); } g.strokeStyle = '#b8b4ac'; g.lineWidth = 3; g.strokeRect(0, 0, 64, 64); g.fillStyle = 'rgba(160,110,40,0.3)'; g.beginPath(); g.arc(20, 44, 7, 0, 7); g.fill(); });
+    B.def('carpet', { kind: 'lambert', map: carpet }); B.def('runner', { kind: 'lambert', map: runner }); B.def('paper', { kind: 'lambert', map: paper });
+    B.def('panel', { kind: 'lambert', map: panel }); B.def('tiles', { kind: 'lambert', map: tiles });
+    for (const c of shell(B, THREE, { w: W, d: D, h: H, floorKey: 'carpet', wallKey: 'paper', ceilKey: 'tiles', ceilCol: 0xffffff, door: { x: 0, w: 1.1, h: 2.15 }, base: 0x2a1a10, frame: 0x4a3020, wallTile: 1.4, floorTile: 1.2, trim: { c: 0x3a2414, y: 1.08, h: 0.07 } })) cols.push(c);
+    for (const [cx, cz, len, ry] of [[0, -D / 2 + 0.008, W, 0], [-W / 2 + 0.008, 0, D, Math.PI / 2], [W / 2 - 0.008, 0, D, -Math.PI / 2], [-W / 4 - 0.3, D / 2 - 0.008, W / 2 - 0.6, Math.PI], [W / 4 + 0.3, D / 2 - 0.008, W / 2 - 0.6, Math.PI]]) B.quad('panel', 0xffffff, len, 1.04, cx, 0.54, cz, ry, { us: len / 1.1, vs: 1, ao: false, tint: false, paint: (_x, y) => 0.75 + 0.25 * (y / 1.1) });
+    B.flat('runner', 0xffffff, 1.4, D - 2.2, 0, 0.012, 0.6, 0, { vs: 4, ao: false, tint: false });
+    // troffers: a frame + a glowing diffuser per ceiling light
+    for (const [x, z] of [[-5, -2], [0, -2], [5, -2], [-5, 2.5], [0, 2.5], [5, 2.5]]) { B.box('plain', 0xd8d4cc, 1.3, 0.05, 0.7, x, H - 0.03, z, 0, { ao: false }); B.flat('glow', 0xfff6e4, 1.18, 0.58, x, H - 0.06, z, 0, { down: true, ao: false, tint: false }); }
+    // portraits of past HOA presidents (all Gary), framed rules, a clock, a fire-exit sign, a ficus in each back corner
+    const garyPic = (k) => ctex(THREE, 'hoa:gary' + k, 48, 64, (g) => { g.fillStyle = ['#3a4a6a', '#5a3a3a', '#3a5a4a'][k]; g.fillRect(0, 0, 48, 64); g.fillStyle = '#e8c8a8'; g.beginPath(); g.ellipse(24, 26, 11, 14, 0, 0, 7); g.fill(); g.fillStyle = '#6a5040'; g.fillRect(13, 12, 22, 6); g.fillStyle = '#2a2a30'; g.fillRect(10, 44, 28, 20); g.fillStyle = '#fff'; g.fillRect(22, 44, 4, 10); g.fillStyle = '#111'; g.fillRect(19, 24, 3, 2); g.fillRect(27, 24, 3, 2); g.fillRect(20, 33, 9, 1); g.fillStyle = '#c8a030'; g.font = 'bold 7px monospace'; g.textAlign = 'center'; g.fillText(['GARY 2009', 'GARY 2015', 'GARY 2021'][k], 24, 62); }, { repeat: false });
+    [-7.4, -5.6, -3.8].forEach((x, k) => { B.def('gp' + k, { kind: 'lambert', map: garyPic(k) }); framedPicture(B, THREE, 'gp' + k, 0.6, 0.8, x, 1.95, -D / 2 + 0.03, 0, 0xb08a30); });
+    B.def('rules', { kind: 'lambert', map: kSign(THREE, 'hoa:rules', ['HOA RULES', '1. beige', '2. no cats', '3. see rule 1'], '#f8f4e8', '#2a2a30', 96, 128, { font: 'serif' }) });
+    framedPicture(B, THREE, 'rules', 0.7, 0.9, W / 2 - 0.03, 1.8, -2.4, -Math.PI / 2, 0x3a2414);
+    B.def('exit', { kind: 'basic', map: kSign(THREE, 'hoa:exit', ['EXIT'], '#3a0a0a', '#ff4a3a', 64, 24, { glow: true }) });
+    B.box('plain', 0xe8e4d8, 0.62, 0.24, 0.08, 0, 2.48, D / 2 - 0.05, 0, { ao: false }); B.quad('exit', 0xffffff, 0.56, 0.2, 0, 2.48, D / 2 - 0.095, Math.PI, { ao: false, tint: false });
+    B.cyl('plain', 0xf4f4f0, 0.24, 0.24, 0.05, -W / 2 + 0.04, 2.45, 2.5, 16, { ao: false, rz: Math.PI / 2 }); B.cyl('plain', 0x2a2a30, 0.26, 0.26, 0.03, -W / 2 + 0.02, 2.45, 2.5, 16, { ao: false, rz: Math.PI / 2 });
+    for (const [x, z] of [[-W / 2 + 0.6, -D / 2 + 0.6], [W / 2 - 0.6, D / 2 - 0.7]]) {
+      B.cyl('plain', 0x8a5a3a, 0.24, 0.18, 0.42, x, 0.21, z, 10); B.cyl('plain', 0x3a2a1a, 0.22, 0.22, 0.02, x, 0.42, z, 10, { ao: false });
+      B.cyl('wood', 0x5a3a20, 0.025, 0.035, 1.2, x, 1.0, z, 5);
+      for (let k = 0; k < 14; k++) { const a = k * 2.4, y = 1.0 + (k % 5) * 0.18; B.sph('plain', k % 3 ? 0x3a6a2a : 0x4a7a32, 0.18 + 0.05 * (k % 3), x + Math.sin(a) * 0.22, y + 0.3, z + Math.cos(a) * 0.22, { ws: 5, hs: 4, s: [1, 0.6, 1] }); }
+      cols.push({ kind: 'box', cx: x, cz: z, w: 0.5, d: 0.5, rot: 0, h: 1.6 });
+    }
+    // refreshments table runner + stacked styrofoam cups and a plate of beige cookies by the urn
+    B.box('plain', 0xf4f0e8, 1.04, 0.02, 2.44, 8.2, 0.81, 2.2, 0, { ao: false });
+    for (let k = 0; k < 3; k++) B.cyl('plain', 0xf8f8f4, 0.045, 0.035, 0.32, 8.0 + k * 0.12, 0.98, 1.3, 8, { ao: false });
+    B.cyl('plain', 0xf4f4f0, 0.18, 0.15, 0.03, 8.25, 0.835, 3.1, 12, { ao: false }); for (let k = 0; k < 6; k++) B.cyl('plain', 0xd8c090, 0.04, 0.04, 0.015, 8.25 + Math.sin(k) * 0.08, 0.86 + (k % 2) * 0.016, 3.1 + Math.cos(k) * 0.08, 8, { ao: false });
+    // folding chairs for the public, two rows facing the board
+    for (const z of [1.4, 2.6]) for (const x of [-5.8, -4.6, 4.6, 5.8]) {
+      B.box('shiny', 0x6a6a72, 0.46, 0.04, 0.44, x, 0.46, z, 0, { ao: false }); B.box('shiny', 0x6a6a72, 0.46, 0.4, 0.03, x, 0.74, z + 0.22, 0, { ao: false });
+      for (const e of [-1, 1]) { B.box('shiny', 0x3a3a40, 0.025, 0.95, 0.025, x + e * 0.21, 0.47, z + 0.2, 0, { ao: false, rx: -0.08 }); B.box('shiny', 0x3a3a40, 0.025, 0.47, 0.025, x + e * 0.21, 0.23, z - 0.18, 0, { ao: false }); }
+      cols.push({ kind: 'box', cx: x, cz: z, w: 0.46, d: 0.46, rot: 0, h: 0.5 });
+    }
+    root.add(B.finish(new THREE.Group()));
     // podium, gavel, board chairs, table with the urn, projector cart, flag, light switch, door
     p.push(tint(at(box(1.1, 1.15, 0.7), 0, 0.57, -4.2), 0x6a4a2a), tint(at(box(1.2, 0.06, 0.8), 0, 1.17, -4.2), 0x8a6a40));
     p.push(tint(at(box(0.08, 0.08, 0.3), 0.4, 1.26, -4.1, 0.5), 0x3a2a1a), tint(at(box(0.2, 0.12, 0.12), 0.34, 1.26, -3.98, 0.5), 0x3a2a1a));
     for (const x of [-3.3, -1.1, 1.1, 3.3]) { p.push(tint(at(box(0.6, 0.08, 0.6), x, 0.48, -0.6), 0x8a3a3a), tint(at(box(0.6, 0.7, 0.08), x, 0.85, -0.28), 0x8a3a3a)); for (const [a, b] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) p.push(tint(at(box(0.05, 0.46, 0.05), x + a, 0.23, -0.6 + b), 0x3a3a3a)); }
     p.push(tint(at(box(1.0, 0.8, 2.4), 8.2, 0.4, 2.2), 0xe8e0d0), tint(at(box(0.7, 0.5, 0.5), 0, 0.75, 3.4), 0x4a4a50), tint(at(box(0.5, 0.25, 0.4), 0, 1.12, 3.4), 0x2a2a30), tint(at(box(0.06, 0.7, 0.06), 0, 0.35, 3.4), 0x8a8a90));
-    p.push(tint(at(box(0.06, 0.18, 0.12), -W / 2 + 0.13, 1.3, 1.5), 0xf4f4f0), tint(at(box(1.1, 2.1, 0.08), 0, 1.05, D / 2 - 0.12), 0x3a2a1a));
-    p.push(tint(at(box(3.2, 1.6, 0.05), 0, 2.1, -D / 2 + 0.13), 0xf4f4f4));
+    p.push(tint(at(box(0.06, 0.18, 0.12), -W / 2 + 0.03, 1.3, 1.5), 0xf4f4f0), tint(at(box(1.1, 2.1, 0.04), 0, 1.05, D / 2 - 0.03), 0x4a3020), tint(at(box(0.08, 0.08, 0.06), 0.42, 1.0, D / 2 - 0.08), 0xc8a030));
+    p.push(tint(at(box(3.2, 1.6, 0.05), 0, 2.1, -D / 2 + 0.06), 0xf4f4f4), tint(at(box(3.4, 0.08, 0.1), 0, 1.26, -D / 2 + 0.08), 0x3a3a40));
     root.add(new THREE.Mesh(merge(p), vmat()));
-    const scr = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.4), basic({ map: signTex(['HOLLOW ESTATES', 'phase 1: remove woods', 'phase 2: beige'], '#f4f4f4', '#1e2a44', 384, 192) })); scr.position.set(0, 2.1, -D / 2 + 0.17); root.add(scr);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.4), basic({ map: signTex(['HOLLOW ESTATES', 'phase 1: remove woods', 'phase 2: beige'], '#f4f4f4', '#1e2a44', 384, 192) })); scr.position.set(0, 2.1, -D / 2 + 0.1); root.add(scr);
     hall.screen = scr; hall.catSlide = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.4), basic({ map: signTex(['( a cave painting )', 'OF A CAT', 'it is judging you'], '#c8a878', '#3a1a0a', 384, 192) })); hall.catSlide.position.copy(scr.position); hall.catSlide.position.z += 0.01; hall.catSlide.visible = false; root.add(hall.catSlide);
-    const ban = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.5), basic({ map: signTex(['MAPLE GROVE HOA  -  ORDER  -  BEIGE  -  ORDER'], '#1e2a44', '#f0e6c8', 512, 56) })); ban.position.set(-4.5, 2.6, -D / 2 + 0.13); root.add(ban);
+    const ban = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.5), basic({ map: signTex(['MAPLE GROVE HOA  -  ORDER  -  BEIGE  -  ORDER'], '#1e2a44', '#f0e6c8', 512, 56) })); ban.position.set(4.6, 2.55, -D / 2 + 0.03); root.add(ban);
     hall.urn = new THREE.Mesh(merge([tint(at(cyl(0.2, 0.22, 0.55, 10), 0, 0.28, 0), 0xb8b8c0), tint(at(cyl(0.08, 0.2, 0.1, 10), 0, 0.6, 0), 0x2a2a2e), tint(at(box(0.05, 0.05, 0.14), 0, 0.12, 0.26), 0x2a2a2e)]), vmat()); hall.urn.position.set(8.2, 0.8, 2.2); root.add(hall.urn);
     hall.flag = new THREE.Group(); hall.flag.position.set(7.4, 0, -5.0); root.add(hall.flag);
     hall.flag.add(new THREE.Mesh(merge([tint(at(cyl(0.03, 0.03, 2.5, 6), 0, 1.25, 0), 0xc8a030), tint(at(cyl(0.2, 0.24, 0.1, 8), 0, 0.05, 0), 0x3a3a3a), tint(at(box(0.9, 0.6, 0.02), -0.48, 2.1, 0), 0x1e2a44), tint(at(box(0.5, 0.1, 0.025), -0.48, 2.1, 0), 0xf0e6c8)]), vmat({ side: THREE.DoubleSide })));
@@ -354,7 +407,7 @@ export function makeHaunted(ctx) {
     const solid = (cx, cz, w, d, h) => cols.push({ kind: 'box', cx, cz, w, d, rot: 0, h });
     solid(0, -4.2, 1.2, 0.8, 1.2); solid(8.2, 2.2, 1.0, 2.4, 0.9); solid(0, 3.4, 0.7, 0.5, 1.2); solid(7.4, -5.0, 0.4, 0.4, 2.5);
     for (const x of [-3.3, -1.1, 1.1, 3.3]) solid(x, -0.6, 0.7, 0.8, 1.5);
-    hall.L = [{ x: -4, y: 2.9, z: -1, c: 0xfff0d0, i: 1.1 }, { x: 4, y: 2.9, z: -1, c: 0xfff0d0, i: 1.1 }, { x: 0, y: 2.9, z: 3.5, c: 0xfff0d0, i: 0.9 }, { x: 0, y: 2.2, z: -4.6, c: 0xffe0b0, i: 0.6 }];
+    hall.L = [{ x: -5, y: 2.95, z: -2, c: 0xfff0d8, i: 0.85 }, { x: 0, y: 2.95, z: -2, c: 0xfff0d8, i: 0.85 }, { x: 5, y: 2.95, z: -2, c: 0xfff0d8, i: 0.85 }, { x: 0, y: 2.95, z: 2.5, c: 0xfff0d8, i: 0.75 }, { x: -5, y: 2.95, z: 2.5, c: 0xfff0d8, i: 0.7 }, { x: 5, y: 2.95, z: 2.5, c: 0xfff0d8, i: 0.7 }, { x: 0, y: 2.0, z: -4.4, c: 0xffd8a0, i: 0.35 }];
     return {
       group: root, size: [W, D], cols, spawn: { x: 0, z: 4.6, yaw: Math.PI }, exit: { x: 0, z: 5.5, r: 0.6 }, lights: hall.L, name: 'HOA Office', cam: { maxDist: 4.2, height: 3.0 },
       interact: [],
