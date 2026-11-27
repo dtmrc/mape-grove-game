@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-27: Goob's truck baked like the other cars (on main, test page only)
+- diet asked to re-bake the truck. tools/vehicles/bake.cjs now bakes `goobtruck` (class `goob`, own livery) into
+  src/models/vehicles/goobtruck.glb: one texture atlas, 33 draw calls -> 4, 373 KB instead of 1.36 MB of GLBs.
+  For this one vehicle the near level is not simplified and textures are saved at full webp quality (at the usual 0.9
+  the hood went blotchy and the headlights soft in close-up shots). Handling, lamps and size stay the hand-tuned
+  CAR_TYPES.goobtruck numbers (vehicles.js). The old body/wheel GLBs stay for `?cars=old` and the decoder fallback.
+
 ## 2026-11-27: performance pass, same picture for less work (on main, test page only)
 - diet: collision that scales to more objects, better data structures where it pays, smaller house textures, preload
   behind the title screen, slower minimap redraw, and "simplify without reducing graphical appearance".

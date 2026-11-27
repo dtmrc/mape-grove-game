@@ -17,8 +17,9 @@ const GAME = {
   pickup: ['k15_95', 'f15_04', 'rampart16', 'f15_24'],
   cart: ['hoacart'],
   police: ['crownpi08', 'chaserpd18', 'tahomappv04', 'pathwaypiu23', 'blazonppv23'],
+  goob: ['goobtruck'],                                     // Goobles' own truck: never in traffic, keeps its black paint and white stripe
 };
-const LIVERY = new Set(GAME.police);                       // keep their own paint (black-and-white, decals)
+const LIVERY = new Set([...GAME.police, ...GAME.goob]);                       // keep their own paint (black-and-white, decals)
 const RATIO = +(process.env.RATIO || 0.4), ERR = +(process.env.ERR || 0.0025), FAR = { ratio: +(process.env.FAR_RATIO || 0.08), err: +(process.env.FAR_ERR || 0.08) };
 const roster = JSON.parse(fs.readFileSync(path.join(D, 'roster.json'), 'utf8'));
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.values(GAME).flat();
@@ -45,7 +46,7 @@ const glbIn = (dir) => path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
   for (const id of ids) {
     const rel = (m) => '/tmp/' + path.relative(TMP, glbIn(path.join(TMP, id + '-' + m)));
-    const r = await p.evaluate(([a, w, o]) => window.bake(a, w, o), [rel('body'), rel('wheel'), { police: clsOf(id) === 'police' || clsOf(id) === 'cart', livery: LIVERY.has(id), ratio: RATIO, err: ERR, far: FAR, maxTex: 512, maxPaint: 512 }]);
+    const r = await p.evaluate(([a, w, o]) => window.bake(a, w, o), [rel('body'), rel('wheel'), { police: clsOf(id) === 'police' || clsOf(id) === 'cart', livery: LIVERY.has(id), ratio: clsOf(id) === 'goob' ? 1 : RATIO, err: ERR, far: FAR, maxTex: 512, maxPaint: 512, webpQ: clsOf(id) === 'goob' ? 1 : 0.9 }   /* Goob's truck is seen up close: textures at full webp quality (0.9 left the hood blotchy) */]);
     const raw = path.join(TMP, id + '-game.glb'); fs.writeFileSync(raw, Buffer.from(r.glb, 'base64'));
     const doc = await io.read(raw);
     doc.createExtension(EXTTextureWebP).setRequired(true);

@@ -30,6 +30,8 @@ export function registerVehicles(CAR_TYPES) {
   const mean = (ids, f) => ids.reduce((t, id) => t + f(INDEX[id]), 0) / ids.length;
   for (const [id, I] of Object.entries(INDEX)) {
     if (!GLB[id]) continue;
+    // Goobles' truck: the baked model (one atlas, 4 draw calls instead of 33) with its hand-tuned handling, lamps and size
+    if (I.cls === 'goob') { const T = CAR_TYPES[id]; if (T) { T.model = id; T.glb = { ...T.glb, livery: true, bar: false }; } continue; }
     const police = I.cls === 'police', cart = I.cls === 'cart', fam = police ? (I.roofY > 1.55 ? 'suv' : 'sedan') : I.cls;
     const B = CAR_TYPES[BASE[fam]], peers = byCls[I.cls];
     const k = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -50,6 +52,7 @@ export function registerVehicles(CAR_TYPES) {
 export function pickModel(type, o = {}) {
   if (!VEHICLES_ENABLED || o.keepType) return null;
   if (o.model && GLB[o.model]) return o.model;          // a specific model (QA, scripted scenes)
+  if (GLB[type] && INDEX[type] && INDEX[type].cls === 'goob') return type;   // Goob's truck: always its own model
   const pick = (a) => (a && a.length ? a[(Math.random() * a.length) | 0] : null);
   if (o.role === 'police' || o.role === 'pdParked') return pick(byCls.police);
   const pool = POOLS[type]; if (!pool) return null;
@@ -142,7 +145,7 @@ export function makeModelCar(type, color, o, CAR_TYPES) {
     mergeWheels(root, wheels, spins, wheelLods);
   }, () => {
     // decoder unavailable: fall back to the procedural car of the same family so the game still has cars
-    const P = makeCar(S.cls === 'sport' ? 'sedan' : S.cls === 'cart' ? 'golfcart' : S.cls, color, o), u = P.userData;
+    const P = makeCar(!S.cls ? type : S.cls === 'sport' ? 'sedan' : S.cls === 'cart' ? 'golfcart' : S.cls, color, o), u = P.userData;
     for (const ch of u.body.children.slice()) body.add(ch);
     u.wheels.forEach((w, i) => { for (const ch of w.children.slice()) { ch.position.set(0, 0, 0); spins[i][0].add(ch); } });
   });
