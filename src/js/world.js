@@ -20,7 +20,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
 import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex } from './houses.js';
 import { buildRoofs, roofTop } from './rooftops.js';   // walkable roofs
-import { roundCrown, pineCrown } from './trees.js';   // render pass: faceted, shaded tree crowns
+import { roundCrown, pineCrown, bushCrown } from './trees.js';   // render pass: faceted, shaded tree crowns
 import { makeRV, makeCar } from './models.js';
 import { initRoads } from './roads.js';
 import { flowRoads } from './roadflow.js';
@@ -192,6 +192,7 @@ function frame(cx, cz, ry) {
       const g = plane(w, h).rotateX(Math.PI / 2);
       if (dir) g.rotateY([0, Math.PI, Math.PI / 2, -Math.PI / 2][dir]);
       const [x, z] = at(lx, lz); addS(g, key, col, x, y, z, ry);
+      if (key === 'window' && col === 0xffffff && w >= 0.8) winTrim(F, lx, y, lz, w, h, dir, F.trim ?? 0xf0ece2);   // render pass: every building window gets a casing + sill
     },
     ramp(lx, lz, w, d, t0, t1, rr = 0) { const [x, z] = at(lx, lz), a = ry + rr; floors.push({ t0, t1, cx: x, cz: z, hw: w / 2, hd: d / 2, c: Math.cos(a), s: Math.sin(a) }); }, // engine: walkable slope
     floor(lx, lz, w, d, top, rr = 0) { const [x, z] = at(lx, lz), a = ry + rr; floors.push({ top, cx: x, cz: z, hw: w / 2, hd: d / 2, c: Math.cos(a), s: Math.sin(a) }); }, // engine: walkable deck
@@ -426,7 +427,7 @@ function deadTree0(x, z, s, o = {}) {
   }
   colliders.push({ cx: x, cz: z, r: 0.35 * s, h: 6, tree: true, top: 4.2 * s, pr: 0.6 * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
-function bush(x, z, s = 1, c = 0xb0e0a0) { addS(new THREE.IcosahedronGeometry(0.7 * s, 1), 'leaves', c, x, 0.45 * s, z, R() * 6); }
+function bush(x, z, s = 1, c = 0xb0e0a0) { addS(bushCrown(x, z, s, R() * 6), 'leaves', c, x, 0, z); }
 function fence(x0, z0, x1, z1, h = 1.2, color = 0xffffff) {
   const len = Math.hypot(x1 - x0, z1 - z0), ry = Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2;
   const g = new THREE.BoxGeometry(len, h, 0.1);
@@ -1710,13 +1711,14 @@ function buildSchool() {
   // main building faces Main St
   {
     const cx = 98, cz = -30, F = frame(cx, cz, 0);
+    F.trim = 0xe6dfcf;   // cast-stone window surrounds
     F.flat(0, 13, 42, 12, 'grass', 0xd8f0c8, 0.03);
     F.box(0, 3.5, 0, 40, 7, 13, 'brick', 0xffffff); F.bld(0, 0, 40, 13, 8);
     F.box(0, 7.15, 0, 40.6, 0.3, 13.6, 'plain', 0x8a8478);
     F.box(-14, 2, -12, 10, 4, 12, 'brick', 0xf0e0d8); F.bld(-14, -12, 10, 12, 4.5); F.box(-14, 4.1, -12, 10.4, 0.25, 12.4, 'plain', 0x8a8478); // gym wing
-    for (let k = 0; k < 9; k++) for (const y of [2, 5]) { if (k === 4) continue; F.face(-16 + k * 4, y, 6.53, 2.4, 1.4, 'window', 0xffffff); winTrim(F, -16 + k * 4, y, 6.5, 2.4, 1.4, 0, 0xe6dfcf); }
+    for (let k = 0; k < 9; k++) for (const y of [2, 5]) { if (k === 4) continue; F.face(-16 + k * 4, y, 6.53, 2.4, 1.4, 'window', 0xffffff); }
     // render pass 2026-11-27: back windows, cast-stone band course + plinth, brick pilasters between bays, rooftop units
-    for (let k = 0; k < 9; k++) for (const y of [2, 5]) { if (k === 0 && y === 2) continue; F.face(-16 + k * 4, y, -6.53, 2.4, 1.4, 'window', 0xffffff, 1); winTrim(F, -16 + k * 4, y, -6.5, 2.4, 1.4, 1, 0xe6dfcf); }
+    for (let k = 0; k < 9; k++) for (const y of [2, 5]) { if (k === 0 && y === 2) continue; F.face(-16 + k * 4, y, -6.53, 2.4, 1.4, 'window', 0xffffff, 1); }
     F.box(0, 3.55, 0, 40.24, 0.26, 13.24, 'plain', 0xe6dfcf);
     F.box(0, 0.3, 0, 40.16, 0.6, 13.16, 'plain', 0x9a9488);
     for (let k = 0; k <= 10; k++) { const x = -20 + k * 4; if (Math.abs(x) < 4) continue; F.box(x, 3.5, 6.56, 0.5, 7, 0.14, 'brick', 0xe8d8d0); }

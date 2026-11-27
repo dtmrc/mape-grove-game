@@ -11,7 +11,7 @@ const SPOTS = [
   ['lake', 0, 9, 50, 25, 1, 95],
   ['pinehollow', 50, 8, 60, 80, 2, 40],
   ['storefronts', 8, 3, 8, -30, 3, 14],
-  ['schoolfront', 98, 2.5, 8, 98, 4, -20],
+  ['schoolfront', 114, 3, 5, 98, 4, -22],
   ['treesclose', 5, 2.5, 70, 25, 3, 100],
   ['roadclose', 40, 1.8, -1, 70, 0, -1],
   ['pines', -110, 3, 40, -126, 4.5, 47],
@@ -22,6 +22,8 @@ const SPOTS = [
   ['quikfront', 23, 2.4, -18, 30, 2.6, -37],
   ['donutfront', -39, 2.2, 5, -44, 2.2, 18],
   ['schoolback', 92, 5, -56, 100, 4, -36],
+  ['police', -60, 3, 6, -68, 3, 24],
+  ['hospital', 200, 4, 70, 212, 5, 40],
 ];
 module.exports = async ({ S, shot, args }) => {
   const only = args.only ? String(args.only).split(',') : null;
