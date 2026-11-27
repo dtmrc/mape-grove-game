@@ -61,7 +61,9 @@ function subdivide(THREE, geo, maxEdge, budget) {
 function occluders(out) {
   return (out.cols || []).filter((c) => c && (c.kind === 'box' || c.kind === undefined) && (+c.h || 0) > 0.12).map((c) => {
     const r = +c.rot || 0;
-    return { cx: +c.cx || 0, cz: +c.cz || 0, hw: Math.abs(+c.w || 0) / 2, hd: Math.abs(+c.d || 0) / 2, h: +c.h || 0, y0: +c.y0 || 0, c: Math.cos(r), s: Math.sin(r) };
+    const b = { cx: +c.cx || 0, cz: +c.cz || 0, hw: Math.abs(+c.w || 0) / 2, hd: Math.abs(+c.d || 0) / 2, h: +c.h || 0, y0: +c.y0 || 0, c: Math.cos(r), s: Math.sin(r) };
+    b.ex = Math.abs(b.hw * b.c) + Math.abs(b.hd * b.s); b.ez = Math.abs(b.hw * b.s) + Math.abs(b.hd * b.c);   // world AABB half extents
+    return b;
   }).filter((b) => b.hw > 0.03 && b.hd > 0.03);
 }
 // segment p -> q against a turned box (slab test in box space); true when blocked
@@ -91,12 +93,13 @@ export function bakeRoom(THREE, group, out) {
   init(THREE);
   const cfg = out.bake === false ? null : (out.bake || {});
   if (!cfg) return { skipped: true };
-  const t0 = performance.now();
+  const t0 = Date.now();
   const maxEdge = cfg.maxEdge ?? 0.7, budget = cfg.budget ?? 60000;
   const amb = cfg.amb ?? 0.24, k = cfg.k ?? 1;
   const sky = new THREE.Color(cfg.sky ?? 0xfff0dc), ground = new THREE.Color(cfg.ground ?? 0x6a5a4a);
-  const occ = cfg.shadows === false ? [] : occluders(out);
   const size = out.size || [6, 6], hw = size[0] / 2, hd = size[1] / 2;
+  // perimeter walls (boxes reaching past the room rectangle) never sit between a light and a surface inside; the corner AO covers them
+  const occ = cfg.shadows === false ? [] : occluders(out).filter((b) => Math.abs(b.cx) + b.ex < hw + 0.05 && Math.abs(b.cz) + b.ez < hd + 0.05);
   const L = (out.lights || []).filter((l) => l && !l.dyn && l.bake !== false).map((l) => ({ x: +l.x || 0, y: +l.y || 2.4, z: +l.z || 0, col: new THREE.Color(l.c ?? 0xfff0d8), i: l.i ?? 1, r: l.r ?? 0.25 }));
   group.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
@@ -119,23 +122,28 @@ export function bakeRoom(THREE, group, out) {
   const cloned = new Map();
   for (const o of meshes) if (mine.get(o.material) !== matUsers.get(o.material)) { if (!cloned.has(o.material)) cloned.set(o.material, o.material.clone()); o.material = cloned.get(o.material); }
   // light samples for soft shadows (4 points around each light)
-  const OFF = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
-  let verts = 0, split = 0;
+  const OFF = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]], cand = new Array(occ.length);
+  let verts = 0, split = 0, tSplit = 0;
   const _v = new THREE.Vector3(), _n = new THREE.Vector3(), nm = new THREE.Matrix3();
   for (const o of meshes) {
     let geo = o.geometry;
     if (useCount.get(geo) > 1) geo = geo.clone();
     const big = cfg.split === false ? false : bigTris(geo, maxEdge);
-    if (big) { const before = geo.attributes.position.count; geo = subdivide(THREE, geo, maxEdge, budget); split += geo.attributes.position.count - before; }
+    if (big) { const t1 = Date.now(), before = geo.attributes.position.count; geo = subdivide(THREE, geo, maxEdge, budget); split += geo.attributes.position.count - before; tSplit += Date.now() - t1; }
     if (geo !== o.geometry) { o.geometry = geo; }
     const toRoom = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
     nm.getNormalMatrix(toRoom);
     const pos = geo.attributes.position, nor = geo.attributes.normal, n = pos.count;
-    const bake = new Float32Array(n * 3);
+    const bake = new Float32Array(n * 3), cache = new Map();
     for (let i = 0; i < n; i++) {
       _v.fromBufferAttribute(pos, i).applyMatrix4(toRoom);
       _n.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
       const x = _v.x, y = _v.y, z = _v.z, nx = _n.x, ny = _n.y, nz = _n.z;
+      // the same corner shared by neighbouring triangles: light it once
+      const key = `${Math.round(x * 500)},${Math.round(y * 500)},${Math.round(z * 500)},${Math.round(nx * 20)},${Math.round(ny * 20)},${Math.round(nz * 20)}`;
+      const hitC = cache.get(key);
+      if (hitC !== undefined) { bake[i * 3] = bake[hitC * 3]; bake[i * 3 + 1] = bake[hitC * 3 + 1]; bake[i * 3 + 2] = bake[hitC * 3 + 2]; continue; }
+      cache.set(key, i);
       // ambient: hemisphere
       const hk = ny * 0.5 + 0.5;
       let r = (ground.r + (sky.r - ground.r) * hk) * amb, g = (ground.g + (sky.g - ground.g) * hk) * amb, b = (ground.b + (sky.b - ground.b) * hk) * amb;
@@ -143,6 +151,7 @@ export function bakeRoom(THREE, group, out) {
       let ao = 1;
       const ox = x + nx * 0.12, oy = y + ny * 0.12, oz = z + nz * 0.12;
       for (const c of occ) {
+        if (Math.abs(x - c.cx) > c.ex + 0.75 || Math.abs(z - c.cz) > c.ez + 0.75 || y > c.h + 0.75) continue;
         if (boxDist(c, x, y, z) < 0.03) continue;          // the box's own surface (or touching it)
         const d = boxDist(c, ox, oy, oz);
         if (d < 0.6) ao *= 0.55 + 0.45 * sm(d / 0.6);
@@ -164,10 +173,14 @@ export function bakeRoom(THREE, group, out) {
         if (fall < 0.004) continue;
         let vis = 1;
         if (occ.length) {
+          // broadphase: boxes whose AABB overlaps the vertex -> light box (light radius included)
+          const x0 = Math.min(ox, l.x) - l.r, x1 = Math.max(ox, l.x) + l.r, z0 = Math.min(oz, l.z) - l.r, z1 = Math.max(oz, l.z) + l.r, y0 = Math.min(oy, l.y);
+          let nc = 0;
+          for (const c of occ) if (c.cx + c.ex >= x0 && c.cx - c.ex <= x1 && c.cz + c.ez >= z0 && c.cz - c.ez <= z1 && c.h >= y0) cand[nc++] = c;
           let hit = 0;
-          for (const [a, bb, cc] of OFF) {
+          if (nc) for (const [a, bb, cc] of OFF) {
             const qx = l.x + a * l.r, qy = l.y + bb * l.r, qz = l.z + cc * l.r;
-            for (const c of occ) if (segHits(c, ox, oy, oz, qx, qy, qz)) { hit++; break; }
+            for (let q = 0; q < nc; q++) if (segHits(cand[q], ox, oy, oz, qx, qy, qz)) { hit++; break; }
           }
           vis = 1 - hit / OFF.length * 0.82;
         }
@@ -181,7 +194,7 @@ export function bakeRoom(THREE, group, out) {
     verts += n;
     patch(o.material);
   }
-  return { meshes: meshes.length, verts, split, lights: L.length, occ: occ.length, ms: Math.round(performance.now() - t0) };
+  return { meshes: meshes.length, verts, split, lights: L.length, occ: occ.length, ms: Date.now() - t0, msSplit: tSplit };
 }
 function bigTris(geo, maxEdge) {
   const p = geo.attributes.position, idx = geo.index, m2 = maxEdge * maxEdge, n = idx ? idx.count : p.count;

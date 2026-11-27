@@ -356,7 +356,6 @@ export function makeHaunted(ctx) {
     B.def('panel', { kind: 'lambert', map: panel }); B.def('tiles', { kind: 'lambert', map: tiles });
     for (const c of shell(B, THREE, { w: W, d: D, h: H, floorKey: 'carpet', wallKey: 'paper', ceilKey: 'tiles', ceilCol: 0xffffff, door: { x: 0, w: 1.1, h: 2.15 }, base: 0x2a1a10, frame: 0x4a3020, wallTile: 1.4, floorTile: 1.2, trim: { c: 0x3a2414, y: 1.08, h: 0.07 } })) cols.push(c);
     for (const [cx, cz, len, ry] of [[0, -D / 2 + 0.008, W, 0], [-W / 2 + 0.008, 0, D, Math.PI / 2], [W / 2 - 0.008, 0, D, -Math.PI / 2], [-W / 4 - 0.3, D / 2 - 0.008, W / 2 - 0.6, Math.PI], [W / 4 + 0.3, D / 2 - 0.008, W / 2 - 0.6, Math.PI]]) B.quad('panel', 0xffffff, len, 1.04, cx, 0.54, cz, ry, { us: len / 1.1, vs: 1, ao: false, tint: false, paint: (_x, y) => 0.75 + 0.25 * (y / 1.1) });
-    for (const [cx, cz, len, ry] of [[0, -D / 2 + 0.02, W, 0], [-W / 2 + 0.02, 0, D, Math.PI / 2], [W / 2 - 0.02, 0, D, -Math.PI / 2], [0, D / 2 - 0.02, W, Math.PI]]) B.quad('plain', 0xf4eee0, len, 0.12, cx, H - 0.06, cz, ry, { ao: false, tint: false });   // crown moulding
     B.flat('runner', 0xffffff, 1.4, D - 2.2, 0, 0.012, 0.6, 0, { vs: 4, ao: false, tint: false });
     // troffers: a frame + a glowing diffuser per ceiling light
     for (const [x, z] of [[-5, -2], [0, -2], [5, -2], [-5, 2.5], [0, 2.5], [5, 2.5]]) { B.box('plain', 0xd8d4cc, 1.3, 0.05, 0.7, x, H - 0.03, z, 0, { ao: false }); B.flat('glow', 0xfff6e4, 1.18, 0.58, x, H - 0.06, z, 0, { down: true, ao: false, tint: false }); }

@@ -183,6 +183,7 @@ function shell(B, THREE, o) {
   };
   around(base, 0.12, 0.06);
   if (trim !== null) around(trim.c, trim.h || 0.08, trim.y);
+  if (o.crown !== false) around(o.crown ?? 0xf2eee4, 0.09, h - 0.045);   // crown moulding (2026-11-27)
   const fc = o.frame || 0xe8e2d4;
   for (const s of [-1, 1]) strip(fc, door.x + s * (door.w / 2 + 0.04), hd, 0.08, door.h + 0.04, door.h / 2, Math.PI);
   strip(fc, door.x, hd, door.w + 0.24, 0.08, door.h + 0.04, Math.PI);
