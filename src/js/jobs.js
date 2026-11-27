@@ -113,7 +113,7 @@ export function makeJobs(A) {
       id: 'signs', title: 'Sign Language', reward: 150,
       start() {
         const lawns = estatesLawns().sort(() => Math.random() - 0.5).slice(0, 6);
-        this.signs = lawns.map((l, i) => { const t = SIGN_TEXT[i % SIGN_TEXT.length]; const g = signProp(t[0], t[1], t[2], l.x, l.z, l.yaw); const mk = makeMarker('mission', l.x, l.z, 0.5); mk.children[1].visible = false; return { x: l.x, z: l.z, g, mk, alive: true }; });
+        this.signs = lawns.map((l, i) => { const t = SIGN_TEXT[i % SIGN_TEXT.length]; const g = signProp(t[0], t[1], t[2], l.x, l.z, l.yaw); const mk = makeMarker('mission', l.x, l.z, 0.5); mk.children[1].visible = false; return { x: l.x, z: l.z, g, mk, alive: true, i, yaw: l.yaw }; });
         this.timer = 180; this.got = 0; this.wasHit = !!P.punchHit;
         objective('Paw 6 HOA lawn signs in the Estates. (0/6)');
       },
@@ -198,5 +198,5 @@ export function makeJobs(A) {
     if (G.hoaTruce > G.time && (S.saveT += dt) > 10) { S.saveT = 0; persist(); }
   }
 
-  return { S, update, talk, run, start: (id) => run(id, false), persist, marks, markYaw, truce: () => Math.max(0, (G.hoaTruce || 0) - G.time), putForSale, signProp };
+  return { S, update, talk, run, start: (id) => run(id, false), persist, marks, markYaw, truce: () => Math.max(0, (G.hoaTruce || 0) - G.time), putForSale, signProp, SIGN_TEXT };
 }

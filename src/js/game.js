@@ -26,6 +26,7 @@ import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patron
 import './robbery.js'; // robbery: hold up the Donut Hole + Rosie's Diner
 import { makeShops } from './shops.js'; // content: shops + belly food
 import { makeJobs } from './jobs.js'; // content: replayable missions, side jobs, post-game
+import * as MSAVE from './missionsave.js'; // missionsave: missions survive a page reload
 import { quests } from './questlog.js'; // quests: quest log + tracked quest (L)
 import * as RD from './roads.js';
 import * as TER from './terrain.js';
@@ -88,7 +89,7 @@ TER.initWorld(scene, { lights, halos, flames }); // engine: link loose world obj
 // ---------------- state ----------------
 const SAVE_KEY = 'maple-grove-offleash-v1';
 // every key NEW GAME wipes: this save, fishing, weather, the sky's day counter, the dev view (not the world editor's maple-grove-world-v1, that is the map)
-const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1', YARDCATS_KEY];
+const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1', YARDCATS_KEY, MSAVE.MISSION_KEY];
 const G = {
   cash: 0, hp: 100, heat: 0, seenT: 0, bustT: 0, clock: 21.5, done: {}, yarn: [],
   mission: null, dialog: null, paused: true, banner: null, over: false, time: 0,
@@ -1591,6 +1592,7 @@ function frame(now) {
     haunted.update(dt);
     fishing.update(dt);
     jobs.update(dt); // content
+    MSAVE.tick(dt); // missionsave: resume after a reload + snapshots
     police.update(dt); // police
     const cru = police.cruisers(); // police
     Sfx.engine(P.car && !P.car.dead ? CP.rev(P.car) : -1, (G.heat > 0 || cru.length) ? Math.min(1, 25 / Math.max(5, sirenNear(cru))) : 0);
@@ -1683,6 +1685,7 @@ STORES.init({ G, places, fishing, toast, addCash, Sfx }); // Bev's Threads + Han
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
+window.__G.msave = MSAVE.init({ G, P, MISSIONS, jobs, places, cars, scene, addPickup, setCheck, objective, makeMarker, enterCar, startMission, toast, save, mission: () => mission }); // missionsave
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 window.__G.setRes = (i) => { resIdx = Math.max(0, Math.min(RES.length - 1, i)); resize(); return RES[resIdx]; }; // qa: render height for comparison shots
 window.__G.gfx = { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b) }; // qa: picture options
