@@ -45,22 +45,26 @@ const mixc = (A, B, t) => [mix(A[0], B[0], t), mix(A[1], B[1], t), mix(A[2], B[2
 
 /** Build a texture from a per-pixel function, then optional canvas drawing on top. */
 export function tex(w, h, fn, post = null, o = {}) {
+  // o.hi = k: draw the same design on a k times finer canvas and lay fine grain over it (ground textures, which fill
+  // the bottom half of the screen and looked blobby at 720p). fn and post still work in the w x h coordinates.
+  const k = o.hi || 1, W = w * k, H = h * k;
   const c = document.createElement('canvas');
-  c.width = w; c.height = h;
+  c.width = W; c.height = H;
   const g = c.getContext('2d');
   if (fn) {
-    const img = g.createImageData(w, h), d = img.data;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const p = fn(x / w, y / h, x, y);
-      const i = (y * w + x) * 4;
-      d[i] = clamp(p[0]); d[i + 1] = clamp(p[1]); d[i + 2] = clamp(p[2]); d[i + 3] = p[3] === undefined ? 255 : clamp(p[3]);
+    const img = g.createImageData(W, H), d = img.data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = fn(x / W, y / H, x / k, y / k);
+      const i = (y * W + x) * 4;
+      const m = k > 1 ? 0.86 + 0.2 * fbm(x / W, y / H, 64, 2) + 0.1 * vnoise(x * 0.5, y * 0.5, 256) : 1;
+      d[i] = clamp(p[0] * m); d[i + 1] = clamp(p[1] * m); d[i + 2] = clamp(p[2] * m); d[i + 3] = p[3] === undefined ? 255 : clamp(p[3]);
     }
     g.putImageData(img, 0, 0);
   }
-  if (post) post(g, w, h);
+  if (post) { if (k > 1) g.scale(k, k); post(g, w, h); }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = ANISO;
+  t.anisotropy = k > 1 ? 4 : ANISO;
   if (o.repeat !== false) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   if (o.nearest) { t.magFilter = THREE.NearestFilter; }
   return t;
@@ -82,7 +86,8 @@ function signTex(text, bg, fg, w = 256, h = 64, glow = false, font = 'bold') {
 export function makeTextures() {
   const T = {};
   const R = Math.random;
-  T.grass = tex(128, 128, (u, v) => {
+  const G2 = (w, h, fn, post) => tex(w, h, fn, post, { hi: 2 });   // ground textures: twice the detail
+  T.grass = G2(128, 128, (u, v) => {
     const n = fbm(u, v, 4, 4), m = fbm(u + 0.3, v + 0.7, 16, 2), s = R();
     const c = mixc([46, 74, 30], [104, 140, 58], n * 0.8 + m * 0.4);
     const k = s < 0.08 ? 0.75 : s > 0.94 ? 1.2 : 1;
@@ -111,8 +116,8 @@ export function makeTextures() {
       g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
     }
   };
-  T.asphalt = tex(128, 128, asphalt, (g, w, h) => cracks(g, w, h, 2));
-  T.road = tex(128, 256, asphalt, (g, w, h) => {
+  T.asphalt = G2(128, 128, asphalt, (g, w, h) => cracks(g, w, h, 2));
+  T.road = G2(128, 256, asphalt, (g, w, h) => {
     g.fillStyle = 'rgba(40,40,44,0.5)'; g.fillRect(20 + R() * 40, 140, 36, 60); // tar patch
     cracks(g, w, h, 4);
     // worn centre dash + edge lines
@@ -126,20 +131,20 @@ export function makeTextures() {
     paint(61, 0, 6, 104, '#d8b83a');
     paint(4, 0, 4, h, '#d6d6cc'); paint(120, 0, 4, h, '#d6d6cc');
   });
-  T.crosswalk = tex(128, 128, asphalt, (g) => {
+  T.crosswalk = G2(128, 128, asphalt, (g) => {
     for (let x = 6; x < 128; x += 24) for (let y = 14; y < 114; y++) for (let xx = x; xx < x + 13; xx++) {
       if (fbm(xx / 128, y / 128, 16, 2) < 0.35) continue;
       g.fillStyle = `rgba(222,222,214,${0.7 + R() * 0.3})`; g.fillRect(xx, y, 1, 1);
     }
   });
-  T.sidewalk = tex(128, 128, (u, v, x, y) => {
+  T.sidewalk = G2(128, 128, (u, v, x, y) => {
     const n = fbm(u, v, 8, 4), s = R();
     let b = 150 + n * 40 + (s < 0.05 ? -18 : s > 0.97 ? 14 : 0);
     if (x % 64 < 2 || y % 64 < 2) b *= 0.55;
     const st = fbm(u + 0.5, v + 0.2, 4, 3); if (st > 0.62) b *= 0.82;
     return [b, b * 0.98, b * 0.94];
   }, (g) => { for (let i = 0; i < 8; i++) { g.fillStyle = 'rgba(40,40,40,0.35)'; g.beginPath(); g.arc(R() * 128, R() * 128, 1 + R(), 0, 7); g.fill(); } });
-  T.dirt = tex(128, 128, (u, v) => {
+  T.dirt = G2(128, 128, (u, v) => {
     const n = fbm(u, v, 6, 4), s = R();
     const c = mixc([96, 72, 48], [156, 126, 88], n);
     const k = s < 0.07 ? 0.75 : s > 0.95 ? 1.25 : 1;
@@ -213,7 +218,7 @@ export function makeTextures() {
     const c = mixc([22, 52, 70], [70, 120, 140], n);
     return m > 0.66 ? mixc(c, [190, 220, 230], (m - 0.66) * 2) : c;
   });
-  T.leaves = tex(128, 128, (u, v) => {
+  T.leaves = G2(128, 128, (u, v) => {
     const n = fbm(u, v, 8, 4), m = fbm(u + 0.2, v + 0.6, 16, 2);
     if (n < 0.42) return [24, 44, 22];
     const c = mixc([46, 86, 38], [120, 160, 70], (n - 0.42) * 2 + m * 0.3);
