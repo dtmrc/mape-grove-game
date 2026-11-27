@@ -22,6 +22,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
 import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex } from './houses.js';
 import { buildRoofs, roofTop } from './rooftops.js';   // walkable roofs
+import { roundCrown, pineCrown, bushCrown } from './trees.js';   // render pass: faceted, shaded tree crowns
 import { makeRV, makeCar } from './models.js';
 import { initRoads } from './roads.js';
 import { flowRoads } from './roadflow.js';
@@ -55,8 +56,8 @@ function addS(geo, key, color, x, y, z, ry = 0) {
   let g = geo.index ? geo.toNonIndexed() : geo.clone();
   const n = g.attributes.position.count;
   const c = new THREE.Color(color);
-  const col = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+  const col = new Float32Array(n * 3), pre = g.attributes.color;   // a baked 'color' attribute (trees.js) is multiplied in
+  for (let i = 0; i < n; i++) { const k = pre ? pre.getX(i) : 1; col[i * 3] = c.r * k; col[i * 3 + 1] = c.g * k; col[i * 3 + 2] = c.b * k; }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
   for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
@@ -85,8 +86,10 @@ function plane(w, d, sw = 1, sd = 1, us = 1, vs = 1) {
   return g;
 }
 function boxUV(w, h, d, scale = 0.5) {
-  // box with world-scaled UVs so textures tile at a fixed density
-  const g = new THREE.BoxGeometry(w, h, d);
+  // box with world-scaled UVs so textures tile at a fixed density. Tall boxes get a row of vertices ~1.2 m up, so the
+  // baked ground occlusion (addS) stays a dark band at the base instead of a gradient smeared up the whole wall.
+  const g = new THREE.BoxGeometry(w, h, d, 1, h > 3 ? 2 : 1, 1);
+  if (h > 3) { const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (Math.abs(p.getY(i)) < 1e-4) p.setY(i, -h / 2 + 1.4); }
   const uv = g.attributes.uv, pos = g.attributes.position, nor = g.attributes.normal;
   for (let i = 0; i < uv.count; i++) {
     const nx = Math.abs(nor.getX(i)), ny = Math.abs(nor.getY(i));
@@ -118,6 +121,52 @@ function gable(w, h, d) {
   return g;
 }
 
+/** Just the two gable-end triangles of a gable(w, h, d) roof (ridge along x), for walls that run up into the roof. */
+function gableEnds(w, h, d, scale = 0.5) {
+  const x = w / 2, z = d / 2;
+  const P = [[-x, 0, -z], [-x, 0, z], [-x, h, 0], [x, 0, z], [x, 0, -z], [x, h, 0]];
+  const U = [[-z, 0], [z, 0], [0, h], [z, 0], [-z, 0], [0, h]].map(([u, v]) => [u * scale, v * scale]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P.flat(), 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(U.flat(), 2));
+  g.computeVertexNormals();
+  return g;
+}
+/** Render pass 2026-11-27: real trim on a house-style building, all in the shared 'plain' bucket (no extra draw calls).
+ *  A window gets a casing (header with a drip cap, jambs) and a projecting sill; dir 0..3 = front/back/right/left face. */
+function winTrim(F, lx, y, lz, ww, wh, dir, col) {
+  const t = 0.1, o = 0.05, r = [0, Math.PI, Math.PI / 2, -Math.PI / 2][dir];
+  const off = (a, b) => { const c = Math.cos(r), s = Math.sin(r); return [lx + a * c + b * s, lz - a * s + b * c]; };   // a along the face, b out of it
+  const box = (a, b, yy, w, h, d) => { const [x, z] = off(a, b); F.box(x, yy, z, w, h, d, 'plain', col, r); };
+  box(0, o, y + wh / 2 + t / 2, ww + 2 * t + 0.04, t, 0.08);            // header
+  box(0, o + 0.03, y + wh / 2 + t + 0.03, ww + 2 * t + 0.14, 0.05, 0.14);   // drip cap
+  for (const sd of [-1, 1]) box(sd * (ww / 2 + t / 2), o, y, t, wh, 0.07); // jambs
+  box(0, o + 0.05, y - wh / 2 - 0.04, ww + 2 * t + 0.16, 0.08, 0.18);     // sill
+}
+
+/** Shop window on a frame's front face (+z, wall plane at lz): the glass plane plus an aluminium storefront frame with a
+ *  centre mullion, a projecting sill and a kick plate under it. Bottom of the glass = y - h / 2. */
+function shopWin(F, lx, y, lz, w, h, key = 'storeWin', tint = 0xffffff, o = {}) {
+  const fc = o.frame ?? 0x3a3c42, kc = o.kick ?? 0x55575e, t = 0.09;
+  F.face(lx, y, lz, w, h, key, tint);
+  F.box(lx, y + h / 2 + t / 2, lz + 0.04, w + 2 * t, t, 0.1, 'plain', fc);
+  F.box(lx, y - h / 2 - t / 2, lz + 0.07, w + 2 * t + 0.06, t, 0.16, 'plain', fc);
+  for (const sd of [-1, 1]) F.box(lx + sd * (w / 2 + t / 2), y, lz + 0.04, t, h, 0.1, 'plain', fc);
+  if (w > 1.7 && !o.noMullion) F.box(lx, y, lz + 0.04, 0.06, h, 0.06, 'plain', fc);
+  const kb = y - h / 2 - t;
+  if (kb > 0.15 && !o.noKick) F.box(lx, kb / 2, lz + 0.03, w + 2 * t, kb, 0.06, 'plain', kc);
+}
+/** A rooftop condenser / AC unit (grille top, a little duct), sitting on a flat roof at height y. */
+function roofUnit(F, lx, y, lz, s = 1) {
+  F.box(lx, y + 0.45 * s, lz, 1.4 * s, 0.9 * s, 1.0 * s, 'metal', 0xb8bcc0);
+  F.box(lx, y + 0.92 * s, lz, 1.2 * s, 0.05, 0.8 * s, 'plain', 0x3a3c40);
+  F.box(lx + 0.9 * s, y + 0.25 * s, lz, 0.4 * s, 0.25 * s, 0.25 * s, 'metal', 0x9a9ea4);
+}
+/** Parapet coping along the top of a flat-roofed box (w x d at height h): a lip that hangs a little proud of each wall. */
+function coping(F, lx, lz, w, d, h, col, ht = 0.22) {
+  for (const sd of [-1, 1]) { F.box(lx, h + ht / 2, lz + sd * d / 2, w + 0.3, ht, 0.3, 'plain', col); F.box(lx + sd * w / 2, h + ht / 2, lz, 0.3, ht, d, 'plain', col); }
+}
+
 /** Box collider; any angle (axis-aligned when ry is a multiple of 90 degrees). */
 function colBox(cx, cz, w, d, h = 3, ry = 0, o = {}) {
   const s = Math.sin(ry), c = Math.cos(ry);
@@ -145,6 +194,7 @@ function frame(cx, cz, ry) {
       const g = plane(w, h).rotateX(Math.PI / 2);
       if (dir) g.rotateY([0, Math.PI, Math.PI / 2, -Math.PI / 2][dir]);
       const [x, z] = at(lx, lz); addS(g, key, col, x, y, z, ry);
+      if (key === 'window' && col === 0xffffff && w >= 0.8) winTrim(F, lx, y, lz, w, h, dir, F.trim ?? 0xf0ece2);   // render pass: every building window gets a casing + sill
     },
     ramp(lx, lz, w, d, t0, t1, rr = 0) { const [x, z] = at(lx, lz), a = ry + rr; floors.push({ t0, t1, cx: x, cz: z, hw: w / 2, hd: d / 2, c: Math.cos(a), s: Math.sin(a) }); }, // engine: walkable slope
     floor(lx, lz, w, d, top, rr = 0) { const [x, z] = at(lx, lz), a = ry + rr; floors.push({ top, cx: x, cz: z, hw: w / 2, hd: d / 2, c: Math.cos(a), s: Math.sin(a) }); }, // engine: walkable deck
@@ -352,18 +402,14 @@ function tree0(x, z, s, o) {
   // o.lite: a deep-forest tree (open-ended cones, 5-sided trunk, no ground shadow decal): ~35 triangles instead of ~110
   const L = !!o.lite;
   if (!L) shadow(x + 0.6, z + 0.4, 5.2 * s, 5.2 * s);
-  addS(new THREE.CylinderGeometry(0.16 * s, 0.26 * s, 2.2 * s, L ? 5 : 7, 1, L), 'bark', 0xffffff, x, 1.1 * s, z);
+  addS(new THREE.CylinderGeometry(0.16 * s, 0.26 * s, 2.2 * s, L ? 5 : 7, 1, true), 'bark', 0xffffff, x, 1.1 * s, z);   // open ends: hidden in the crown / ground
   const kind = o.kind ?? (R() < 0.5 ? 'round' : 'pine');
-  const tint = o.tint ?? 0xffffff;
+  const tint = new THREE.Color(o.tint ?? 0xffffff), hv = Math.sin(x * 3.1 + z * 7.7) * 0.5 + 0.5;   // a touch of per-tree hue drift
+  tint.multiply(new THREE.Color().setRGB(0.94 + hv * 0.1, 0.97 + (1 - hv) * 0.05, 0.92 + (1 - hv) * 0.08));
   if (kind === 'round') {
-    addS(new THREE.IcosahedronGeometry(1.7 * s, L ? 0 : 1), 'leaves', tint, x, 3.2 * s, z, R() * 6);
-    addS(new THREE.IcosahedronGeometry(1.2 * s, L ? 0 : 1), 'leaves', new THREE.Color(tint).multiply(new THREE.Color(0xdfffd0)), x + 0.4, 4.3 * s, z - 0.2, R() * 6);
-  } else {
-    const t = new THREE.Color(tint);
-    addS(new THREE.ConeGeometry(1.8 * s, 2.6 * s, L ? 7 : 9, 1, L), 'leaves', t.clone().multiply(new THREE.Color(0xc8e8c0)), x, 3.0 * s, z);
-    addS(new THREE.ConeGeometry(1.3 * s, 2.2 * s, L ? 7 : 9, 1, L), 'leaves', t.clone().multiply(new THREE.Color(0xe0ffd8)), x, 4.3 * s, z);
-    if (s > 1.2) addS(new THREE.ConeGeometry(0.9 * s, 1.8 * s, L ? 6 : 8, 1, L), 'leaves', t.clone().multiply(new THREE.Color(0xd8f8d0)), x, 5.4 * s, z);
-  }
+    const r0 = R() * 6, r1 = R() * 6;   // the two rolls the old crown used: keep the seeded sequence in step
+    for (const p of roundCrown(x, z, s, L, r0, r1)) addS(p.g, 'leaves', tint.clone().multiply(new THREE.Color(p.tint)), x, 0, z);
+  } else addS(pineCrown(x, z, s, L), 'leaves', tint.clone().multiply(new THREE.Color(0xdcf4d4)), x, 0, z);
   if (!o.nocol) colliders.push({ cx: x, cz: z, r: 0.4 * s, h: 6, tree: true, top: (kind === 'round' ? 5.2 : s > 1.2 ? 5.9 : 5.1) * s, pr: (kind === 'round' ? 1.1 : 0.8) * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
 function deadTree(x, z, s = 1) {
@@ -383,7 +429,7 @@ function deadTree0(x, z, s, o = {}) {
   }
   colliders.push({ cx: x, cz: z, r: 0.35 * s, h: 6, tree: true, top: 4.2 * s, pr: 0.6 * s, ...(o.ng ? { ng: true } : {}) });   // top: the climbable perch (climb.js)
 }
-function bush(x, z, s = 1, c = 0xb0e0a0) { addS(new THREE.IcosahedronGeometry(0.7 * s, 1), 'leaves', c, x, 0.45 * s, z, R() * 6); }
+function bush(x, z, s = 1, c = 0xb0e0a0) { addS(bushCrown(x, z, s, R() * 6), 'leaves', c, x, 0, z); }
 function fence(x0, z0, x1, z1, h = 1.2, color = 0xffffff) {
   const len = Math.hypot(x1 - x0, z1 - z0), ry = Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2;
   const g = new THREE.BoxGeometry(len, h, 0.1);
@@ -479,8 +525,17 @@ function house(cx, cz, ry, o = {}) {
   const w = o.w || 9, d = o.d || 7, h = o.h || 3.2;
   const wall = o.wall, roof = o.roof;
   const [hx, hz] = rot(cx, cz, 0, 0, ry);
-  addS(boxUV(w, h, d, 0.5), o.brick ? 'brick' : 'siding', wall, hx, h / 2, hz, ry);
-  addS(gable(w + 1, o.rh || 2.0, d + 1), 'shingle', roof, hx, h, hz, ry);
+  const HF = frame(cx, cz, ry), trim = o.trim ?? 0xf2efe6, wk = o.brick ? 'brick' : 'siding', rh = o.rh || 2.0;
+  addS(boxUV(w, h, d, 0.5), wk, wall, hx, h / 2, hz, ry);
+  addS(gable(w + 1, rh, d + 1), 'shingle', roof, hx, h + 0.06, hz, ry);
+  // render pass 2026-11-27: gable ends in the wall's own material (not roof shingles), fascia + rake boards, corner boards
+  addS(gableEnds(w, rh * d / (d + 1), d), wk, wall, hx, h, hz, ry);
+  for (const sd of [-1, 1]) {
+    HF.box(0, h - 0.02, sd * ((d + 1) / 2 + 0.02), w + 1.08, 0.2, 0.06, 'plain', trim);   // fascia under each eave
+    const ang = Math.atan2(rh, (d + 1) / 2), len = Math.hypot(rh, (d + 1) / 2) + 0.06;
+    for (const sx of [-1, 1]) HF.geo(new THREE.BoxGeometry(0.07, 0.2, len).rotateX(sd * ang), 'plain', trim, sx * ((w + 1) / 2 + 0.03), h + 0.06 + rh / 2 - 0.08, sd * (d + 1) / 4);   // rake boards
+    if (!o.brick) for (const sx of [-1, 1]) HF.box(sx * (w / 2 + 0.02), h / 2, sd * (d / 2 + 0.02), 0.2, h, 0.2, 'plain', trim);   // corner boards
+  }
   colBox(hx, hz, w, d, h + 2, ry, { bld: true });
   shadow(hx, hz, w + 3.2, d + 3.2, ry, true);
   // eave trim + foundation
@@ -495,6 +550,7 @@ function house(cx, cz, ry, o = {}) {
     if (Math.abs(wx) + 0.8 > w / 2) continue;
     [x, z] = rot(cx, cz, wx, fz, ry);
     addS(plane(1.4, 1.2).rotateX(Math.PI / 2), 'window', 0xffffff, x, 1.7, z, ry);
+    winTrim(HF, wx, 1.7, fz, 1.4, 1.2, 0, trim);
     if (o.shutters !== undefined) for (const s of [-1, 1]) { [x, z] = rot(cx, cz, wx + s * 0.95, fz + 0.02, ry); addS(plane(0.4, 1.3).rotateX(Math.PI / 2), 'plain', o.shutters, x, 1.7, z, ry); }
   }
   if (h > 5) { // second floor
@@ -502,6 +558,7 @@ function house(cx, cz, ry, o = {}) {
       if (Math.abs(wx) + 0.8 > w / 2) continue;
       [x, z] = rot(cx, cz, wx, fz, ry); addS(plane(1.2, 1.2).rotateX(Math.PI / 2), 'window', 0xffffff, x, h - 1.6, z, ry);
       [x, z] = rot(cx, cz, wx, -fz, ry); addS(plane(1.2, 1.2).rotateX(Math.PI / 2).rotateY(Math.PI), 'window', 0xffffff, x, h - 1.6, z, ry);
+      winTrim(HF, wx, h - 1.6, fz, 1.2, 1.2, 0, trim); winTrim(HF, wx, h - 1.6, -fz, 1.2, 1.2, 1, trim);
     }
   }
   if (garage) {
@@ -518,9 +575,15 @@ function house(cx, cz, ry, o = {}) {
   for (const s of [-1, 1]) {
     [x, z] = rot(cx, cz, s * (w / 2 + 0.03), 0, ry);
     addS(plane(1.2, 1.1).rotateX(Math.PI / 2).rotateY(s * Math.PI / 2), 'window', 0xffffff, x, 1.7, z, ry);
+    winTrim(HF, s * (w / 2 + 0.03), 1.7, 0, 1.2, 1.1, s > 0 ? 2 : 3, trim);
   }
   [x, z] = rot(cx, cz, 0, -fz, ry);
   addS(plane(1.4, 1.1).rotateX(Math.PI / 2).rotateY(Math.PI), 'window', 0xffffff, x, 1.7, z, ry);
+  winTrim(HF, 0, 1.7, -fz, 1.4, 1.1, 1, trim);
+  // door: casing + a little gabled hood on brackets
+  winTrim(HF, doorX, 1.0, fz, 1.0, 2.0, 0, trim);
+  HF.geo(gable(1.7, 0.45, 0.9).rotateY(Math.PI / 2).rotateY(-Math.PI / 2), 'shingle', roof, doorX, 2.32, fz + 0.45);
+  HF.box(doorX, 2.28, fz + 0.45, 1.7, 0.08, 0.9, 'plain', trim);
   // path from door toward the road + porch step
   const pl = Math.max(2, dl);
   [x, z] = rot(cx, cz, doorX, d / 2 + pl / 2, ry);
@@ -716,7 +779,7 @@ export function buildWorld(scene, T) {
     asphalt: phong({ map: T.asphalt, vertexColors: true, shininess: 40, specular: 0x2a2a30 }),
     crosswalk: phong({ map: T.crosswalk, vertexColors: true, shininess: 40, specular: 0x2a2a30 }),
     sidewalk: phong({ map: T.sidewalk, vertexColors: true, shininess: 20, specular: 0x1a1a1a }),
-    puddle: phong({ color: 0x0c0e14, shininess: 140, specular: 0xcfd8ff, vertexColors: true }),
+    puddle: phong({ color: 0x252b34, shininess: 140, specular: 0xcfd8ff, vertexColors: true }),   // render pass: wet tarmac, not a hole
     creek: phong({ map: T.water, vertexColors: true, shininess: 90, specular: 0x9ab4c4 }),
     metal: phong({ map: T.metal, vertexColors: true, shininess: 60, specular: 0x666666 }),
     shadow: basic({ map: T.shadow, transparent: true, depthWrite: false, color: 0x000000, polygonOffset: true, polygonOffsetFactor: -2 }),
@@ -860,8 +923,10 @@ function buildDowntown(scene, T) {
     F.flat(0, 0, 40, 38, 'asphalt', 0xe6e6e6, 0.04, '#6a6a70');
     F.box(0, 2, -11, 16, 4, 9, 'brick', 0xffffff); F.bld(0, -11, 16, 9, 4.5);
     F.box(0, 4.2, -11, 16.6, 0.4, 9.6, 'plain', 0xe03030);
-    for (const wx of [-5, -2, 4, 6.5]) F.face(wx, 1.6, -6.47, 2.4, 1.8, 'storeWin', 0xffffff);
-    F.face(1, 1.1, -6.47, 1.6, 2.2, 'door', 0x99c4e0);
+    for (const wx of [-5, -2, 4, 6.5]) shopWin(F, wx, 1.6, -6.47, 2.4, 1.8);
+    shopWin(F, 1, 1.1, -6.5, 1.6, 2.2, 'door', 0x99c4e0, { noMullion: true });
+    roofUnit(F, -4, 4.4, -12.5); roofUnit(F, 3.5, 4.4, -13, 0.85);
+    for (const sx of [-1, 1]) F.box(sx * 7.85, 2.1, -6.45, 0.14, 4.2, 0.14, 'metal', 0x9a9ea4);   // downspouts
     F.box(-7.6, 1, -6, 1, 2, 0.8, 'plain', 0xa01820); F.face(-7.6, 1, -5.59, 0.95, 1.9, 'vending', 0xffffff); F.col(-7.6, -6, 1, 0.8, 2);
     F.light(-7.6, 1.5, -4.6, 0xffb0b0, 0.6, { always: true }); F.halo(-7.6, 1.2, -5.5, 2.2, 0xff6060);
     F.light(0, 2.2, -4.5, 0xfff0d0, 1, { always: true });
@@ -932,7 +997,11 @@ function buildDowntown(scene, T) {
     const dn = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.4, 5, 8), lambert({ color: 0xf080b0 }));
     dn.position.set(cx, 4.8, cz); scene.add(dn);
     animated.push({ obj: dn, fn: (t) => { dn.rotation.y = t; } });
-    for (const x of [-3, 3]) F.face(x, 1.6, 3.53, 2, 1.5, 'storeWin', 0xffc0d8);
+    for (const x of [-3, 3]) {
+      shopWin(F, x, 1.6, 3.53, 2, 1.5, 'storeWin', 0xffc0d8, { frame: 0xf4f0f2, kick: 0xb05070 });
+      for (let k = 0; k < 5; k++) F.geo(new THREE.BoxGeometry(0.5, 0.06, 1.0).rotateX(0.35), 'plain', k % 2 ? 0xfff4f8 : 0xe06090, x - 1 + k * 0.5, 2.72, 4.0);   // striped awning
+    }
+    roofUnit(F, 2.5, 3.65, -1.5, 0.8);
     F.light(0, 2.4, 5.5, 0xff80c0, 1, { always: true }); F.halo(0, 4.8, 0, 4, 0xff60b0);
     F.face(0, 1, 3.53, 1.2, 2, 'door', 0xffffff);
     F.sign('DONUT HOLE', '#b05070', '#fff0f6', 4, 0.8, 2.9, 3.57);
@@ -966,7 +1035,8 @@ function buildDowntown(scene, T) {
     F.box(0, 1.8, 0, 10, 3.6, 8, 'brick', 0xd8c0a8); F.bld(0, 0, 10, 8, 4.2);
     F.box(0, 3.75, 0, 10.5, 0.35, 8.5, 'plain', 0x2a7a3a);                            // green cornice
     for (let k = 0; k < 7; k++) F.box(-4.5 + k * 1.5, 2.85, 4.55, 1.5, 0.08, 1.2, 'plain', k % 2 ? 0xf4f4f0 : 0xd02a2a); // striped awning
-    for (const wx of [-3.3, -1.1, 3]) F.face(wx, 1.5, 4.03, 1.9, 1.7, 'storeWin', 0xfff0d0);
+    for (const wx of [-3.3, -1.1, 3]) shopWin(F, wx, 1.5, 4.03, 1.9, 1.7, 'storeWin', 0xfff0d0, { frame: 0x1e4a26, kick: 0x6a4a38 });
+    roofUnit(F, -2.5, 3.9, -2);
     F.face(1, 1.1, 4.03, 1.2, 2.2, 'door', 0x2a7a3a);
     F.sign('PIZZA CITY', '#d02a2a', '#fff4d0', 7.6, 1.3, 4.6, 4.1, { tw: 512, th: 64, glow: true });
     F.sign('HOT & FAST', '#2a7a3a', '#ffffff', 2.2, 0.5, 2.5, 4.06, { lx: -2.2 });
@@ -1639,15 +1709,23 @@ function buildSchool() {
   // main building faces Main St
   {
     const cx = 98, cz = -30, F = frame(cx, cz, 0);
+    F.trim = 0xe6dfcf;   // cast-stone window surrounds
     F.flat(0, 13, 42, 12, 'grass', 0xd8f0c8, 0.03);
     F.box(0, 3.5, 0, 40, 7, 13, 'brick', 0xffffff); F.bld(0, 0, 40, 13, 8);
     F.box(0, 7.15, 0, 40.6, 0.3, 13.6, 'plain', 0x8a8478);
     F.box(-14, 2, -12, 10, 4, 12, 'brick', 0xf0e0d8); F.bld(-14, -12, 10, 12, 4.5); F.box(-14, 4.1, -12, 10.4, 0.25, 12.4, 'plain', 0x8a8478); // gym wing
     for (let k = 0; k < 9; k++) for (const y of [2, 5]) { if (k === 4) continue; F.face(-16 + k * 4, y, 6.53, 2.4, 1.4, 'window', 0xffffff); }
+    // render pass 2026-11-27: back windows, cast-stone band course + plinth, brick pilasters between bays, rooftop units
+    for (let k = 0; k < 9; k++) for (const y of [2, 5]) { if (k === 0 && y === 2) continue; F.face(-16 + k * 4, y, -6.53, 2.4, 1.4, 'window', 0xffffff, 1); }
+    F.box(0, 3.55, 0, 40.24, 0.26, 13.24, 'plain', 0xe6dfcf);
+    F.box(0, 0.3, 0, 40.16, 0.6, 13.16, 'plain', 0x9a9488);
+    for (let k = 0; k <= 10; k++) { const x = -20 + k * 4; if (Math.abs(x) < 4) continue; F.box(x, 3.5, 6.56, 0.5, 7, 0.14, 'brick', 0xe8d8d0); }
+    for (const [x, z] of [[-12, -2], [-4, 3], [6, -3], [13, 2]]) roofUnit(F, x, 7.3, z, 1.1);
+    F.box(-14, 2.1, -12, 10.12, 0.2, 12.12, 'plain', 0xe6dfcf); roofUnit(F, -15, 4.22, -14, 0.9);
     // entrance portico
     F.box(0, 6, 8.2, 9, 0.5, 3.6, 'plain', 0xf0ece4);
     for (const s of [-3.6, -1.2, 1.2, 3.6]) { F.geo(new THREE.CylinderGeometry(0.3, 0.32, 5.8, 8), 'plain', 0xf4f4f0, s, 2.9, 9.6); F.post(s, 9.6, 0.32, 6); }
-    F.face(0, 1.4, 6.55, 3, 2.8, 'door', 0x4a6a9a);
+    shopWin(F, 0, 1.4, 6.55, 3, 2.8, 'door', 0x4a6a9a, { frame: 0xe6dfcf, noKick: true });
     F.sign('MAPLE GROVE HIGH', '#f0ece4', '#1e3a6a', 8, 1.1, 6.9, 10.02, { tw: 512, th: 64 });
     F.light(0, 5, 9, 0xfff0d0, 1);
     // marquee + flagpole + bike rack
