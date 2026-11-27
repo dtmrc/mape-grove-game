@@ -1660,6 +1660,7 @@ PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 window.__G.setRes = (i) => { resIdx = Math.max(0, Math.min(RES.length - 1, i)); resize(); return RES[resIdx]; }; // qa: render height for comparison shots
+window.__G.gfx = { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b) }; // qa: picture options
 const ui = makeUI({ G, P, keys, pressed, touch, hit, fx, mapImg, MAP_HALF, places, giverMarks, districtAt, isTouch, RES, getRes: () => resIdx, setRes: (i, manual) => { resIdx = i; if (manual) resManual = true; resize(); }, gfx: { aa: (b) => post.setAA(b), crt: (b) => post.setCRT(b), shadows: (b) => sunShadow.setEnabled(b) }, setInvert: (b) => { lookInv = b ? -1 : 1; }, toast, px, pz, yaw: () => (P.car ? P.car.yaw : P.yaw), mission: () => mission, dev: () => dev, setMark });
 const gamepad = makeGamepad({ keys, pressed, touch, P, ui, toast, look: (dx, dy) => { camYaw -= dx; camPitch = Math.max(-0.15, Math.min(1.1, camPitch + dy * lookInv)); camIdle = 0; } });
 window.__G.ui = ui; window.__G.gamepad = gamepad;

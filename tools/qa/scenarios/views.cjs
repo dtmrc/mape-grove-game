@@ -30,6 +30,13 @@ module.exports = async ({ S, shot, args }) => {
   const hour = args.time !== undefined ? Number(args.time) : 12;
   await S.js((h) => window.QA.time(h, { freeze: true }), hour);
   await S.js(() => window.QA.hud(false));
+  // --res 0..3 = render height 360/480/720/1080 (builds before 2026-11-27 only have 360/480/720 on the P key), --aa 1, --crt 1
+  if (args.res !== undefined) await S.js(async (r) => {
+    const G = window.__G;
+    if (G.setRes) G.setRes(r); else for (let i = 0; i < (r - 1 + 3) % 3; i++) await window.QA.key('p', 1);
+  }, Number(args.res));
+  if (args.aa !== undefined) await S.js((b) => window.__G.gfx?.aa(!!b), Number(args.aa));
+  if (args.crt !== undefined) await S.js((b) => window.__G.gfx?.crt(!!b), Number(args.crt));
   const shotO = { hud: false };
   const out = [];
   for (const sp of SPOTS) {
