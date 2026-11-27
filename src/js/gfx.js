@@ -412,7 +412,9 @@ export function makePost(renderer) {
     uniforms: { t: { value: null }, px: { value: new THREE.Vector2() }, night: { value: 1 } }, vertexShader: vs,
     fragmentShader: `uniform sampler2D t; uniform vec2 px; uniform float night; varying vec2 vUv;
       void main(){ vec3 c = vec3(0.0);
-        for (int i=-1;i<=1;i++) for (int j=-1;j<=1;j++) c += texture2D(t, vUv + vec2(i,j)*px*1.5).rgb;
+        // one broken pixel (NaN or infinity from any shader) must not turn into a screen-sized block of bloom:
+        // a comparison with NaN is false, so anything that is not a sane number counts as black
+        for (int i=-1;i<=1;i++) for (int j=-1;j<=1;j++) { vec3 s = texture2D(t, vUv + vec2(i,j)*px*1.5).rgb; c += (s.r + s.g + s.b < 3000.0) ? min(s, vec3(64.0)) : vec3(0.0); }
         c /= 9.0; float l = dot(c, vec3(0.299,0.587,0.114));
         // by day only what is really hot glows (sun glints, lit signs); at night lamps and windows bloom freely
         float lo = mix(1.25, 0.62, night);
@@ -440,8 +442,9 @@ export function makePost(renderer) {
         } else {           // crisp: unsharp mask against the four neighbours (clamped so edges don't ring)
           vec3 n = (texture2D(t, uv + vec2(px.x, 0.0)).rgb + texture2D(t, uv - vec2(px.x, 0.0)).rgb
                   + texture2D(t, uv + vec2(0.0, px.y)).rgb + texture2D(t, uv - vec2(0.0, px.y)).rgb) * 0.25;
-          c = clamp(c + (c - n) * sharp, c * 0.6, c * 1.5 + 0.02);
+          if (n.r + n.g + n.b < 3000.0) c = clamp(c + (c - n) * sharp, c * 0.6, c * 1.5 + 0.02);
         }
+        if (!(c.r + c.g + c.b < 3000.0)) c = vec3(0.0);   // a NaN or infinite pixel: show black, not a white speck
         c += texture2D(b, uv).rgb * (0.55 + night * 0.95);
         // tone: soft shoulder, then gamma
         c = c / (1.0 + c * 0.35);
