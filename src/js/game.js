@@ -1612,6 +1612,7 @@ window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar
 const police = makePolice({ scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
+window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block
 Object.assign(window.__G, { banner, toast, addCash }); // robbery: banner/toast/addCash for robbery.js
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)

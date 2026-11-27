@@ -264,7 +264,7 @@ export function makeJail(ctx) {
   const zMats = { snore: new THREE.SpriteMaterial({ map: zTex('Z z z', '#cfe6ff'), transparent: true, depthTest: false }), mumble: new THREE.SpriteMaterial({ map: zTex('. . .', '#ffd23f'), transparent: true, depthTest: false }), stir: new THREE.SpriteMaterial({ map: zTex('!', '#ff4040'), transparent: true, depthTest: false }) };
   const zz = new THREE.Sprite(zMats.snore); zz.scale.set(0.7, 0.35, 1); zz.position.set(5.0, 1.75, 1.8); zz.renderOrder = 5; room.add(zz);
   // the fly
-  const fly = new THREE.Group(); room.add(fly);
+  const fly = new THREE.Group(); room.add(fly); fly.scale.setScalar(1.8);   // 2026-11-27: 1.8x, it was a speck on a phone screen
   mesh(box(0.035, 0.03, 0.05), MDark, 0, 0, 0, fly);
   const wings = [mesh(new THREE.PlaneGeometry(0.05, 0.03), basic({ color: 0xbfd0e0, transparent: true, opacity: 0.6, side: THREE.DoubleSide }), -0.03, 0.015, 0, fly), mesh(new THREE.PlaneGeometry(0.05, 0.03), basic({ color: 0xbfd0e0, transparent: true, opacity: 0.6, side: THREE.DoubleSide }), 0.03, 0.015, 0, fly)];
   wings.forEach((w) => { w.rotation.x = -Math.PI / 2; });
