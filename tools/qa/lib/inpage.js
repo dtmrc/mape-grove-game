@@ -10,7 +10,7 @@
 
   // ---------- seeded Math.random (reproducible traffic, peds, loot) ----------
   // dev build: start with the cheats panel closed so screenshots show the game
-  try { const c = JSON.parse(localStorage.getItem('mg-cheats') || '{}'); c.open = false; localStorage.setItem('mg-cheats', JSON.stringify(c)); } catch (e) { /* ignore */ }
+  try { const c = JSON.parse(localStorage.getItem('mg-cheats') || '{}'); if (c.open !== false) { c.open = false; localStorage.setItem('mg-cheats', JSON.stringify(c)); } } catch (e) { /* ignore */ }
 
   if (CFG.seed !== null && CFG.seed !== undefined) {
     let a = (CFG.seed >>> 0) || 1;
