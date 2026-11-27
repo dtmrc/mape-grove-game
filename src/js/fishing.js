@@ -8,6 +8,7 @@ import { mat, lambert, basic } from './gfx.js';
 import { animBiped, makeHuman, makeRaccoon } from './models.js';
 import { heightAt } from './terrain.js';
 import { setText, setStyle, setClass } from './dom.js';
+import { staticMerge } from './rigmerge.js';
 
 const KEY = 'maple-grove-offleash-fishing-v1';
 const LAKE = { x: -35, z: 92, rx: 40, rz: 24 };
@@ -138,6 +139,7 @@ body.touch:not(.titled) #bagbtn.has { display: block; }
   sign.position.set(-1.2, 1.1, -0.6); sign.rotation.y = Math.PI - 0.4; fireG.add(sign);
   const signPost = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 0.08), wood); signPost.position.set(-1.2, 0.55, -0.6); fireG.add(signPost);
   const cookFish = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), lambert({ color: 0xcccccc })); cookFish.scale.set(1, 0.45, 2); cookFish.position.y = 0.55; cookFish.visible = false; fireG.add(cookFish);
+  staticMerge(fireG, [cookFish, ...flames, sign]);   // the ring of stones, logs and grate: 26 draw calls -> 8
   const setFire = (on) => { S.fire.lit = on; for (const f of flames) f.visible = on; fireLight.intensity = on ? 1.6 : 0; };
   setFire(false);
 

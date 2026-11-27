@@ -628,6 +628,7 @@ export function makeShadowMan(o = {}) {
   m(cyl(0.143, 0.143, 0.035, 12), ink, 0, 0.025, 0, hat).scale.z = 0.9;              // hat band
   addShadow(root, 0.9, 0.9);
   root.userData = { body, torso, legs, arms, head, scale: 1, seed: 0, lookFwd: true, shadowMan: true };
+  rigMerge(root);   // 27 draw calls -> 2
   return root;
 }
 

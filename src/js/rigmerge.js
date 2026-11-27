@@ -42,27 +42,42 @@ if (typeof window !== 'undefined') window.__RIG = RIG;
 /** Rebuild the static meshes under `root` into rigid-skinned meshes, one per material class. Returns the number of meshes replaced. */
 export function rigMerge(root) {
   if (!RIG.on) return 0;
-  root.updateMatrixWorld(true);
-  _inv.copy(root.matrixWorld).invert();
+  const list = [];
+  root.traverse((o) => { if (o !== root) list.push(o); });
+  const made = rigMergeList(root, list);
+  if (!made.length) return 0;
+  const first = made.first;
+  for (const mesh of made) { mesh.layers.mask = first.layers; mesh.receiveShadow = first.receive; root.add(mesh); }
+  root.userData.rigMeshes = made;
+  return made.length;
+}
+
+/** The core: merge the batchable meshes in `list` (descendants of `frame`) into skinned meshes that are to be parented
+ *  under `frame` with no transform of their own (directly, or through identity nodes like a LOD). The caller attaches
+ *  the returned meshes. Pieces that can't be batched (transparent, named, with userData...) are left where they are. */
+export function rigMergeList(frame, list, min = 2) {
+  if (!RIG.on) return [];
+  frame.updateWorldMatrix(true, false); frame.updateMatrixWorld(true);
+  const root = frame;
+  _inv.copy(frame.matrixWorld).invert();
   // 1. the pieces: every plain Mesh whose material(s) can be batched
   const pieces = [], bones = [], boneIx = new Map();
-  root.traverse((o) => {
-    if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o === root || !o.parent || o.children.length || !o.visible) return;
-    const g = o.geometry; if (!g || !g.attributes.position || !g.attributes.normal || g.morphAttributes.position) return;
+  for (const o of list) {
+    if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || !o.parent || o.children.length || !o.visible) continue;
+    const g = o.geometry; if (!g || !g.attributes.position || !g.attributes.normal || g.morphAttributes.position) continue;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
-    const keys = mats.map(classKey); if (keys.some((k) => k === null)) return;
-    if (Array.isArray(o.material) && !g.groups.length) return;
-    if (o.renderOrder || o.userData.keep || Object.keys(o.userData).length || o.name) return;   // something refers to it: leave it
+    const keys = mats.map(classKey); if (keys.some((k) => k === null)) continue;
+    if (Array.isArray(o.material) && !g.groups.length) continue;
+    if (o.renderOrder || o.userData.keep || Object.keys(o.userData).length || o.name) continue;   // something refers to it: leave it
     let b = boneIx.get(o.parent); if (b === undefined) { b = bones.length; bones.push(o.parent); boneIx.set(o.parent, b); }
     pieces.push({ o, g, mats, keys, b });
-  });
-  if (pieces.length < 2) return 0;
+  }
+  if (pieces.length < min) return [];
   // 2. per material class: the shape (shared between every figure built the same way) + this figure's colours
   const byClass = new Map();
   let sig = '';
   for (const b of bones) sig += f4(_m.multiplyMatrices(_inv, b.matrixWorld).elements) + ';';
   for (const p of pieces) {
-    p.o.updateMatrix();
     const groups = p.g.groups.length ? p.g.groups : [{ start: 0, count: p.g.index ? p.g.index.count : p.g.attributes.position.count, materialIndex: 0 }];
     sig += p.g.uuid + '@' + p.b + ':' + f4(p.o.matrix.elements) + '[' + groups.map((gr) => p.keys[Array.isArray(p.o.material) ? gr.materialIndex : 0]).join('/') + ']';
     for (const gr of groups) {
@@ -77,23 +92,25 @@ export function rigMerge(root) {
     let S = shapes.get(shapeKey);
     if (!S) {
       let n = 0; for (const q of C.parts) n += q.gr.count;
-      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), si = new Uint16Array(n * 4), sw = new Float32Array(n * 4), base = new Float32Array(n * 3);
+      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), si = new Uint8Array(n * 4), sw = new Uint8Array(n * 4), base = new Float32Array(n * 3);
       const ranges = []; let d = 0, r2 = 0;
       for (const q of C.parts) {
         const g = q.p.g, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, K = g.attributes.color, ix = g.index;
         _m.multiplyMatrices(_inv, q.p.o.matrixWorld); _n.getNormalMatrix(_m);
+        const flip = _m.determinant() < 0;   // a mirrored piece (the wheels on one side of a car): reverse the winding so it still faces out
         ranges.push(d, q.gr.count);
         for (let i = 0; i < q.gr.count; i++, d++) {
-          const s = ix ? ix.getX(q.gr.start + i) : q.gr.start + i;
+          const j = flip && i % 3 ? (i % 3 === 1 ? i + 1 : i - 1) : i;
+          const s = ix ? ix.getX(q.gr.start + j) : q.gr.start + j;
           _v.fromBufferAttribute(P, s).applyMatrix4(_m); pos[d * 3] = _v.x; pos[d * 3 + 1] = _v.y; pos[d * 3 + 2] = _v.z; r2 = Math.max(r2, _v.lengthSq());
           _v.fromBufferAttribute(N, s).applyMatrix3(_n).normalize(); nor[d * 3] = _v.x; nor[d * 3 + 1] = _v.y; nor[d * 3 + 2] = _v.z;
           if (U) { uv[d * 2] = U.getX(s); uv[d * 2 + 1] = U.getY(s); }
           if (K && q.mat.vertexColors) { base[d * 3] = K.getX(s); base[d * 3 + 1] = K.getY(s); base[d * 3 + 2] = K.getZ(s); } else { base[d * 3] = base[d * 3 + 1] = base[d * 3 + 2] = 1; }
-          si[d * 4] = q.p.b; sw[d * 4] = 1;
+          si[d * 4] = q.p.b; sw[d * 4] = 255;
         }
       }
       S = { n, ranges, base, radius: Math.sqrt(r2), attrs: { position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), uv: new THREE.BufferAttribute(uv, 2),
-        skinIndex: new THREE.BufferAttribute(si, 4), skinWeight: new THREE.BufferAttribute(sw, 4) } };
+        skinIndex: new THREE.BufferAttribute(si, 4), skinWeight: new THREE.BufferAttribute(sw, 4, true) } };   // bytes: one pivot per vertex, weight 255/255
       shapes.set(shapeKey, S);
     }
     // the colours of this figure's surfaces, in the shape's order
@@ -116,8 +133,8 @@ export function rigMerge(root) {
     mesh.userData.rig = true;
     made.push(mesh);
   }
-  // 3. swap: the pieces leave their pivots, the merged meshes hang off the root and follow the pivots as bones
-  const layers = pieces[0].o.layers.mask, receive = pieces[0].o.receiveShadow;
+  // 3. swap: the pieces leave their pivots, the merged meshes hang off the frame and follow the pivots as bones
+  made.first = { layers: pieces[0].o.layers.mask, receive: pieces[0].o.receiveShadow };
   for (const p of pieces) p.o.parent.remove(p.o);
   const skel = new THREE.Skeleton(bones, bones.map((b) => new THREE.Matrix4().copy(b.matrixWorld).invert()));
   const update = skel.update;
@@ -130,9 +147,49 @@ export function rigMerge(root) {
       if (hidden) bm.fill(0, i * 16, i * 16 + 16);   // a hidden pivot hides its part of the merged mesh
     }
   };
-  for (const mesh of made) { mesh.layers.mask = layers; mesh.receiveShadow = receive; root.add(mesh); }
-  root.updateMatrixWorld(true);
-  for (const mesh of made) mesh.bind(skel, mesh.matrixWorld);
-  root.userData.rigMeshes = made;
-  return pieces.length;
+  for (const mesh of made) { mesh.layers.mask = made.first.layers; mesh.receiveShadow = made.first.receive; mesh.bind(skel, frame.matrixWorld); }
+  return made;
+}
+
+/** For props that never move against each other: the meshes under `group` that share a material become one mesh
+ *  (one draw call per material instead of one per piece). Transparent, hidden, skinned and `keep` meshes are left alone,
+ *  so anything the game animates or toggles has to be passed in `keep`. Returns how many pieces were merged away. */
+export function staticMerge(group, keep = []) {
+  if (!RIG.on) return 0;
+  group.updateWorldMatrix(true, false); group.updateMatrixWorld(true);
+  _inv.copy(group.matrixWorld).invert();
+  const skip = new Set(keep), by = new Map();
+  group.traverse((o) => {
+    if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o === group || o.children.length || !o.visible || skip.has(o) || Array.isArray(o.material)) return;
+    for (let p = o.parent; p && p !== group; p = p.parent) if (!p.visible || skip.has(p)) return;
+    const m = o.material, g = o.geometry;
+    if (m.transparent || m.opacity < 1 || !g.attributes.position || !g.attributes.normal || g.morphAttributes.position || o.renderOrder) return;
+    (by.get(m) || by.set(m, []).get(m)).push(o);
+  });
+  let gone = 0;
+  for (const [mat, list] of by) {
+    if (list.length < 2) continue;
+    let n = 0; for (const o of list) n += o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), col = mat.vertexColors ? new Float32Array(n * 3).fill(1) : null;
+    let d = 0;
+    for (const o of list) {
+      const g = o.geometry, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, K = g.attributes.color, ix = g.index, cnt = ix ? ix.count : P.count;
+      _m.multiplyMatrices(_inv, o.matrixWorld); _n.getNormalMatrix(_m); const flip = _m.determinant() < 0;
+      for (let i = 0; i < cnt; i++, d++) {
+        const j = flip && i % 3 ? (i % 3 === 1 ? i + 1 : i - 1) : i, s = ix ? ix.getX(j) : j;
+        _v.fromBufferAttribute(P, s).applyMatrix4(_m); pos[d * 3] = _v.x; pos[d * 3 + 1] = _v.y; pos[d * 3 + 2] = _v.z;
+        _v.fromBufferAttribute(N, s).applyMatrix3(_n).normalize(); nor[d * 3] = _v.x; nor[d * 3 + 1] = _v.y; nor[d * 3 + 2] = _v.z;
+        if (U) { uv[d * 2] = U.getX(s); uv[d * 2 + 1] = U.getY(s); }
+        if (col && K) { col[d * 3] = K.getX(s); col[d * 3 + 1] = K.getY(s); col[d * 3 + 2] = K.getZ(s); }
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    if (col) geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mesh = new THREE.Mesh(geo, mat), f = list[0];
+    mesh.layers.mask = f.layers.mask; mesh.receiveShadow = f.receiveShadow; mesh.castShadow = f.castShadow; mesh.userData.merged = list.length;
+    for (const o of list) o.parent.remove(o);
+    group.add(mesh); gone += list.length - 1;
+  }
+  return gone;
 }

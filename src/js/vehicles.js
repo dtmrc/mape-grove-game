@@ -12,6 +12,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { makeCar, addShadow } from './models.js';
 import { basic } from './gfx.js';
 import { GLB, INDEX } from '../models/vehicles/index.js';
+import { rigMergeList } from './rigmerge.js';
 
 export const VEHICLES_ENABLED = !(typeof location !== 'undefined' && /[?&]cars=old\b/.test(location.search));
 const LOD_FAR = 38;
@@ -90,6 +91,22 @@ function lodOf(sc, names, mats) {
   return lod;
 }
 
+// The four wheels of a car are one draw call instead of four (rigmerge.js): one mesh whose vertices follow the four
+// wheel pivots, with a near and a far level like before. Paint and trim stay as they are (two draws on one pivot,
+// and a burnt-out car recolours them). The pose is zeroed while binding so every car of a model shares the buffers.
+function mergeWheels(root, wheels, spins, wheelLods) {
+  const pose = [...wheels, ...spins.map((q) => q[0])].map((o) => [o, o.quaternion.clone()]);
+  for (const [o] of pose) o.quaternion.identity();
+  const level = (i) => wheelLods.flatMap((l) => l.levels[i].object.children.slice());
+  const near = rigMergeList(root, level(0), 2), far = near.length ? rigMergeList(root, level(1), 2) : [];
+  if (near.length && far.length) {
+    const lod = new THREE.LOD(), gn = new THREE.Group(), gf = new THREE.Group();
+    gn.add(...near); gf.add(...far); lod.addLevel(gn, 0); lod.addLevel(gf, LOD_FAR); root.add(lod);
+    for (const l of wheelLods) { l.autoUpdate = false; for (const q of l.levels) q.object.visible = true; }   // empty now: only pivots for the merged wheels
+  }
+  for (const [o, q] of pose) o.quaternion.copy(q);
+}
+
 // same userData contract as models.js makeCar: { body, wheels [FL, FR, RL, RR], bar, wr, spec, paint, glows }
 export function makeModelCar(type, color, o, CAR_TYPES) {
   const S = CAR_TYPES[type], G = S.glb;
@@ -107,8 +124,10 @@ export function makeModelCar(type, color, o, CAR_TYPES) {
   { const sh = root.children[root.children.length - 1]; sh.updateMatrix(); sh.matrixAutoUpdate = false; }
   load(S.model, (sc) => {
     paint.map = sc.getObjectByName('Paint').material.map; paint.needsUpdate = true;
-    body.add(lodOf(sc, ['Paint', 'Body', 'BarR', 'BarB'], { Paint: paint, BarR: bar[0], BarB: bar[1] }));
-    for (const [spin, s] of spins) { const w = lodOf(sc, ['Wheel'], {}); if (s < 0) w.scale.x = -1; spin.add(w); }
+    const bodyLod = lodOf(sc, ['Paint', 'Body', 'BarR', 'BarB'], { Paint: paint, BarR: bar[0], BarB: bar[1] }), wheelLods = [];
+    body.add(bodyLod);
+    for (const [spin, s] of spins) { const w = lodOf(sc, ['Wheel'], {}); if (s < 0) w.scale.x = -1; spin.add(w); wheelLods.push(w); }
+    mergeWheels(root, wheels, spins, wheelLods);
   }, () => {
     // decoder unavailable: fall back to the procedural car of the same family so the game still has cars
     const P = makeCar(S.cls === 'sport' ? 'sedan' : S.cls === 'cart' ? 'golfcart' : S.cls, color, o), u = P.userData;

@@ -6,7 +6,7 @@ module.exports = {
   async run({ S, check, log }) {
     if (process.env.RIG_SHOTS) await S.js(() => { window.__RIG_SHOTS = true; });
     const r = await S.js(async () => {
-      const QA = window.QA, G = window.__G, RIG = window.__RIG, out = [];
+      const QA = window.QA, G = window.__G, RIG = window.__RIG, out = [], cars = [];
       await QA.tp('green', { settle: 10, render: false });
       G.G.paused = true; G.cat.visible = false;   // Goobles keeps breathing while paused: out of the picture
       const P = G.P, canvas = document.getElementById('c');
@@ -32,18 +32,40 @@ module.exports = {
         for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d > 2) diff++; if (d > 24) big++; }
         out.push({ name, before: draws[false], after: draws[true], diff, big, px: a.length / 4 });
       }
+      // cars: the four wheels are one draw call; steered and rolled wheels must look the same
+      for (const model of ['crown03', 'f15_24', 'chaserpd18']) {
+        const shots = {}, draws = {};
+        for (const on of [false, true]) {
+          RIG.on = on;
+          QA.step(2, { render: true }); const base = QA.stats().drawCalls;
+          const c = G.spawnCar('sedan', P.x + 3, P.z + 1.5, 0.9, { model, color: 0x2e6fbf }), u = c.mesh.userData;
+          c.mesh.position.set(P.x + 3, 0.7, P.z + 1.5); c.mesh.rotation.y = 2.3;   // lifted clear of the gazebo floor, side on, so the wheels show
+          u.wheels[0].rotation.y = u.wheels[1].rotation.y = 0.45; for (const w of u.wheels) w.children[0].rotation.x = 1.1;
+          QA.step(1, { render: true }); shots[on] = grab(); urls[model + (on ? '-merged' : '-pieces')] = canvas.toDataURL('image/png'); draws[on] = QA.stats().drawCalls - base;
+          G.removeCar(c);
+        }
+        RIG.on = true;
+        const a = shots[false], b = shots[true]; let diff = 0, big = 0;
+        for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d > 2) diff++; if (d > 24) big++; }
+        cars.push({ name: model, before: draws[false], after: draws[true], diff, big, px: a.length / 4 });
+      }
       // hiding a pivot hides its part (townsfolk swap straight legs for bent ones this way)
       const fig = looks.walker(); fig.position.set(P.x + 1.2, 0, P.z + 0.6); G.scene.add(fig);
       const full = grab(); fig.userData.legs[0].visible = false; fig.userData.legs[1].visible = false; const cut = grab(); G.scene.remove(fig); const none = grab();
       let legsGone = 0, restSame = 0; for (let i = 0; i < full.length; i += 4) { const d1 = Math.abs(full[i] - cut[i]) + Math.abs(full[i + 1] - cut[i + 1]) + Math.abs(full[i + 2] - cut[i + 2]), d2 = Math.abs(cut[i] - none[i]) + Math.abs(cut[i + 1] - none[i + 1]) + Math.abs(cut[i + 2] - none[i + 2]); if (d1 > 30) legsGone++; if (d2 > 30) restSame++; }
       G.G.paused = false; QA.shadowHold = false; G.cat.visible = true;
-      return { out, legsGone, restSame, urls: window.__RIG_SHOTS ? urls : null };
+      return { out, cars, legsGone, restSame, urls: window.__RIG_SHOTS ? urls : null };
     });
     if (r.urls) for (const [k, u] of Object.entries(r.urls)) require('fs').writeFileSync(require('path').join(process.env.RIG_SHOTS, k + '.png'), Buffer.from(u.split(',')[1], 'base64'));
     for (const o of r.out) {
       log(`${o.name}: ${o.before} draw calls -> ${o.after}; ${o.diff} of ${o.px} pixels differ by more than 2/255, ${o.big} by more than 24/255`);
       check(`${o.name}: fewer draw calls (${o.before} -> ${o.after})`, o.after < o.before && o.after <= 6, o);
       check(`${o.name}: picture unchanged (${o.diff} px differ, ${o.big} strongly)`, o.diff <= 40 && o.big <= 4, o);
+    }
+    for (const o of r.cars) {
+      log(`car ${o.name}: ${o.before} draw calls -> ${o.after}; ${o.diff} of ${o.px} pixels differ by more than 2/255, ${o.big} by more than 24/255`);
+      check(`car ${o.name}: fewer draw calls (${o.before} -> ${o.after})`, o.after === o.before - 3, o);
+      check(`car ${o.name}: picture unchanged (${o.diff} px differ, ${o.big} strongly)`, o.diff <= 40 && o.big <= 4, o);
     }
     check(`hiding the leg pivots removes the legs (${r.legsGone} px) and keeps the rest (${r.restSame} px)`, r.legsGone > 150 && r.restSame > 400, r);
   },
