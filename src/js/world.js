@@ -2106,7 +2106,8 @@ function buildFences() {
         for (let j = 0; j < n; j++) { const c0 = ax + (qx - ax) * (j + 0.5) / n; if (keep[j] && c0 < L.doorX) kl = j; if (keep[j] && c0 > L.doorX && kr < 0) kr = j; }
         if (kl >= 0 && kr >= 0) {
           const xl = ax + (qx - ax) * (kl + 1) / n, xr = ax + (qx - ax) * kr / n, leaf = Math.min(1.1, (xr - xl) * 0.45);
-          if (xr - xl > 1.2 && xr - xl < 10) {   // the walk + driveway gaps usually merge: hinge on the walk's side const [x0, z0] = F.at(xl + 0.06, az - 0.06), [x1, z1] = F.at(xl + 0.06, az - 0.06 - leaf); fenceRun(x0, z0, x1, z1, 'picket', S.col, { gate: true }); }
+          // the walk + driveway gaps usually merge: hinge on the walk's side
+          if (xr - xl > 1.2 && xr - xl < 10) { const [x0, z0] = F.at(xl + 0.06, az - 0.06), [x1, z1] = F.at(xl + 0.06, az - 0.06 - leaf); fenceRun(x0, z0, x1, z1, 'picket', S.col, { gate: true }); }
         }
       }
     }
