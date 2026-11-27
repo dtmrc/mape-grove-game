@@ -90,7 +90,11 @@ export function makeJobs(A) {
         objective("Take the HOA golf cart from the patrol lot in the Estates.");
       },
       update() {
-        if (this.cart.dead) return endMission(false, "That's not a golf cart any more. Nana is disappointed.");
+        if (this.cart.dead) { // the HOA has spares: a fresh cart turns up at the lot and you go again
+          this.cart = hoaCart() || spawnCar('golfcart', places.hoaLot.x - 3, places.hoaLot.z, 0, { color: 0xffffff, canopy: 0x1e2a44, lightbar: true });
+          this.taken = false; setCheck(places.hoaLot.x - 3, places.hoaLot.z, 4, 'HOA patrol lot');
+          objective('That cart is scrap. The HOA has spares: take another one from the lot.'); toast('Cart wrecked. Go grab another from the HOA lot.', 4);
+        }
         if (!this.taken) {
           if (P.car === this.cart) { this.taken = true; addHeat(1, 'repossessing HOA property'); setCheck(this.drop.x, this.drop.z, 4, "Nana's RV lot"); }
           else G.check = { x: this.cart.x, z: this.cart.z, r: 1, blipOnly: true, label: 'HOA cart', col: '#ffd23f' };

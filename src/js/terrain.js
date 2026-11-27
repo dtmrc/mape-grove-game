@@ -402,6 +402,9 @@ export function prepareWorld(buckets, ctx) {
       if (Math.hypot(x - A.x - t * (B.x - A.x), z - A.z - t * (B.z - A.z)) <= hw) flat[j * TN + i] = 1;
     }
   }
+  // the jailbreak cell block is built at world (-330, -330) (jailbreak.js JX/JZ, ~15 x 13 m, floor at y 0): keep the ground
+  // flat under it, or the countryside hills poke grass up through the cell floor and hide the fly (diet 2026-11-27)
+  for (let j = 0; j < TN; j++) for (let i = 0; i < TN; i++) { const x = TX0 + i * TCELL, z = TZ0 + j * TCELL; if (x < -316 && z < -316) flat[j * TN + i] = 1; }
   if (ctx.inLake) for (let j = 0; j < TN; j++) for (let i = 0; i < TN; i++) if (ctx.inLake(TX0 + i * TCELL, TZ0 + j * TCELL, 1.15)) flat[j * TN + i] = 1;
   // chamfer distance transform (cells) from flat features
   const D = new Float32Array(TN * TN);

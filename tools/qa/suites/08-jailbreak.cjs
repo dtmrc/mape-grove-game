@@ -18,6 +18,8 @@ module.exports = {
       }
       return { out, dialog: !!window.__G.G.dialog, st: J.state().stage };
     });
+    const hmax = await S.js(() => { const h = window.__G.heightAt, [jx, jz] = window.__JAIL.origin(); let m = 0; for (let x = -8; x <= 8; x++) for (let z = -9; z <= 5; z++) m = Math.max(m, Math.abs(h(jx + x, jz + z))); return m; });
+    check('no terrain pokes through the cell block floor', hmax < 0.02, hmax);
     check('cat cannot tunnel out of cell 2', !t.dialog && t.out.every(([x, z]) => z < -0.5 && z > -3.5 && x > -2.5 && x < 1.1), t);
     const e = await S.js(async () => { const QA = window.QA, J = window.__JAIL; J.end(); QA.step(30, { render: false }); for (let i = 0; i < 30 && window.__G.G.dialog; i++) await QA.key('e'); return { active: J.active(), st: QA.state() }; });
     check('jailbreak ends back in town', !e.active && !e.st.inside, e);
