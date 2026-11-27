@@ -17,6 +17,16 @@
   vertex, colour folded into vertex colours). Walker 17 draws -> 5, raccoon 13 -> 5, shadow man 27 -> 2, car wheels
   4 -> 1 (a car is 4 draws). `staticMerge` for props that do not move (firepit 26 -> a few). Suite `rigmerge` builds each
   both ways (`window.__RIG.on`) and compares the frames pixel by pixel: 0 to 3 pixels differ.
+- Geometry memory: merged figures share one copy of each surface class whatever they wear (24 MB -> 12 MB of buffers
+  with 31 people out), colours and normals are 16-bit. src/js/geopack.js packs the merged world chunks the same way
+  (10.6 MB less, in memory and on the GPU; largest pixel change in five comparison shots is 1/255).
+- Cars: merged wheels follow the spin pivots, the emptied wheel LOD nodes are removed (31 updating nodes per car -> 14;
+  cars were half of all per-frame matrix updates).
+- Not done on purpose: freeing vertex arrays after upload (the game recovers from a lost WebGL context today, checked
+  with WEBGL_lose_context, and would not without the arrays), baking the estate layout and woods relief at build time
+  (world build is 2.9 s -> 1.9 s after the search fixes, the two together are now about 0.3 s, and a bake has to be
+  re-run by every thread that touches the map), matrixAutoUpdate=false on static props (about 250 nodes, under 0.1 ms),
+  tree wind (new GPU detail, trees do not move today).
 - Left alone: world chunks, trees, poles, signs, fences (already one draw per material per chunk, breakables stay
   separate), otters and hens (already instanced), cave (62 draws in total), Goob's truck (20 body parts with 20
   different textures, needs a re-baked atlas in Tracebench), shop sign planes (one texture each).
