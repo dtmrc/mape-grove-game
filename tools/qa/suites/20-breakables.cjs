@@ -49,7 +49,7 @@ module.exports = {
     // signs: a slow nudge bends the pole and leaves it rooted, a fast hit snaps it and throws it
     const sl = await ram('sign', 5, 0);
     check('a slow hit breaks a sign', sl.broken, sl);
-    const bent = await S.js(() => { window.QA.step(40, { render: false }); const e = [...window.__BRK.live].reverse().find((q) => q.kind === 'sign' && q.mesh) || { mesh: { position: {} } }; return { kind: e.kind, snapped: e.snapped, ang: e.ang, x: e.mesh.position.x, x0: e.x };   // the newest broken sign (traffic may have broken something else since) });
+    const bent = await S.js(() => { window.QA.step(40, { render: false }); const e = [...window.__BRK.live].reverse().find((q) => q.kind === 'sign' && q.mesh) || { mesh: { position: {} } }; return { kind: e.kind, snapped: e.snapped, ang: e.ang, x: e.mesh.position.x, x0: e.x }; /* the newest broken sign: traffic may have broken something else since */ });
     check('slow: the sign only bends over and stays in the ground', bent.kind === 'sign' && !bent.snapped && bent.ang > 0.15 && bent.ang < 1.3, bent);
     const sf = await ram('sign', 22, 0);
     const thrown = await S.js(() => { const B = window.__BRK, e = [...B.live].reverse().find((q) => q.kind === 'sign' && q.mesh) || { mesh: { position: { x: 0, z: 0 } } }, x0 = e.mesh.position.x, z0 = e.mesh.position.z; window.QA.step(40, { render: false }); return { kind: e.kind, snapped: e.snapped, ang: e.ang, moved: Math.hypot(e.mesh.position.x - x0, e.mesh.position.z - z0) }; });
