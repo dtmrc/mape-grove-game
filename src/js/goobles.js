@@ -47,6 +47,23 @@ export function makeGoobles(o = {}) {
 
   let mixer = null, clips = {}, cur = null, bones = {}, rest = {}, last = null, speed = 0, emote = null, ready = false;
   const mats = [];
+  // climb (2026-11-26, diet: "when climbing onto a roof ... the posture of a 4 legged cat"): u.quad = true drops him onto
+  // all fours on top of whatever clip is playing (the Walk clip's arm/leg swing becomes a diagonal trot). Blended in/out.
+  let quadK = 0, quadSaved = null;
+  const _qa = new THREE.Quaternion(), _ax = new THREE.Vector3(1, 0, 0);
+  const QUAD = [['hips', -1], ['thigh_L', 1], ['thigh_R', 1], ['shin_L', 1], ['shin_R', 1], ['arm_L', 1], ['arm_R', 1], ['forearm_L', 1], ['forearm_R', 1], ['neck', 1], ['head', 1], ['tail', 1]];
+  function quadPose(k) {
+    // the rig faces +z, so a rotation of -x tips him forward onto his front paws
+    const A = 1.35 * k, ang = { hips: A, thigh_L: -A + 0.55 * k, thigh_R: -A + 0.55 * k, shin_L: -0.95 * k, shin_R: -0.95 * k, arm_L: -A * 0.92, arm_R: -A * 0.92, forearm_L: 0.2 * k, forearm_R: 0.2 * k, neck: -A * 0.6, head: -A * 0.1, tail: 0.5 * k };
+    quadSaved = [];
+    for (const [n] of QUAD) {
+      const b = bones[n]; if (!b) continue;
+      quadSaved.push([b, b.quaternion.clone()]);
+      b.quaternion.premultiply(_qa.setFromAxisAngle(_ax, ang[n]));
+    }
+    bones.hips.position.y = hipY - 0.1 * k;
+  }
+  let hipY = 0;
   u.onBiped = (ph, amt, t, punch = 0) => {
     for (const p of [...arms, ...legs, head, torso]) p.rotation.copy(p.userData.neutral);
     body.position.y = 0;
@@ -80,7 +97,10 @@ export function makeGoobles(o = {}) {
       else if (speed > 0.15) { const a = play('Walk'); if (a) a.timeScale = Math.max(0.6, speed / 0.5); }
       else { const a = play('Idle', 0.25); if (a) a.timeScale = 1; }
     }
+    if (quadSaved) { for (const [b, q] of quadSaved) b.quaternion.copy(q); quadSaved = null; bones.hips.position.y = hipY; }   // climb: undo last frame's four-legged pose
     mixer.update(dt);
+    quadK += ((u.quad ? 1 : 0) - quadK) * Math.min(1, dt * 10);
+    if (quadK > 0.01) quadPose(quadK);
     // overrides written by other systems this frame
     for (let i = 0; i < 2; i++) {
       const a = arms[i], b = bones[i ? 'arm_L' : 'arm_R'];
@@ -116,6 +136,7 @@ export function makeGoobles(o = {}) {
     hand(sock.arm0, 'hand_R', -1); hand(sock.arm1, 'hand_L', 1);
     bones.head.add(sock.head); sock.head.position.set(0, -0.04, 0);           // old head pivot sat lower on the skull; this seats hats and riders on the flat crown
     bones.hips.add(sock.torso); sock.torso.position.set(0, (0.13 - 0.46 * S) / S, 0); // old torso pivot = ground; cuffs at the new wrists
+    hipY = bones.hips.position.y;
     mixer = new THREE.AnimationMixer(model);
     for (const c of gltf.animations) clips[c.name] = mixer.clipAction(c);
     model.traverse((n) => { n.layers.mask = root.layers.mask; });

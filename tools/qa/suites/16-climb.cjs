@@ -19,8 +19,9 @@ module.exports = {
     check('climbing up reaches the treetop perch and stays there while up is held', Math.abs(t.held.y - t.top) < 0.05 && t.held.d < 1, t);
     await S.js(() => { window.__camDist = 6; window.__G.setCam(0.9, 0.25); window.QA.step(12); });
     await shot('tree-perch', { hud: false });
-    const j = await S.js(async () => { const QA = window.QA, P = window.__G.P; QA.down('w'); await QA.key(' ', 1); QA.step(4, { render: false }); QA.up('w'); let peak = P.y; for (let i = 0; i < 80; i++) { QA.step(1, { render: false }); peak = Math.max(peak, P.y); } return { peak, y: P.y, nan: !isFinite(P.x + P.y + P.z) }; });
-    check('leaping off the perch lands back on the ground', j.y < 1 && !j.nan, j);   // (holding on into another trunk would grab it: tree to tree)
+    const j = await S.js(async () => { const QA = window.QA, P = window.__G.P; QA.down('w'); await QA.key(' ', 1); QA.step(4, { render: false }); QA.up('w'); let peak = P.y; for (let i = 0; i < 80; i++) { QA.step(1, { render: false }); peak = Math.max(peak, P.y); } QA.step(6, { render: false }); return { peak, y: P.y, nan: !isFinite(P.x + P.y + P.z), quad: !!window.__G.cat.userData.quad }; });
+check('back on the ground he stands upright again', !j.quad, j);
+        check('leaping off the perch lands back on the ground', j.y < 1 && !j.nan, j);   // (holding on into another trunk would grab it: tree to tree)
 
     // roof: run at a two-story Estates house wall, jump + two wall scrambles + double + triple, pull up onto the eave
     const r = await S.js(async () => {
@@ -34,11 +35,12 @@ module.exports = {
       for (let k = 0; k < 5 && !P.mantle; k++) { await QA.key(' ', 1, { render: false }); await QA.frames(5, { render: false }); }
       const pulled = !!P.mantle || P.y > 5;
       await QA.frames(20, { render: false }); QA.up('w'); await QA.frames(6, { render: false });
-      const on = { y: P.y, fl: P.fl, inside: P.x < c.x1 };
+      const on = { y: P.y, fl: P.fl, inside: P.x < c.x1, quad: !!G.cat.userData.quad };
       return { box: c.h, eave, pulled, on };
     });
     check('Estates eave is below the collider box (roof grid built)', r.eave > 4 && r.eave < r.box - 0.5, r);
     check('wall scrambles + pull-up land Goobles on the roof', r.pulled && r.on.inside && r.on.y > r.eave - 0.3 && Math.abs(r.on.y - r.on.fl) < 0.05, r);
+    check('on the roof he is on all fours', r.on.quad, r.on);
     await S.js(() => { window.__camDist = 7; window.__G.setCam(2.2, 0.35); window.QA.step(12); });
     await shot('estates-roof', { hud: false });
     await S.js(() => { window.__camDist = 0; });
