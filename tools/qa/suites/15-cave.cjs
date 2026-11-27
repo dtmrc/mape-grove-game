@@ -12,6 +12,11 @@ module.exports = {
       P.x = s.x + Math.sin(s.yaw) * 0.9; P.z = s.z + Math.cos(s.yaw) * 0.9; await QA.frames(3); await QA.key('e'); await QA.until(() => window.__INT.inside && !window.__INT.state.fading, 200); await QA.frames(5);
       o.tunnel = window.__INT.current();
       const R = window.__INT.room, T = C.tun, e = T.pts[T.pts.length - 1];
+      // the branching cave (cavegen.js): every passage open, rock pushes back, far tiles hidden
+      const g = C.cavegen; o.gen = { branches: g.branches.length, tiles: g.stats.tiles, pools: g.stats.pools, buildMs: g.stats.ms };
+      o.open = [g.main, ...g.branches].every((b) => b.pts.every((p) => g.field(p.x, p.z) < -0.4));
+      P.x = R.origin.x + 3.5; P.z = R.origin.z + 52; await QA.frames(4); o.pushedOut = g.field(P.x - R.origin.x, P.z - R.origin.z) < -0.2;
+      o.culled = g.stats.visibleTiles > 0 && g.stats.visibleTiles < g.stats.tiles;
       P.x = R.origin.x + e.x - e.tx * 4.1; P.z = R.origin.z + e.z - e.tz * 4.1; await QA.frames(5);
       await QA.key('e'); await QA.until(() => window.__INT.current() === 'cavelair', 300); await QA.frames(10);
       o.lair = window.__INT.current(); o.depth = Math.round(C.S.depth);
@@ -24,6 +29,9 @@ module.exports = {
     check('cave door hidden until you hold the torch', r.closedWithoutTorch, r);
     check('torch taken from the post', r.held, r);
     check('torch opens the cave', r.tunnel === 'cave', r);
+    check('cave branches: loops and dead ends, all open', r.gen && r.gen.branches >= 5 && r.open, r);
+    check('cave walls push the cat back out of the rock', r.pushedOut, r);
+    check('far cave tiles are hidden', r.culled, r);
     check('rope leads 1,940 m down to the dwelling', r.lair === 'cavelair' && r.depth === 1940, r);
     check('the ghost shows himself', r.ghost === 'haunt', r);
     check('leaving puts the torch back', r.outside && r.torchBack, r);

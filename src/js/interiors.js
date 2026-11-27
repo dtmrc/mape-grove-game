@@ -326,6 +326,8 @@ export function makeInteriors(ctx) {
       x = c.cx + lx * c.c + lz * c.s; z = c.cz - lx * c.s + lz * c.c;
       nx = nlx * c.c + nlz * c.s; nz = -nlx * c.s + nlz * c.c; hit = true;
     }
+    // a room with its own shape (the cave's distance field, cavegen.js) pushes back here
+    if (R.out && R.out.collide) { const q = R.out.collide(x - R.origin.x, z - R.origin.z, r, y); if (q) { x = R.origin.x + q.x; z = R.origin.z + q.z; nx = q.nx; nz = q.nz; hit = true; } }
     // stay inside the room
     const hw = R.size[0] / 2 - r, hd = R.size[1] / 2 - r, ox = R.origin.x, oz = R.origin.z;
     if (x < ox - hw) { x = ox - hw; hit = true; nx = 1; nz = 0; } else if (x > ox + hw) { x = ox + hw; hit = true; nx = -1; nz = 0; }
@@ -337,6 +339,7 @@ export function makeInteriors(ctx) {
     const m = 0.12;
     if (Math.abs(x - R.origin.x) > R.size[0] / 2 - m || Math.abs(z - R.origin.z) > R.size[1] / 2 - m) return true;
     if (y > R.cam.height + 0.2) return true;
+    if (R.out && R.out.solid && R.out.solid(x - R.origin.x, y, z - R.origin.z)) return true;
     for (const c of R.cols) {
       if (y > (c.top ?? c.h)) continue;
       const dx = x - c.cx, dz = z - c.cz;
