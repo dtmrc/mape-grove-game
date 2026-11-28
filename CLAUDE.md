@@ -15,7 +15,8 @@ Several Claude threads work on this game at the same time. To avoid conflicts be
 5. **Unfinished features go behind a flag** (default off) so they can be merged to main without breaking the game. Example: `HUNGER_ENABLED` in `src/js/fishing.js`.
 6. **Never commit build output.** `dist/` and `qa-out/` are git-ignored; they are rebuilt from source and would conflict on every merge.
 7. **Keep shared files easy to merge.** Put a new system in its own `src/js/<name>.js` and wire it into `game.js` / `world.js` with the smallest possible hook. Don't reformat or reorder code you aren't changing.
-8. If a merge conflict is in another thread's system and the right resolution isn't obvious, ask in the project rather than guessing.
+8. **New keyboard key = one line in `BINDINGS` in `src/js/hotkeys.js`.** The ? keyboard map, the title card and pause > CONTROLS are drawn from it, and QA suite `hotkeys` fails when a key read in `src/js` is missing there.
+9. If a merge conflict is in another thread's system and the right resolution isn't obvious, ask in the project rather than guessing.
 
 Pushing to main does not publish the game. The live game artifact, the share link and the `gh-pages` branch (GitHub Pages) are only updated when diet says to ship. The private phone test page may be updated from main at any time.
 
