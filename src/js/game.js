@@ -19,6 +19,7 @@ import * as BRK from './breakables.js';
 import * as DONUT from './donut.js';
 import * as PIZZA from './pizza.js'; // Pizza City interior + order counter
 import * as STORES from './storerooms.js'; // Bev's Threads + Hank's Hardware interiors
+import * as MANSIONS from './mansions.js'; // Estates house interiors
 import * as SCHOOL from './school.js'; // Maple Grove High interior
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
@@ -1727,6 +1728,7 @@ const jobs = makeJobs({ MISSIONS, INTROS, DONE_LINES, spawnCar, spawnPed, remove
 DONUT.init({ G, fishing, toast, Sfx }); // engine: Donut Hole (fish barter)
 PIZZA.init({ G, places, fishing, toast, addCash, Sfx }); // Pizza City interior
 STORES.init({ G, places, fishing, toast, addCash, Sfx }); // Bev's Threads + Hank's Hardware interiors
+MANSIONS.init({ G, places, toast, addCash, Sfx }); // Estates house interiors
 WARD.init({ cat, fishing, Sfx, toast }); // wardrobe
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
