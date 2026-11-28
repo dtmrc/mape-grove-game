@@ -625,8 +625,12 @@ function liftObj(o) {
     o.rotation.order = 'YXZ'; o.rotation.x = -pitch; o.rotation.z = roll + o.rotation.z;
   }
 }
+let indoorsNow = false;
+/** Indoors (interiors.js draws only camera layer 1) nothing outside is on screen: beforeRender has nothing to lift. */
+export function indoors(b) { indoorsNow = !!b; }
 export function beforeRender(scene, camera, tx, tz) {
   saved.length = 0;
+  if (indoorsNow) return;
   if (groundTiles.length) groundLod(camera);
   _tmp.length = 0; for (const c of scene.children) _tmp.push(c);
   for (const c of _tmp) liftObj(c);

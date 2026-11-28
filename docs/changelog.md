@@ -19,6 +19,32 @@
   removed out of sight. The casualty stays down until then. EMTs and the stretcher are built once and reused.
 - House-fire call-outs (firestarter.js) use the same baked engine.
 - Suite `ems` (26-ems.cjs). `window.__EMS.dispatch()` calls an ambulance for the nearest walker.
+## 2026-11-28: stutter log on the device, interiors warm up behind the door fade
+- diet: stutter on the phone, also inside Hank's shop; "optimise all building interiors".
+- src/js/hitchlog.js: Settings > Show FPS now also lists each long frame: its length, the game's own JS time in it,
+  and what was uploaded or created (texture megapixels, vertex kB, shaders, people / cars spawned, house atlas swaps,
+  room entries, render height changes). Headless software GL cannot show phone stutter, this can.
+- Interiors are built on first entry and were uploaded piece by piece as the camera first turned to each thing (150
+  to 350 vertex buffers and 20 to 30 textures per room). prewarm.js `warm(group)`, called from the interiors `enter`
+  event, switches frustum culling off for two frames so the whole room goes up in the frame behind the door fade.
+  Looking around a room afterwards uploads nothing (measured in all 13 rooms).
+- The indoor floor plan (minimap canvas) was redrawn every frame, the second largest indoor cost after three's
+  render; it now redraws only when the cat moves or turns. The terrain lift is skipped indoors (`TER.indoors`).
+- Rooms were already one mesh per material (32 to 108 draw calls) with baked light, so nothing was merged further.
+
+## 2026-11-27: house atlas swap fixed, world chunk vertex arrays freed
+- Bug in the performance pass (it was live for a few hours): the full house atlas was swapped in by changing
+  `texture.source`. three.js keeps one fixed-size GPU texture per Texture, so the 2048 upload into the 1024 texture
+  failed (GL_INVALID_OPERATION) and Estates houses stayed half resolution up close, with a wasted 16 MB decode on
+  every approach. Now the half atlas stays loaded for good and the full one is its own Texture; the house materials'
+  `map` is switched (world.js registers them with `houseMat`). The full atlas is uploaded from an ImageBitmap made off
+  the main thread (`MODE.bitmap`), and going back to half costs nothing. Suite `housetex` now watches texStorage2D for
+  the 2048 upload and for GL errors (it fails on the old code).
+- src/js/vfree.js (diet: "lets get the vertex freed"): the merged world chunks drop their vertex arrays right after
+  upload, 54 MB in 485 arrays. Nothing reads them again (terrain lift and editor moves are done in the shader).
+  The cost: three can no longer rebuild those buffers after a lost WebGL context, so a lost context now saves the
+  game and reloads the page when the context comes back (before, it carried on in place). `?vfree=0` keeps the arrays.
+  Suite `vfree`. Not freed: ground meshes (the terrain editor rewrites them), figures, cars, props.
 
 ## 2026-11-27: Goob's truck baked like the other cars (on main, test page only)
 - diet asked to re-bake the truck. tools/vehicles/bake.cjs now bakes `goobtruck` (class `goob`, own livery) into
