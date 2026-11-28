@@ -39,6 +39,7 @@ function status(q) {
   const G = A.G, m = mission();
   if (q.id === 'catch') { const st = catchStage(); return st === 'done' ? 'done' : st === 'none' ? 'open' : 'active'; }
   if (m && m.id === q.id) return 'active';
+  if (q.kind === 'side' && G.sideDone && G.sideDone[q.id]) return 'done';   // jobs.js: done for today
   if (q.needs && !q.needs.every((n) => G.done[n])) return 'locked';
   if (q.kind === 'story' && G.done[q.id]) return 'done';
   return 'open';
@@ -60,6 +61,7 @@ function guide(q) {
   if (st === 'active') return { obj: A.G.objRaw || '', check: A.G.check };   // the running mission
   if (st === 'locked') return { obj: `Locked: finish ${q.needs.filter((n) => !A.G.done[n]).map((n) => BY[n].title).join(', ')} first.`, check: null };
   const at = giverSpot(q), who = q.giver.replace(/^the /, '');
+  if (st === 'done' && q.kind === 'side') return { obj: `Done for today. ${q.giver[0].toUpperCase() + q.giver.slice(1)} may have another one tomorrow morning.`, check: null };
   const verb = st === 'done' ? `Replay for half pay: talk to ${q.giver} at ${q.where}.` : `Talk to ${q.giver} at ${q.where} to start.`;
   const obj = m ? `${verb} (finish ${m.title || 'the current job'} first)` : verb;
   return { obj, check: at && !near(at, 3.5) ? { x: at.x, z: at.z, r: 2.5, label: who[0].toUpperCase() + who.slice(1), col: '#ffd23f' } : null };

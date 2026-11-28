@@ -993,7 +993,9 @@ function busted() {
   respawn('CITED!', `The HOA fined you $${fine}.`, places.rv);
 }
 function respawn(title, sub, at) {
+  const lost = mission && mission.title; // say which job the respawn ended, so it doesn't look like it reset on its own
   if (mission) endMission(false, '');
+  if (lost) sub += ` ${lost} failed.`;
   if (P.car) exitCar();
   fishing.abort(); jail.end({ quiet: true }); police.dropGun(); // no cast, cell or pistol survives a respawn
   banner(title, sub, 4, 'fail');
@@ -1500,7 +1502,7 @@ function updateHeat(dt) {
     // car wash scrubs you clean
     if (P.car && inZone('wash', P.car.x, P.car.z) && !(mission && mission.id === 'gary')) {
       G.heat = 0; toast('Suds N Paws: squeaky clean. Heat cleared!');
-      P.car.hp = Math.min(100, P.car.hp + 40); P.car.washed = true; // on the house this visit
+      P.car.hp = Math.max(P.car.hp, Math.min(P.car.maxHp || 100, P.car.hp + 40)); P.car.washed = true; // on the house this visit
     }
     // getting cited (HOA carts only; the PD cuffs instead)
     let close = false;
@@ -1553,7 +1555,7 @@ function updateCars(dt) {
   }
   // keep traffic topped up, clear wrecks far away
   let ai = 0, walkers = 0;
-  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90 && SV_.hidden(c.x, c.z, 90)) || (c.driver === 'ai' && !c.role && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
+  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90 && SV_.hidden(c.x, c.z, 90)) || (c.driver === 'ai' && !c.role && !c.keep && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
   if (!cars.some((c) => c.role === 'goob' && !c.dead) && Math.hypot(places.goobTruck.x - px(), places.goobTruck.z - pz()) > 80 && !cars.some((c) => Math.hypot(c.x - places.goobTruck.x, c.z - places.goobTruck.z) < 4)) goobTruck();
   if (ai < 12 && Math.random() < dt) spawnTraffic(['sedan', 'hatch', 'pickup', 'wagon'][(Math.random() * 4) | 0]);
   for (let i = 0; i < peds.length; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human') walkers++; }
@@ -1561,7 +1563,7 @@ function updateCars(dt) {
   // cap the crowd (carjack victims pile up): drop far-off walkers over the cap, and cars the player left far behind
   let over = walkers - 22;
   if (over > 0) for (let i = 0; i < peds.length && over > 0; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human' && Math.hypot(p.x - px(), p.z - pz()) > 90 && SV_.hidden(p.x, p.z, 90)) { removePed(p); over--; i--; } }
-  if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110 && SV_.hidden(c.x, c.z, 110)) { removeCar(c); i--; } }
+  if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && !c.keep && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110 && SV_.hidden(c.x, c.z, 110)) { removeCar(c); i--; } }
 }
 
 let districtT = 0, district = '';
@@ -1680,7 +1682,7 @@ function frame(now) {
   setText(hud.cash, '$' + String(G.cash).padStart(8, '0'));
   setStyle(hud.hp, 'width', Math.max(0, G.hp) + '%');
   setStyle(hud.carhp, 'display', P.car ? 'block' : 'none');
-  if (P.car) setStyle(hud.carhpfill, 'width', P.car.hp + '%');
+  if (P.car) setStyle(hud.carhpfill, 'width', Math.min(100, P.car.hp / (P.car.maxHp || 100) * 100) + '%');
   setStyle(hud.fuel, 'display', P.car ? 'flex' : 'none');
   if (P.car) { const f = P.car.fuel ?? 100, el = hud.fuelfill; setStyle(el, 'width', f + '%'); setStyle(el, 'background', f < 20 ? '#ff4040' : f < 45 ? '#ffd23f' : '#7fe07f'); setClass(hud.fuel, 'low', f < 20); setClass(hud.fuel, 'pump', !!P.car.filling); }
   const prompt = !P.car && !G.dialog && !G.paused ? (catshow.prompt() || haunted.prompt() || hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
