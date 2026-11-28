@@ -20,6 +20,14 @@ const LOD_FAR = 38;
 const BASE = { sedan: 'sedan', sport: 'hatch', suv: 'suv', pickup: 'pickup', cart: 'golfcart' };
 // which models a requested procedural type turns into
 const POOLS = { sedan: ['sedan', 'sedan', 'sport'], hatch: ['sedan', 'sport'], wagon: ['suv'], suv: ['suv'], pickup: ['pickup'], golfcart: ['cart'] };
+// town service vehicles (tools/vehicles GAME.service): fixed handling per model, keep their livery, red/white bar flashes only with the siren on
+// (diet 2026-11-28: "make the tractor drivable ... same for the fire truck and emergency medical vehicle at the hospital")
+export const SERVICE = {
+  pumper12: { fam: 'pickup', top: 24, acc: 5.5, grip: 4.6, mass: 2.6, siren: true, name: 'VFD Engine 1' },
+  ambulance15: { fam: 'pickup', top: 30, acc: 8, grip: 5.2, mass: 1.9, siren: true, name: 'Maple Grove EMS' },
+  tractor: { fam: 'pickup', top: 11, acc: 5, grip: 7.5, mass: 1.5, name: 'Greenacre 5045', tractor: true },
+};
+const BAR_SIREN = [[0xff2020, 0x301010], [0xffffff, 0x303030]];
 const byCls = {};
 for (const [id, I] of Object.entries(INDEX)) if (GLB[id]) (byCls[I.cls] ||= []).push(id);
 
@@ -32,6 +40,12 @@ export function registerVehicles(CAR_TYPES) {
     if (!GLB[id]) continue;
     // Goobles' truck: the baked model (one atlas, 4 draw calls instead of 33) with its hand-tuned handling, lamps and size
     if (I.cls === 'goob') { const T = CAR_TYPES[id]; if (T) { T.model = id; T.glb = { ...T.glb, livery: true, bar: false }; } continue; }
+    if (I.cls === 'service') {
+      const V = SERVICE[id]; if (!V) continue;
+      CAR_TYPES[id] = { len: I.len, wid: +(I.wid * 0.9).toFixed(2), h: +(I.roofY * 0.5).toFixed(2), top: V.top, acc: V.acc, grip: V.grip, mass: V.mass, cls: V.fam, name: V.name, model: id, service: true, tractor: !!V.tractor,
+        glb: { wr: I.wr, ww: I.ww, wx: I.wx, axles: I.axles, rear: I.rear, duals: I.duals, roofY: I.roofY, roofZ: I.roofZ, glows: I.glows, livery: true, bar: !!V.siren, siren: !!V.siren } };
+      continue;
+    }
     const police = I.cls === 'police', cart = I.cls === 'cart', fam = police ? (I.roofY > 1.55 ? 'suv' : 'sedan') : I.cls;
     const B = CAR_TYPES[BASE[fam]], peers = byCls[I.cls];
     const k = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -131,17 +145,24 @@ export function makeModelCar(type, color, o, CAR_TYPES) {
   if (!G.livery) { paint.color.set(color); const hi = Math.max(paint.color.r, paint.color.g, paint.color.b); paint.color.multiplyScalar(Math.min(1.45, 1.15 / Math.max(hi, 0.01))); } // whites would blow out
   const bar = [basic({ color: 0xff2020 }), basic({ color: 0x2050ff })];
   const wheels = [], spins = [];
-  for (const z of G.axles) for (const s of [1, -1]) {
-    const pv = new THREE.Group(), spin = new THREE.Group(); pv.position.set(s * G.wx, G.wr, z); root.add(pv); pv.add(spin);
-    wheels.push(pv); spins.push([spin, s]);
-  }
+  // rear axle: a bigger wheel (tractor, G.rear) or dual wheels (fire engine, ambulance, G.duals) on the same pivot
+  G.axles.forEach((z, ai) => { for (const s of [1, -1]) {
+    const R = ai > 0 ? G.rear : null, D = ai > 0 ? G.duals : null;
+    const pv = new THREE.Group(), spin = new THREE.Group(); pv.position.set(s * (R ? R.x : D ? D.x : G.wx), R ? R.r : G.wr, z); root.add(pv); pv.add(spin);
+    wheels.push(pv); spins.push([spin, s, R, D]);
+  } });
   addShadow(root, S.wid + 1.0, S.len + 1.0);
   { const sh = root.children[root.children.length - 1]; sh.updateMatrix(); sh.matrixAutoUpdate = false; }
   load(S.model, (sc) => {
     paint.map = sc.getObjectByName('Paint').material.map; paint.needsUpdate = true;
     const bodyLod = lodOf(sc, ['Paint', 'Body', 'BarR', 'BarB'], { Paint: paint, BarR: bar[0], BarB: bar[1] }), wheelLods = [];
     body.add(bodyLod);
-    for (const [spin, s] of spins) { const w = lodOf(sc, ['Wheel'], {}); if (s < 0) w.scale.x = -1; spin.add(w); wheelLods.push(w); }
+    for (const [spin, s, R, D] of spins) for (let k = 0; k < (D ? 2 : 1); k++) {
+      const w = lodOf(sc, ['Wheel'], {}), q = R ? R.r / G.wr : 1;
+      w.scale.set((s < 0 ? -1 : 1) * (R && G.ww ? R.w / G.ww : q), q, q);
+      if (k) w.position.x = -s * D.w;   // inner dual
+      spin.add(w); wheelLods.push(w);
+    }
     mergeWheels(root, wheels, spins, wheelLods);
   }, () => {
     // decoder unavailable: fall back to the procedural car of the same family so the game still has cars
@@ -161,5 +182,7 @@ export function makeModelCar(type, color, o, CAR_TYPES) {
   }
   const glows = G.glows.map(([x, y, z, c, s]) => ({ x, y, z, c, s }));
   root.userData = { body, wheels, bar: G.bar || o.lightbar ? bar : null, wr: G.wr, spec: S, paint, glows };
+  if (G.siren) { root.userData.barc = BAR_SIREN; root.userData.siren = true; bar[0].color.setHex(BAR_SIREN[0][1]); bar[1].color.setHex(BAR_SIREN[1][1]); }
+  if (G.rear) root.userData.wk = [1, 1, G.wr / G.rear.r, G.wr / G.rear.r];   // big rear wheels turn slower
   return root;
 }

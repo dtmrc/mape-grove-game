@@ -3,7 +3,9 @@
 function heavyKit(K) {
   const H = {};
   /** dual rear wheels (inner + outer per side) */
-  H.duals = (z, x, r, w, o = {}) => { for (const s of [-1, 1]) { K.wheel(s * x, r, z, { r, w, rim: 0.56, style: 'steel', holes: 10, ...o }); K.wheel(s * (x - w - 0.02), r, z, { r, w, rim: 0.56, style: 'steel', holes: 10, ...o }); } };
+  // game export (MODE body / wheel): the duals stay out of the body and become the rear axle; the game hangs two wheel meshes on
+  // each rear pivot (wheel.json duals = {x: outer wheel centre, w: wheel width + gap})
+  H.duals = (z, x, r, w, o = {}) => { if (K.mode) { if (K.wheelOpt) { K.wheelOpt.axles = [...K.wheelOpt.axles, z]; K.wheelOpt.duals = { x, w: w + 0.02 }; } return; } for (const s of [-1, 1]) { K.wheel(s * x, r, z, { r, w, rim: 0.56, style: 'steel', holes: 10, ...o }); K.wheel(s * (x - w - 0.02), r, z, { r, w, rim: 0.56, style: 'steel', holes: 10, ...o }); } };
   /** frame rails and a fuel tank */
   H.rails = (z0, z1, y, hw = 0.45) => { for (const s of [-1, 1]) K.bx('Under', s * hw, y, z0, s * (hw - 0.1), y + 0.22, z1); };
   /** mud flaps behind a wheel */

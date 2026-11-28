@@ -722,14 +722,9 @@ function extras(F, w, d, h, list, o) {
       for (let k = 0; k < 3; k++) F.geo(new THREE.BoxGeometry(2.4, 0.4, 0.5), 'wood', 0xc0a080, -w / 2 - 0.6, 0.2 + k * 0.4, -d / 2 + 1 + k * 0.05, Math.PI / 2);
       F.col(-w / 2 - 0.6, -d / 2 + 1, 0.6, 2.4, 1.2);
     } else if (e === 'tractor') {
-      const tx = w / 2 + 3.5, tz = -d / 2 - 3;
-      F.box(tx, 1.2, tz, 1.2, 0.9, 2.6, 'plain', 0x2a8a3a);
-      F.box(tx, 1.9, tz - 0.6, 1.0, 0.6, 1.0, 'plain', 0x2a8a3a);
-      for (const s of [-1, 1]) {
-        F.geo(new THREE.CylinderGeometry(0.85, 0.85, 0.4, 10).rotateZ(Math.PI / 2), 'plain', 0x1a1a1a, tx + s * 0.85, 0.85, tz - 0.8);
-        F.geo(new THREE.CylinderGeometry(0.45, 0.45, 0.3, 8).rotateZ(Math.PI / 2), 'plain', 0x1a1a1a, tx + s * 0.75, 0.45, tz + 1.0);
-      }
-      F.col(tx, tz, 2.4, 3, 2.2);
+      // the farm's tractor (drivable Greenacre 5045, ems.js): parked behind the house, nose toward the road
+      const [x, z] = F.at(w / 2 + 3.5, -d / 2 - 3), [fx, fz] = F.at(w / 2 + 3.5, -d / 2 - 2);
+      places.tractor = { x, z, yaw: Math.atan2(fx - x, fz - z) };
     } else if (e === 'windchime') {
       F.halo(1.6, 2.3, d / 2 + 0.6, 0.7, 0x80c0ff);
     } else if (e === 'yardsale') {
@@ -1826,7 +1821,7 @@ function buildSchool() {
 function buildPineHollow() {
   const H = [
     // (the two homes that faced Main St moved when the shops went in: the farmhouse to Lake Rd, the trailer across Hollow Ln)
-    [15, 33, -Math.PI / 2, { style: 'farm', wall: 0xf0f0ea, roof: 0x6a2a2a, w: 10, drive: 3, gravel: true, extras: ['woodpile', 'flag'], flag: 0x2a5a2a, fence: 'rail' }],
+    [15, 33, -Math.PI / 2, { style: 'farm', wall: 0xf0f0ea, roof: 0x6a2a2a, w: 10, drive: 3, gravel: true, extras: ['woodpile', 'flag', 'tractor'], flag: 0x2a5a2a, fence: 'rail' }],
     [141, 22, -Math.PI / 2, { style: 'mobile', wall: 0xe0e8f0, roof: 0x8a9098, trim: 0x2a6ab0, drive: 3.5, extras: ['flamingos', 'junker'], junk: 0x4a6a8a, fence: 'chain' }],
     // facing south onto Hollow Ln
     [74, 32, 0, { style: 'cottage', wall: 0xf4d9a8, roof: 0x5a3a2a, drive: 4, extras: ['garden', 'scarecrow', 'chimney'] }],
@@ -2285,23 +2280,8 @@ function buildFireStation() {
     F.sign(t, '#f4f0e0', '#c01818', 4, 0.42, y, 11.48, { tw: 384, th: 40, lx: 10.4, rr: Math.PI });
   }
   F.col(10.4, 11.6, 4.4, 0.6, 2.2);
-  // a parked engine in the open bay, nose out on the apron
-  {
-    const tx = 2;
-    for (const lz of [-0.5, 4.8]) for (const s of [-1, 1]) F.geo(new THREE.CylinderGeometry(0.5, 0.5, 0.4, 10).rotateZ(Math.PI / 2), 'plain', 0x1a1a1a, tx + s * 1.1, 0.5, lz);
-    F.box(tx, 1.75, 0.3, 2.5, 2.2, 5.6, 'plain', RED);                                 // body
-    F.box(tx, 2.95, 0.3, 2.3, 0.2, 5.4, 'metal', 0xc8ccd0);                             // ladder bed
-    for (const s of [-1, 1]) F.box(tx + s * 0.6, 3.15, 0.3, 0.1, 0.2, 5.4, 'metal', 0xd8d8d8);
-    F.box(tx, 1.75, 4.4, 2.5, 2.6, 2.2, 'plain', RED);                                 // cab
-    F.box(tx, 1.1, 2.5, 2.54, 0.18, 6, 'plain', 0xf4f4f0);                             // white stripe
-    F.face(tx, 2.45, 5.51, 2.2, 0.9, 'window', 0x9ab0c0);
-    F.box(tx, 0.75, 5.6, 2.6, 0.3, 0.2, 'metal', 0xd8d8d8);                            // bumper
-    for (const s of [-1, 1]) { F.box(tx + s * 0.8, 1.2, 5.52, 0.4, 0.25, 0.05, 'lamp', 0xfff4d0); F.box(tx + s * 0.6, 3.15, 4.4, 0.6, 0.18, 0.3, 'lamp', 0xff3020); }
-    F.halo(tx, 3.3, 4.4, 1.4, 0xff3020);
-    F.sign('MAPLE GROVE VFD', '#c01818', '#ffd23f', 1.6, 0.4, 2.1, 4.4, { tw: 256, th: 64, lx: tx - 1.27, rr: -Math.PI / 2 });
-    F.sign('MAPLE GROVE VFD', '#c01818', '#ffd23f', 1.6, 0.4, 2.1, 4.4, { tw: 256, th: 64, lx: tx + 1.27, rr: Math.PI / 2 });
-    F.col(tx, 3.8, 2.6, 3.8, 3);
-  }
+  // VFD Engine 1 (drivable, ems.js) parks on the apron in front of the open bay, nose toward the highway
+  { const [x, z] = F.at(2, 7.4), [fx, fz] = F.at(2, 8.4); places.fireEngine = { x, z, yaw: Math.atan2(fx - x, fz - z) }; }
   hydrant(...F.at(-14, 11));
   places.fireStation = (([x, z]) => ({ x, z, yaw: Math.PI }))(F.at(-2, 8));
 }
@@ -2352,14 +2332,8 @@ function buildHospital() {
   F.sign('EMERGENCY', '#d02a2a', '#ffffff', 5.2, 0.55, 4.3, -0.77, { lx: 13.5, tw: 384, th: 40, glow: true });
   F.sign('EMERGENCY', '#d02a2a', '#ffffff', 5, 0.8, 3.4, -6.93, { lx: 13.5, tw: 384, th: 48, glow: true });
   F.halo(13.5, 4.3, -0.4, 4.5, 0xff3030); F.light(13.5, 3.6, -3, 0xff7070, 1.1, { always: true });
-  // the town's one ambulance, parked under the canopy
-  F.box(13.5, 0.4, -4, 5.6, 0.5, 2.1, 'plain', 0x333336);
-  F.box(14.3, 1.6, -4, 3.8, 2.2, 2.2, 'plain', 0xf8f8f4); F.box(11.7, 1.3, -4, 1.8, 1.6, 2.1, 'plain', 0xf8f8f4);
-  F.box(11.15, 1.6, -4, 0.7, 0.7, 2.12, 'plain', 0x24343e);
-  F.box(14.3, 1.35, -4, 3.82, 0.3, 2.22, 'plain', RED); F.box(14.3, 2.15, -4, 1.4, 0.3, 2.24, 'plain', RED); F.box(14.3, 2.15, -4, 0.3, 1.0, 2.24, 'plain', RED);
-  for (const z of [-4.6, -3.4]) { F.box(12.2, 2.2, z, 0.3, 0.16, 0.3, 'lamp', z < -4 ? 0xff3030 : 0x4060ff); }
-  for (const [x, z] of [[11.8, -5.05], [11.8, -2.95], [15.3, -5.05], [15.3, -2.95]]) F.geo(new THREE.CylinderGeometry(0.38, 0.38, 0.28, 8).rotateX(Math.PI / 2), 'plain', 0x1a1a1a, x, 0.38, z);
-  F.col(13.5, -4, 5.6, 2.2, 2.7);
+  // the town's ambulance (drivable, ems.js) parks under the canopy, nose west toward the lot exit
+  { const [x, z] = F.at(13.5, -4), [fx, fz] = F.at(12.5, -4); places.ambulance = { x, z, yaw: Math.atan2(fx - x, fz - z) }; }
   // roof: helipad, AC units, red-cross sign facing the highway
   F.geo(new THREE.CylinderGeometry(4.6, 4.6, 0.12, 20), 'plain', 0x5a5e62, -9, 7.66, -12);
   F.geo(new THREE.TorusGeometry(4.0, 0.15, 3, 20).rotateX(Math.PI / 2), 'plain', 0xf0d040, -9, 7.74, -12);

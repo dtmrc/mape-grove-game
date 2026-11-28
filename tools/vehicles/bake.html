@@ -85,7 +85,7 @@ window.bake = async (bodyUrl, wheelUrl, o) => {
   const barR = [], barB = [], rest = [];
   for (const s of B) {
     if (o.police && /^Light(Red|Blue|White)$/.test(s.name)) {
-      const up = pick(s.g, (x, y) => y > paintTop - 0.02), low = pick(s.g, (x, y) => y <= paintTop - 0.02);
+      const by = o.barY ?? paintTop - 0.02, up = pick(s.g, (x, y) => y > by), low = pick(s.g, (x, y) => y <= by);
       if (up.attributes.position.count) (s.name === 'LightRed' ? barR : barB).push(up);
       if (low.attributes.position.count) rest.push({ ...s, g: low });
     } else if (s.name !== 'Paint') rest.push(s);

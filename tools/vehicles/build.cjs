@@ -45,7 +45,7 @@ const NAMES = JSON.parse(fs.readFileSync(path.join(__dirname, 'roster.json'), 'u
       s.renderList(); s.applyDisplay({ textured: true, wireframe: false, flat: false }); s.select(null);
       const bb = new T.Box3(); objs.forEach((o) => bb.expandByObject(o.mesh));
       const tris = objs.reduce((n, o) => n + o.mesh.geometry.getAttribute('position').count / 3, 0);
-      const wo = K.wheelOpt; return { wheel: wo ? { r: wo.r, w: wo.w, x: wo.x, axles: wo.axles } : null, tris, bb: [bb.min.toArray(), bb.max.toArray()], json: JSON.stringify({ version: 2, name: NAME, display: tracebench.project.display, scene: s.serialize() }) };
+      const wo = K.wheelOpt; return { wheel: wo ? { r: wo.r, w: wo.w, x: wo.x, axles: wo.axles, rear: wo.rear, duals: wo.duals } : null, tris, bb: [bb.min.toArray(), bb.max.toArray()], json: JSON.stringify({ version: 2, name: NAME, display: tracebench.project.display, scene: s.serialize() }) };
     }, [SRC, NAME, id, MODE]);
     fs.writeFileSync(path.join(OUT, `${NAME}.tracebench.json`), info.json);
     if (info.wheel) fs.writeFileSync(path.join(OUT, 'wheel.json'), JSON.stringify(info.wheel));   // axle layout for the game bake (bake.cjs)
