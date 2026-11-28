@@ -11,6 +11,7 @@ import { makeHens } from './hens.js';
 import { makeHaunted } from './haunted.js';
 import { makeMeows } from './meows.js';
 import { makeYardCats, KEY as YARDCATS_KEY } from './yardcats.js';
+import { makeCatShow, KEY as CATSHOW_KEY } from './catshow.js'; // cat show on the town green
 import { makeRadio } from './radio.js'; // radio
 import { makeDash } from './dash.js'; // dash: speedometer + radio buttons
 import { makeFirestarter } from './firestarter.js';
@@ -100,7 +101,7 @@ TER.initWorld(scene, { lights, halos, flames }); // engine: link loose world obj
 // ---------------- state ----------------
 const SAVE_KEY = 'maple-grove-offleash-v1';
 // every key NEW GAME wipes: this save, fishing, weather, the sky's day counter, the dev view (not the world editor's maple-grove-world-v1, that is the map)
-const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1', YARDCATS_KEY, MSAVE.MISSION_KEY];
+const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1', YARDCATS_KEY, CATSHOW_KEY, MSAVE.MISSION_KEY];
 const G = {
   cash: 0, hp: 100, heat: 0, seenT: 0, bustT: 0, clock: 21.5, done: {}, yarn: [],
   mission: null, dialog: null, paused: true, banner: null, over: false, time: 0,
@@ -1095,7 +1096,7 @@ function updatePlayer(dt) {
   // interact
   if (hit('e', 'f', 'enter') && !(P.lock > 0)) {
     const npc = nearNpc();
-    if (haunted.interact()) { /* haunted: note, fetch items, site, bulldozer */ } else if (hens.interact()) { /* hens: clues, coop, bucket */ } else if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
+    if (catshow.interact()) { /* catshow: entries desk */ } else if (haunted.interact()) { /* haunted: note, fetch items, site, bulldozer */ } else if (hens.interact()) { /* hens: clues, coop, bucket */ } else if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
     else if (near) enterCar(near);
   }
   if (hit('e', 'f', 'enter') === false && false) {/* noop */}
@@ -1640,6 +1641,7 @@ function frame(now) {
     otters.update(dt);
     meows.update(dt);
     yardcats.update(dt); // yardcats
+    catshow.update(dt); // catshow
     fires.update(dt);
     cave.update(dt);
     hens.update(dt);
@@ -1674,7 +1676,7 @@ function frame(now) {
   if (P.car) setStyle(hud.carhpfill, 'width', P.car.hp + '%');
   setStyle(hud.fuel, 'display', P.car ? 'flex' : 'none');
   if (P.car) { const f = P.car.fuel ?? 100, el = hud.fuelfill; setStyle(el, 'width', f + '%'); setStyle(el, 'background', f < 20 ? '#ff4040' : f < 45 ? '#ffd23f' : '#7fe07f'); setClass(hud.fuel, 'low', f < 20); setClass(hud.fuel, 'pump', !!P.car.filling); }
-  const prompt = !P.car && !G.dialog && !G.paused ? (haunted.prompt() || hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
+  const prompt = !P.car && !G.dialog && !G.paused ? (catshow.prompt() || haunted.prompt() || hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
   setText(hud.prompt, prompt); setStyle(hud.prompt, 'display', prompt ? 'block' : 'none');
   if (jail.active() && !G.dialog && !G.paused) { const jp = jail.prompt(); setText(hud.prompt, jp); setStyle(hud.prompt, 'display', jp ? 'block' : 'none'); } // jailbreak
   setText(hud.usebtn, P.car ? 'EXIT' : prompt ? (prompt.includes('Talk') ? 'TALK' : prompt.includes('Get in') ? 'GET IN' : prompt.replace(/^E[:!]? ?/, '').split(' ')[0].toUpperCase().slice(0, 6)) : 'USE');
@@ -1731,6 +1733,8 @@ window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ carsNear: (x, z, r) => CARG.near(x, z, r, _bCop), scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time, hidden: SV_.hidden });
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
+// catshow: the Grand National Feline Classic at the gazebo (src/js/catshow.js)
+const catshow = makeCatShow({ scene, G, P, cat, places, quests, fishing, yardcats, say, toast, banner, Sfx, addCash, isTouch, mission: () => mission, inside: () => INT.inside }); window.__G.catshow = catshow;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block
 Object.assign(window.__G, { banner, toast, addCash });

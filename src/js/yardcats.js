@@ -817,3 +817,30 @@ export function makeYardCats(ctx) {
   };
   return api;
 }
+
+// ---------- dressed copies for other modules (catshow.js: the rival show cats) ----------
+/** Parses the GLB again (the yard cats drop their source atlas after init) and dresses one cat per look
+ *  ({ fur, pat, p2, p3, eye, acc, ac } as in CATS). Resolves to { list: [{ root, play(name, once), mixer }], update(dt), dispose() }. */
+export function makeCatFigures(looks) {
+  return new Promise((resolve, reject) => {
+    const buf = GLB.buffer.slice(GLB.byteOffset, GLB.byteOffset + GLB.byteLength);
+    new GLTFLoader().parse(buf, '', (gltf) => {
+      const keepT = template, keepS = srcCanvas;
+      try {
+        buildTemplate(gltf);
+        const mine = template, mats = [];
+        const list = looks.map((look, i) => {
+          const root = new THREE.Group(), body = new THREE.Group(); root.add(body); addShadow(root, 0.42, 0.42);
+          const c = { def: { look }, root, body };
+          makeCatModel(c, i + 11); root.visible = true; mats.push(c.mat);
+          return { root, mixer: c.mixer, play: (name, once = false) => { const a = play(c, name, 0.2, once); if (once && a) c.mixer.addEventListener('finished', function back(e) { if (e.action === a) { c.mixer.removeEventListener('finished', back); play(c, 'Idle'); } }); } };
+        });
+        resolve({
+          list,
+          update: (dt) => { for (const f of list) f.mixer.update(dt); },
+          dispose: () => { for (const m of mats) { m.map && m.map.dispose(); m.dispose(); } mine.scene.traverse((n) => { if (n.isMesh && n.geometry) n.geometry.dispose(); }); },
+        });
+      } catch (e) { reject(e); } finally { if (keepT) template = keepT; srcCanvas = keepS; }
+    }, reject);
+  });
+}
