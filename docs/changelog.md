@@ -60,7 +60,7 @@
   ten tufts on an Estates lawn in 45 s, one instanced mesh), Tow Rescue (drive a ticketed car to the RV lot before the
   HOA tow, may draw an HOA star). Work rep: +10% pay per 4 shifts (max +50%); 3 in a row = $50 bonus. Save key
   mg-oddjobs-v1. Debug window.__G.oddjobs.
-- QA: suite 27-hoastory (scenario tools/qa/scenarios/hoastory.cjs, also takes shots).
+- QA: suite 28-hoastory (scenario tools/qa/scenarios/hoastory.cjs, also takes shots).
 
 ## 2026-11-28: drivable fire engine, ambulance and tractor; ambulance dispatch after run-overs (on main, test page only)
 - diet: "make the tractor drivable with enhanced graphics? same for the fire truck and emergency medical vehicle at the
