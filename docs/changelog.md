@@ -8,7 +8,11 @@
 - jobs.js: the job's cart gets 260 hp, a full tank and `keep` (game.js cleanup skips kept cars) while the job runs;
   only parked carts at the lot are taken; a cart that vanished anyway is replaced. HUD car bar and the car wash use
   `maxHp`. Any respawn (cited, knocked out) now says which job it failed.
-- qa suite missions: five new Repo Man checks.
+- diet picked the real symptom: a finished Repo Man was offered again straight away. Now it counts as done for the
+  day: the quest log shows DONE ("Done for today"), Nana's marker stays off and her gnome stands on the lawn by her
+  porch. From 6 AM the next game day Gary has towed it again and the job is back (Nana has a second intro for repeats).
+  Saved in the jobs key (`cool`). Fish Order and Sign Language are unchanged.
+- qa suite missions: nine new Repo Man checks.
 ## 2026-11-28: drivable fire engine, ambulance and tractor; ambulance dispatch after run-overs (on main, test page only)
 - diet: "make the tractor drivable with enhanced graphics? same for the fire truck and emergency medical vehicle at the
   hospital ... when we run over pedestrians, there should be some random ambulance dispatches with stretchers and emts".

@@ -60,5 +60,24 @@ module.exports = {
     check('car cleanup leaves the Repo Man cart alone', q.kept, q);
     check('Repo Man cart takes ten hard knocks', q.after.hp > 0 && !q.after.dead && q.after.taken, q.after);
     check('a citation says the job failed', /Repo Man failed/.test(q.cited) && q.keepCleared, q);
+
+    // finished means done for the day (diet 2026-11-28: "finished it, but it's offered again"): gnome back, job back at 6 AM
+    const d = await S.js(async () => {
+      const QA = window.QA, W = window.__G, { G, P, jobs, enterCar } = W, o = {};
+      await QA.tp('nana', { settle: 1, render: false }); P.lock = 0; G.clock = 12;
+      G.done.nana = true; jobs.start('repo'); QA.step(1, { render: false });
+      const m = W.mission; enterCar(m.cart, true); m.cart.x = m.drop.x; m.cart.z = m.drop.z; m.cart.vx = m.cart.vz = m.cart.speed = 0; QA.step(2, { render: false });
+      o.passed = !W.mission; QA.step(1, { render: false });
+      const row = () => W.quests.list().find((x) => x.id === 'repo');
+      o.done = { status: row().status, step: row().step, marker: jobs.marks.repo.visible, saved: JSON.parse(localStorage.getItem('maple-grove-offleash-jobs-v1') || '{}').cool };
+      G.clock = 23.9; QA.step(1, { render: false }); o.night = row().status;
+      G.clock = 5.99; QA.step(1, { render: false }); G.clock = 6.05; QA.step(1, { render: false }); QA.step(1, { render: false });
+      o.morning = { status: row().status, marker: jobs.marks.repo.visible };
+      return o;
+    });
+    check('Repo Man passes at the RV', d.passed, d);
+    check('finished Repo Man shows done, no marker, saved', d.done.status === 'done' && !d.done.marker && /Done for today/.test(d.done.step) && d.done.saved && d.done.saved.repo, d.done);
+    check('still done that night', d.night === 'done', d);
+    check('offered again next morning', d.morning.status === 'open' && d.morning.marker, d.morning);
   },
 };

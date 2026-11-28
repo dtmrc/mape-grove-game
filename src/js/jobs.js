@@ -21,11 +21,11 @@ const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(
 export function makeJobs(A) {
   const { MISSIONS, INTROS, DONE_LINES, spawnCar, setCheck, objective, toast, banner, addHeat, places, cars, P, G, fishing, NPC, giverMarks, makeMarker, say, startMission, endMission, scene, T, Sfx, ahead } = A;
   const mission = () => A.mission();
-  const S = { best: {}, jobs: {}, truceLeft: 0, forsale: false, pendingBanner: 0, saveT: 0, props: [] };
-  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { S.best = s.best || {}; S.jobs = s.jobs || {}; S.truceLeft = s.truceLeft || 0; S.forsale = !!s.forsale; } } catch (e) { /* storage blocked */ }
-  G.best = S.best; G.jobs = S.jobs;
+  const S = { best: {}, jobs: {}, truceLeft: 0, forsale: false, pendingBanner: 0, saveT: 0, props: [], cool: {}, lastClock: G.clock };
+  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { S.best = s.best || {}; S.jobs = s.jobs || {}; S.truceLeft = s.truceLeft || 0; S.forsale = !!s.forsale; S.cool = s.cool || {}; } } catch (e) { /* storage blocked */ }
+  G.best = S.best; G.jobs = S.jobs; G.sideDone = S.cool;
   if (S.truceLeft > 0) G.hoaTruce = G.time + S.truceLeft;
-  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify({ best: S.best, jobs: S.jobs, truceLeft: Math.max(0, (G.hoaTruce || 0) - G.time), forsale: S.forsale })); } catch (e) { /* ignore */ } };
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify({ best: S.best, jobs: S.jobs, truceLeft: Math.max(0, (G.hoaTruce || 0) - G.time), forsale: S.forsale, cool: S.cool })); } catch (e) { /* ignore */ } };
   const near = (x, z, r) => Math.hypot(P.x - x, P.z - z) < r;
 
   // ---------- props: HOA lawn signs and Gary's FOR SALE sign ----------
@@ -53,7 +53,23 @@ export function makeJobs(A) {
   giverMarks.fish = makeMarker('mission', dinerDoor.x, dinerDoor.z - 3.1);
   { const m = ahead(places.nana, 4.0, -4.8); giverMarks.repo = makeMarker('mission', m.x, m.z); }   // on the lawn, clear of the porch windows
   { const m = ahead(places.quik, 3.0, 5.6); giverMarks.signs = makeMarker('mission', m.x, m.z); }   // forecourt corner, clear of the door and the pumps
-  const available = { fish: () => true, repo: () => !!G.done.nana, signs: () => !!G.done.kids };
+  const available = { fish: () => true, repo: () => !!G.done.nana && !S.cool.repo, signs: () => !!G.done.kids };
+  // Done for the day (diet 2026-11-28: Repo Man "finished it, but it's offered again"): a job in COOL counts as done
+  // when you finish it and is offered again from the next 6 AM. While Repo Man rests, Nana's gnome is back on her lawn.
+  const COOL = ['repo'], MORNING = 6;
+  let gnome = null;
+  function showGnome(on) {
+    if (on && !gnome) {
+      const at = ahead(places.nana, 3.2, -3.6), g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.22, 7), lambert({ color: 0x2f5fb3 })); body.position.y = 0.11; g.add(body);
+      const face = new THREE.Mesh(new THREE.SphereGeometry(0.075, 7, 5), lambert({ color: 0xf0c8a0 })); face.position.y = 0.27; g.add(face);
+      const beard = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 7), lambert({ color: 0xf4f4f4 })); beard.position.set(0, 0.2, 0.045); beard.rotation.x = Math.PI; g.add(beard);
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.24, 7), lambert({ color: 0xc8302c })); hat.position.y = 0.42; hat.rotation.z = 0.15; g.add(hat);
+      g.name = 'nanaGnome'; g.position.set(at.x, 0, at.z); g.rotation.y = places.nana.yaw; g.scale.setScalar(1.6); scene.add(g); gnome = g;
+    }
+    if (gnome) gnome.visible = !!on;
+  }
+  showGnome(!!S.cool.repo);
   const marks = { fish: giverMarks.fish, repo: giverMarks.repo, signs: giverMarks.signs }, markYaw = { fish: 0, repo: places.nana.yaw, signs: places.quik.yaw };   // tests: where to look at each marker from
 
   // ---------- side jobs ----------
@@ -162,6 +178,7 @@ export function makeJobs(A) {
     repo: [['Nana', 'That cart makes a lovely planter.']],
     signs: [['Quik Stop Kid', 'Legendary. The Estates are sign-free. For now.']],
   });
+  const REPO_AGAIN = [['Nana', 'He did it AGAIN, sweetie. Gary towed my gnome right off the lawn this morning.'], ['Nana', "Same cart, same lot. Bring it home."]];
   const REPLAY = { nana: 'Nana', kids: 'Quik Stop Kid', ricky: 'Big Ricky', gary: 'Gary' };
   const GARY_DONE = [['Gary', '...The RV stays. I have listed the house. Pine Hollow has an HOA with STANDARDS.'], ['Gary', 'Do NOT touch the FOR SALE sign.']];
   if (G.done.gary) DONE_LINES.gary = GARY_DONE;
@@ -185,14 +202,14 @@ export function makeJobs(A) {
       S.forsale = true; putForSale(); DONE_LINES.gary = GARY_DONE; persist();
       S.pendingBanner = 4.3;
     }
-    if (SIDE.includes(m.id)) { S.jobs[m.id] = (S.jobs[m.id] || 0) + 1; persist(); }
+    if (SIDE.includes(m.id)) { S.jobs[m.id] = (S.jobs[m.id] || 0) + 1; if (COOL.includes(m.id)) S.cool[m.id] = true; if (m.id === 'repo') showGnome(true); persist(); }
   }
 
   // ---------- starting and talking ----------
   function run(id, half) { const m = MISSIONS[id](); if (half) m.reward = Math.ceil(m.reward / 2); startMission(m); return m; }
   /** talkTo(id) hook. Returns true when handled (side jobs and replays), false to let game.js do the first run. */
   function talk(id) {
-    if (SIDE.includes(id)) { if (mission() || !available[id]()) return true; delete G.done[id]; say(INTROS[id], () => run(id, false)); return true; }
+    if (SIDE.includes(id)) { if (mission() || !available[id]()) return true; delete G.done[id]; say(id === 'repo' && S.jobs.repo ? REPO_AGAIN : INTROS[id], () => run(id, false)); return true; }
     if (!STORY.includes(id) || !G.done[id] || mission()) return false;
     const who = REPLAY[id], base = MISSIONS[id]().reward;
     say([...DONE_LINES[id], [who, `Run it again? (half pay: $${Math.ceil(base / 2)}${id === 'kids' && S.best.kids ? `, best ${fmt(S.best.kids)}` : ''})`]], () => run(id, true));
@@ -203,10 +220,18 @@ export function makeJobs(A) {
     if (G.paused) return;
     const m = mission();
     for (const id of SIDE) { if (G.done[id]) delete G.done[id]; giverMarks[id].visible = !m && available[id](); }
+    // a new morning: rested jobs are offered again (and Gary has towed the gnome again)
+    const step = (G.clock - S.lastClock + 24) % 24, toMorning = (MORNING - S.lastClock + 24) % 24; S.lastClock = G.clock;
+    if (step > 0 && step < 23 && toMorning > 0 && toMorning <= step) newDay();
     if (m && m.id === 'fish' && m.stage === 'return' && !P.car && near(dinerDoor.x, dinerDoor.z - 1.5, 3.2) && m.have()) { m.done(); onEnd(m, true); }
     if (S.pendingBanner > 0 && (S.pendingBanner -= dt) <= 0) { banner('THE RV STAYS', 'Gary resigned. The HOA patrols stand down for a day.', 5, 'pass'); Sfx.jingle(); }
     if (G.hoaTruce > G.time && (S.saveT += dt) > 10) { S.saveT = 0; persist(); }
   }
 
-  return { S, update, talk, run, start: (id) => run(id, false), persist, marks, markYaw, truce: () => Math.max(0, (G.hoaTruce || 0) - G.time), putForSale, signProp, SIGN_TEXT };
+  function newDay() {
+    let any = false; for (const id of COOL) if (S.cool[id]) { delete S.cool[id]; any = true; }
+    if (!any) return; showGnome(false); persist();
+  }
+
+  return { S, newDay, update, talk, run, start: (id) => run(id, false), persist, marks, markYaw, truce: () => Math.max(0, (G.hoaTruce || 0) - G.time), putForSale, signProp, SIGN_TEXT };
 }
