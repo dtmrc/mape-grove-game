@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-28: Repo Man (gnome towing job) stops resetting itself
+- diet: "the gnome towing quest keeps resetting itself". The golf cart had 100 hp, so a few bumps into fences, lamps
+  or traffic scrapped it and the job went back to "take the cart from the lot". The car cleanup could also delete the
+  job's cart once you were far from it (more than 26 cars), leaving the job pointing at nothing, and the job could
+  pick a retired HOA patrol cart driving through the lot.
+- jobs.js: the job's cart gets 260 hp, a full tank and `keep` (game.js cleanup skips kept cars) while the job runs;
+  only parked carts at the lot are taken; a cart that vanished anyway is replaced. HUD car bar and the car wash use
+  `maxHp`. Any respawn (cited, knocked out) now says which job it failed.
+- qa suite missions: five new Repo Man checks.
 ## 2026-11-28: mansion, fire station and hospital interiors (roomparts.js, mansions.js, civic.js)
 - diet: interiors for the Estates mansions ("what typical high end households usually have"), the fire station and
   the hospital, with a lot of detail at low cost.

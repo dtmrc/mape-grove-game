@@ -57,7 +57,16 @@ export function makeJobs(A) {
   const marks = { fish: giverMarks.fish, repo: giverMarks.repo, signs: giverMarks.signs }, markYaw = { fish: 0, repo: places.nana.yaw, signs: places.quik.yaw };   // tests: where to look at each marker from
 
   // ---------- side jobs ----------
-  const hoaCart = () => cars.find((c) => c.type === 'golfcart' && !c.dead && !c.repo && !c.role && c.driver !== 'player' && Math.hypot(c.x - places.hoaLot.x, c.z - places.hoaLot.z) < 14);
+  const hoaCart = () => cars.find((c) => c.type === 'golfcart' && !c.dead && !c.gone && !c.repo && !c.role && c.driver === null && Math.hypot(c.x - places.hoaLot.x, c.z - places.hoaLot.z) < 14);
+  // Repo Man's cart (diet 2026-11-28: "the gnome towing quest keeps resetting itself"): a golf cart has little room for
+  // crashes, and every wreck sent the job back to the lot. The job's cart is tougher, fuelled, and kept out of the car
+  // cleanup (c.keep) while the job runs.
+  const REPO_HP = 260;
+  const repoCart = () => {
+    const c = hoaCart() || spawnCar('golfcart', places.hoaLot.x - 3, places.hoaLot.z, 0, { color: 0xffffff, canopy: 0x1e2a44, lightbar: true });
+    c.hp = Math.max(c.hp, REPO_HP); c.maxHp = REPO_HP; c.fuel = 100; c.keep = true;
+    return c;
+  };
   // a lawn spot beside each Estates driveway: 3.6 m to the side of the parked-car spot and 3 m back from the street
   const estatesLawns = () => places.drives.filter((d) => districtAt(d.x, d.z) === 'Maple Grove Estates').map((d) => ({ x: d.x + Math.cos(d.ry) * 3.6 - Math.sin(d.ry) * 3, z: d.z - Math.sin(d.ry) * 3.6 - Math.cos(d.ry) * 3, yaw: d.ry }));
   const SIGN_TEXT = [['NO CATS', '#1e2a44', '#ffffff'], ['MOW IT', '#ffffff', '#1e2a44'], ['BYLAW 14-C', '#c03030', '#ffffff'], ['NO FUN', '#1e2a44', '#ffffff'], ['HOA KNOWS', '#ffffff', '#c03030'], ['KEEP OFF', '#2050a0', '#ffffff']];
@@ -84,14 +93,15 @@ export function makeJobs(A) {
     repo: () => ({
       id: 'repo', title: 'Repo Man', reward: 120,
       start() {
-        this.cart = hoaCart() || spawnCar('golfcart', places.hoaLot.x - 3, places.hoaLot.z, 0, { color: 0xffffff, canopy: 0x1e2a44, lightbar: true });
+        this.cart = repoCart();
         this.taken = false; this.drop = { x: places.rv.x + 4, z: places.rv.z + 3 };
         setCheck(places.hoaLot.x - 3, places.hoaLot.z, 4, 'HOA patrol lot');
         objective("Take the HOA golf cart from the patrol lot in the Estates.");
       },
       update() {
+        if (this.cart.gone && !this.cart.dead) this.cart = repoCart();   // cleaned up by the car culler (should not happen: keep): a fresh one at the lot
         if (this.cart.dead) { // the HOA has spares: a fresh cart turns up at the lot and you go again
-          this.cart = hoaCart() || spawnCar('golfcart', places.hoaLot.x - 3, places.hoaLot.z, 0, { color: 0xffffff, canopy: 0x1e2a44, lightbar: true });
+          this.cart.keep = false; this.cart = repoCart();
           this.taken = false; setCheck(places.hoaLot.x - 3, places.hoaLot.z, 4, 'HOA patrol lot');
           objective('That cart is scrap. The HOA has spares: take another one from the lot.'); toast('Cart wrecked. Go grab another from the HOA lot.', 4);
         }
@@ -107,7 +117,7 @@ export function makeJobs(A) {
           endMission(true, 'Nana: "Park it by the camp chairs. Gary can come ask nicely."');
         }
       },
-      cleanup() { G.check = null; },
+      cleanup() { G.check = null; if (this.cart) this.cart.keep = false; },
     }),
     signs: () => ({
       id: 'signs', title: 'Sign Language', reward: 150,
