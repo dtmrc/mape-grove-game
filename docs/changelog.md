@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-28: drivable fire engine, ambulance and tractor; ambulance dispatch after run-overs (on main, test page only)
+- diet: "make the tractor drivable with enhanced graphics? same for the fire truck and emergency medical vehicle at the
+  hospital ... when we run over pedestrians, there should be some random ambulance dispatches with stretchers and emts".
+  (Fire station and hospital interiors are a separate thread.)
+- Models (tools/vehicles): the Tracebench VFD Engine 1 (`pumper12`) and Maple Grove EMS ambulance (`ambulance15`) are baked
+  for the game (bake.cjs `GAME.service`), plus a new Greenacre 5045 utility tractor (`v-tractor.js`: open station, roll
+  bar, sun canopy, front weights, lugged tyres via vkit `lugs`). Dual rear wheels export as wheel.json `duals` and the
+  tractor's big rears as `rear` (the game scales the front wheel mesh), so every wheel spins on the merged wheel rig.
+  Emergency lamps below the roof line flash too (`BAR_Y`). About 150-170 KB each.
+- src/js/ems.js: the engine parks on the fire station apron in front of the open bay, the ambulance under the ER canopy,
+  the tractor behind the farmhouse on Lake Rd. Each comes back to its spot when wrecked or left far away, out of sight.
+  Taking the engine or ambulance is a star. Horn (H) in either toggles the siren and the red/white bar. Long trucks get
+  a third collision circle (game.js carCircles, cars over 6.5 m).
+- Ambulance dispatch: half of the walkers you run over get an ambulance (one call at a time, 25 s cool-down). It
+  spawns out of sight 60-260 m away by road (Dijkstra over the road graph), drives in with the siren on, two EMTs walk a
+  stretcher round the ambulance to the casualty, load them, carry them back and the ambulance leaves in traffic and is
+  removed out of sight. The casualty stays down until then. EMTs and the stretcher are built once and reused.
+- House-fire call-outs (firestarter.js) use the same baked engine.
+- Suite `ems` (26-ems.cjs). `window.__EMS.dispatch()` calls an ambulance for the nearest walker.
+
 ## 2026-11-27: Goob's truck baked like the other cars (on main, test page only)
 - diet asked to re-bake the truck. tools/vehicles/bake.cjs now bakes `goobtruck` (class `goob`, own livery) into
   src/models/vehicles/goobtruck.glb: one texture atlas, 33 draw calls -> 4, 373 KB instead of 1.36 MB of GLBs.
