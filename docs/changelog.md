@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-28: mansion, fire station and hospital interiors (roomparts.js, mansions.js, civic.js)
+- diet: interiors for the Estates mansions ("what typical high end households usually have"), the fire station and
+  the hospital, with a lot of detail at low cost.
+- src/js/roomparts.js: shared kit for big interiors. `plan()` builds a multi-room floor plan (walls, doorways, trim),
+  `makeAtlas()` packs every sign, painting and label of a building into one canvas texture, `parts()` is a furniture
+  library (about 60 pieces) that writes into the merged per-material room meshes, `zoneLights()` keeps a baked light
+  inside its own room.
+- src/js/mansions.js: all 13 Estates houses including Gary's Beaumont. Ten spaces each (foyer, great room, chef's
+  kitchen with island, dining, home theater, office, wine room, bath, walk-in closet, primary suite), four themes,
+  mirrored plans, seeded per house. Fridge heals, the safe and jewelry box can be looted once.
+- src/js/civic.js: fire station (apparatus bay with Engine 1, gear lockers, pole, watch office, dayroom, bunk room;
+  office door and open bay both enter) and hospital (lobby, gift shop and cafe, pharmacy, exam, patient rooms,
+  nurses' station, X-ray, OR, ER; main entrance and ER doors; reception heals for $20).
+- Cost: 40k to 92k triangles, 5 to 11 MB, 26 to 38 draw calls per building, light baked into vertex colours (0.3 to
+  0.9 s once). interiors.js: rooms marked `unload` are freed when a third one is entered, `pack` stores normals and
+  colours in 16 bits, the cat is lit by the nearest pool lights, door entries may land at `inside`.
+- tools/qa/scenarios/bigroom.cjs: top-down and eye-level shots plus triangle, memory and draw call counts for a room.
+
 ## 2026-11-28: stutter log on the device, interiors warm up behind the door fade
 - diet: stutter on the phone, also inside Hank's shop; "optimise all building interiors".
 - src/js/hitchlog.js: Settings > Show FPS now also lists each long frame: its length, the game's own JS time in it,
