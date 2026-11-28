@@ -2282,8 +2282,8 @@ function buildFireStation() {
     F.sign(t, '#f4f0e0', '#c01818', 4, 0.42, y, 11.48, { tw: 384, th: 40, lx: 10.4, rr: Math.PI });
   }
   F.col(10.4, 11.6, 4.4, 0.6, 2.2);
-  // VFD Engine 1 (drivable, ems.js) parks on the apron in front of the open bay, nose toward the highway
-  { const [x, z] = F.at(2, 7.4), [fx, fz] = F.at(2, 8.4); places.fireEngine = { x, z, yaw: Math.atan2(fx - x, fz - z) }; }
+  // VFD Engine 1 (drivable, ems.js) parks on the apron in front of the closed bay 1, nose toward the highway (the open bay 2 is the way in, civic.js)
+  { const [x, z] = F.at(-6, 7.4), [fx, fz] = F.at(-6, 8.4); places.fireEngine = { x, z, yaw: Math.atan2(fx - x, fz - z) }; }
   hydrant(...F.at(-14, 11));
   places.fireStation = (([x, z]) => ({ x, z, yaw: Math.PI }))(F.at(-2, 8));
 }
