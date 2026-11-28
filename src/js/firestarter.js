@@ -14,6 +14,8 @@ import { makeHuman } from './models.js';
 import { NODES, EDGES, colliders, collide } from './world.js';
 import { heightAt } from './terrain.js';
 import * as INTM from './interiors.js';
+import { CAR_TYPES } from './models.js';
+import { makeModelCar } from './vehicles.js'; // ems: the call-out truck is the baked VFD Engine 1 model
 
 const KEY = 'maple-grove-offleash-fire-v1';
 const BURNABLE = { quik: 'Quik Stop', diner: "Rosie's Diner", church: 'Chapel Hill Church', nana: "Nana's House", donut: 'the Donut Hole' };
@@ -96,6 +98,15 @@ function propModel(id) {
 
 // ---------- the Maple Grove VFD truck ----------
 function makeFireTruck() {
+  // the baked VFD Engine 1 (tools/vehicles pumper12, the same model the player can drive from the fire station) when it loaded
+  if (CAR_TYPES.pumper12) {
+    const g = makeModelCar('pumper12', 0xffffff, {}, CAR_TYPES), u = g.userData;
+    const glA = new THREE.Sprite(glowMat(0xff3020)), glB = new THREE.Sprite(glowMat(0xffffff));
+    glA.position.set(-0.6, 3.35, 4.1); glB.position.set(0.6, 3.35, 4.1); glA.scale.setScalar(2.2); glB.scale.setScalar(2.2); u.body.add(glA, glB);
+    const nozzle = new THREE.Object3D(); nozzle.position.set(0, 3.0, 0.3); u.body.add(nozzle);   // deck gun
+    g.userData = { body: u.body, lights: [glA, glB], bar: u.bar.map((m) => ({ material: m })), nozzle, shared: true };
+    return g;
+  }
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   const red = mat(0xc01818, null, 0, 70), white = mat(0xf0f0e8), dark = mat(0x1a1a1e), chrome = mat(0xd0d0d4, null, 0, 120), glass = mat(0x223344, null, 0, 120);
   const B = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); body.add(o); return o; };
@@ -595,7 +606,7 @@ export function makeFirestarter(ctx) {
     const id = F.id;
     if (F.indoor) { F.indoor.g.removeFromParent(); disposeTree(F.indoor.g); }
     if (F.outdoor) { scene.remove(F.outdoor.g); disposeTree(F.outdoor.g); const i = lights.indexOf(F.outdoor.L); if (i >= 0) lights.splice(i, 1); }
-    if (F.truck) { scene.remove(F.truck.g); for (const h of F.truck.crew) scene.remove(h); disposeTree(F.truck.g); }
+    if (F.truck) { scene.remove(F.truck.g); for (const h of F.truck.crew) scene.remove(h); if (!F.truck.g.userData.shared) disposeTree(F.truck.g); }
     INTM.close(id, false);
     delete fires[id];
     toast(`The HOA rebuilt ${name(id)}. Overnight. Somehow. It looks exactly the same.`, 4.5);

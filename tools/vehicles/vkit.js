@@ -452,6 +452,13 @@ function makeVKit(T) {
     const prof = [[rr * 0.98, -w / 2 + 0.02], [r - 0.035, -w / 2], [r - 0.005, -w / 2 + 0.035], [r, 0], [r - 0.005, w / 2 - 0.035], [r - 0.035, w / 2], [rr * 0.98, w / 2 - 0.02]].map(([a, b]) => new T.Vector2(a, b));
     const tg = new T.LatheGeometry(prof, sg); tg.rotateZ(Math.PI / 2);   // axis along x
     put(o.tyre ?? 'Tyre', tg, [x, y, z]);
+    if (o.lugs) {   // tractor / off-road tread: raised bars across the tread, the two halves staggered
+      const n = o.lugs, lh = o.lugH ?? r * 0.1;
+      for (let k = 0; k < n; k++) for (const h of [-1, 1]) {
+        const a = ((k + (h > 0 ? 0.5 : 0)) / n) * Math.PI * 2;
+        box(o.tyre ?? 'Tyre', x + h * w * 0.24, y + Math.cos(a) * (r - lh * 0.3), z + Math.sin(a) * (r - lh * 0.3), w * 0.46, lh * 1.6, r * 0.16, [a, 0, 0]);
+      }
+    }
     const face = x + s * (w / 2 - (o.dish ?? 0.05));
     // rim barrel + face
     const barrel = new T.CylinderGeometry(rr, rr, w * 0.8, sg, 1, true); barrel.rotateZ(Math.PI / 2); put('RimIn', barrel, [x, y, z]);

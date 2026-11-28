@@ -40,6 +40,7 @@ import { makeFX } from './fx.js';
 import { makePolice } from './police.js'; // police
 import { makeCarPhys } from './carphys.js'; // driving
 import { registerVehicles, pickModel, makeModelCar } from './vehicles.js'; // remodeled cars (src/models/vehicles)
+import { makeServices } from './ems.js'; // ems: drivable fire engine / ambulance / tractor + ambulance dispatch
 import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeDynGrid } from './dyngrid.js'; // broad phase for cars + peds
 import { makePrewarm } from './prewarm.js'; // shaders + textures ready behind the title screen
@@ -311,6 +312,7 @@ function spawnCar(type, x, z, yaw, o = {}) {
   cars.push(c);
   return c;
 }
+let svc = null; // ems.js (made after police, below)
 function removeCar(c) { c._asleep = false; c.gone = true; scene.remove(c.mesh); cars.splice(cars.indexOf(c), 1); const u = c.mesh.userData; u.paint.dispose(); if (u.bar) for (const b of u.bar) b.dispose(); }
 
 // road graph helpers (world.js NODES/ADJ: a hand-laid road network, not a grid)
@@ -757,6 +759,7 @@ function enterCar(c, silent) {
   } else if (c.role === 'patrol') { if (!silent) addHeat(2, 'stealing HOA property'); }
   c.driver = 'player'; c.ai = null; if (c.role === 'patrol') c.role = null;
   P.car = c; cat.visible = false; CP.enter(c);
+  if (svc) svc.enter(c, silent); // ems
   hud.car.textContent = c.spec.name || CAR_NAMES[c.type]; hud.car.classList.add('show'); setTimeout(() => hud.car.classList.remove('show'), 2500);
   if (!silent) Sfx.door();
 }
@@ -794,10 +797,10 @@ function drive(c, thr, steer, hand, dt) {
 }
 
 function carCircles(c) { // P13: the two body circles are cached per car and refreshed when x / z / yaw change (no per-call arrays)
-  let k = c.cc; if (!k) k = c.cc = { x: NaN, z: NaN, yaw: NaN, p: [[0, 0], [0, 0]] };
+  let k = c.cc; if (!k) k = c.cc = { x: NaN, z: NaN, yaw: NaN, p: c.spec.len > 6.5 ? [[0, 0], [0, 0], [0, 0]] : [[0, 0], [0, 0]] }; // ems: long trucks get a middle circle
   if (k.x !== c.x || k.z !== c.z || k.yaw !== c.yaw) {
     const off = c.spec.len / 2 - c.spec.wid / 2, fx = Math.sin(c.yaw), fz = Math.cos(c.yaw), p = k.p;
-    p[0][0] = c.x + fx * off; p[0][1] = c.z + fz * off; p[1][0] = c.x - fx * off; p[1][1] = c.z - fz * off; k.x = c.x; k.z = c.z; k.yaw = c.yaw;
+    p[0][0] = c.x + fx * off; p[0][1] = c.z + fz * off; p[1][0] = c.x - fx * off; p[1][1] = c.z - fz * off; if (p.length > 2) { p[2][0] = c.x; p[2][1] = c.z; } k.x = c.x; k.z = c.z; k.yaw = c.yaw;
   }
   return k.p;
 }
@@ -1022,7 +1025,7 @@ function updatePlayer(dt) {
     if (c.fuel <= 0) thr = 0;  // out of gas: coast
     CP.drive(c, thr, st, down(' ', 'b'), dt); // driving
     if (hit('e', 'f', 'enter') && !(P.lock > 0)) exitCar();
-    if (hit('h')) Sfx.horn(c.x, c.z, true);
+    if (hit('h') && !(svc && svc.horn(c))) Sfx.horn(c.x, c.z, true); // ems: horn toggles the siren in the engine / ambulance
     return;
   }
   if (P.down > 0) {
@@ -1162,6 +1165,7 @@ function interactions(dt) {
         if (Math.hypot(p.x - cx, p.z - cz) < r) {
           if (police.runOver(p, c, cx, cz, sp)) { // police: tumble
             Sfx.punch(); if (c === P.car) { if (p.kind === 'human') addHeat(1, 'vehicular yard work'); shake(0.15); }
+            if (svc) svc.report(p, c); // ems: sometimes an ambulance comes
             c.vx *= 0.9; c.vz *= 0.9;
           }
         }
@@ -1529,15 +1533,17 @@ function updateCars(dt) {
     else if (c.driver === 'racer') racerAI(c, dt);
     else if (c.driver === 'flee') fleeAI(c, dt);
     else if (c.driver === 'police') police.carAI(c, dt); // police
+    else if (c.driver === 'ems' && svc) svc.carAI(c, dt); // ems
     else if (c.driver !== 'player') drive(c, 0, 0, true, dt);
     carWorld(c, dt);
     // visuals
     const u = c.mesh.userData;
     c.mesh.position.set(c.x, 0, c.z); c.mesh.rotation.y = c.yaw;
     c.wheel += c.speed * dt / u.wr;
-    u.wheels.forEach((w, i) => { w.children[0].rotation.x = c.wheel; if (i < 2) w.rotation.y = c.steer * 0.5; });
+    u.wheels.forEach((w, i) => { w.children[0].rotation.x = u.wk ? c.wheel * u.wk[i] : c.wheel; if (i < 2) w.rotation.y = c.steer * 0.5; }); // ems: tractor rears turn slower
     CP.body(c, u, dt); // driving: suspension pitch / roll / heave + spin-outs
-    if (u.bar) { const f = Math.floor(G.time * 6) % 2; u.bar[0].color.set(f ? 0xff8a00 : 0x302010); u.bar[1].color.set(f ? 0x302010 : 0x3070ff); }
+    if (u.barc) { const f = c.siren && Math.floor(G.time * 6) % 2, g = c.siren && !f; u.bar[0].color.setHex(u.barc[0][f ? 0 : 1]); u.bar[1].color.setHex(u.barc[1][g ? 0 : 1]); } // ems: red / white, only with the siren on
+    else if (u.bar) { const f = Math.floor(G.time * 6) % 2; u.bar[0].color.set(f ? 0xff8a00 : 0x302010); u.bar[1].color.set(f ? 0x302010 : 0x3070ff); }
     if (!c.dead && c.hp < 35 && Math.random() < dt * (c.hp < 15 ? 12 : 4)) puff('smoke', c.x + Math.sin(c.yaw) * c.spec.len * 0.4, 1.1, c.z + Math.cos(c.yaw) * c.spec.len * 0.4, 0, 1.4, 0, 0.6, 1.4);
     if (c.fire > 0) {
       c.fire -= dt;
@@ -1651,7 +1657,8 @@ function frame(now) {
     MSAVE.tick(dt); // missionsave: resume after a reload + snapshots
     police.update(dt); // police
     const cru = police.cruisers(); // police
-    Sfx.engine(P.car && !P.car.dead ? CP.rev(P.car) : -1, (G.heat > 0 || cru.length) ? Math.min(1, 25 / Math.max(5, sirenNear(cru))) : 0);
+    svc.update(dt); // ems
+    Sfx.engine(P.car && !P.car.dead ? CP.rev(P.car) : -1, Math.max(svc.sirenLevel(), (G.heat > 0 || cru.length) ? Math.min(1, 25 / Math.max(5, sirenNear(cru))) : 0)); // ems: + service sirens
   }
   cat.position.set(P.x, P.y - (P.swim ? SWIM_SINK - Math.sin(G.time * 3) * 0.03 : 0), P.z); cat.rotation.y = P.yaw;
   cat.userData.sync?.(dt, catLight); // goobles: clips + pose overrides
@@ -1732,6 +1739,7 @@ const otters = makeOtters({ scene, G, P, T, Sfx, blocked, places, camera, px: ()
 window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar, waterAt, events, fx, cars, peds, places, camera, scene, drawMap, MAP_HALF, talkTo, addHeat, patrols, busted, save, load, SAVE_KEY, get mission() { return mission; }, setCam: (y, p) => { camYaw = y; camPitch = p; camIdle = -99; } };
 // police: Maple Grove PD, officers on foot, civilians who fight back (src/js/police.js, tools/police-hooks.mjs)
 const police = makePolice({ carsNear: (x, z, r) => CARG.near(x, z, r, _bCop), scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time, hidden: SV_.hidden });
+svc = makeServices({ scene, G, P, cars, peds, places, CAR_TYPES, NODES, ADJ, spawnCar, removeCar, spawnPed, removePed, nearestNode, roadOpts, chaseAI, drive, collide, addHeat, toast, Sfx, px, pz, hidden: SV_.hidden }); // ems
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block

@@ -18,8 +18,11 @@ const GAME = {
   cart: ['hoacart'],
   police: ['crownpi08', 'chaserpd18', 'tahomappv04', 'pathwaypiu23', 'blazonppv23'],
   goob: ['goobtruck'],                                     // Goobles' own truck: never in traffic, keeps its black paint and white stripe
+  service: ['pumper12', 'ambulance15', 'tractor'],         // town vehicles parked at the fire station, hospital and Sawyer Fields (drivable, EMS dispatch)
 };
-const LIVERY = new Set([...GAME.police, ...GAME.goob]);                       // keep their own paint (black-and-white, decals)
+const LIVERY = new Set([...GAME.police, ...GAME.goob, ...GAME.service]);                       // keep their own paint (black-and-white, decals)
+// emergency lights below the roof line that still flash (fire engine cab bar + rear beacons, ambulance module corner lamps)
+const BAR_Y = { pumper12: 2.2, ambulance15: 2.5 };
 const RATIO = +(process.env.RATIO || 0.4), ERR = +(process.env.ERR || 0.0025), FAR = { ratio: +(process.env.FAR_RATIO || 0.08), err: +(process.env.FAR_ERR || 0.08) };
 const roster = JSON.parse(fs.readFileSync(path.join(D, 'roster.json'), 'utf8'));
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.values(GAME).flat();
@@ -46,7 +49,7 @@ const glbIn = (dir) => path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
   for (const id of ids) {
     const rel = (m) => '/tmp/' + path.relative(TMP, glbIn(path.join(TMP, id + '-' + m)));
-    const r = await p.evaluate(([a, w, o]) => window.bake(a, w, o), [rel('body'), rel('wheel'), { police: clsOf(id) === 'police' || clsOf(id) === 'cart', livery: LIVERY.has(id), ratio: clsOf(id) === 'goob' ? 1 : RATIO, err: ERR, far: FAR, maxTex: 512, maxPaint: 512, webpQ: clsOf(id) === 'goob' ? 1 : 0.9 }   /* Goob's truck is seen up close: textures at full webp quality (0.9 left the hood blotchy) */]);
+    const r = await p.evaluate(([a, w, o]) => window.bake(a, w, o), [rel('body'), rel('wheel'), { police: clsOf(id) === 'police' || clsOf(id) === 'cart' || BAR_Y[id] !== undefined, barY: BAR_Y[id], livery: LIVERY.has(id), ratio: clsOf(id) === 'goob' ? 1 : RATIO, err: ERR, far: FAR, maxTex: 512, maxPaint: 512, webpQ: clsOf(id) === 'goob' ? 1 : 0.9 }   /* Goob's truck is seen up close: textures at full webp quality (0.9 left the hood blotchy) */]);
     const raw = path.join(TMP, id + '-game.glb'); fs.writeFileSync(raw, Buffer.from(r.glb, 'base64'));
     const doc = await io.read(raw);
     doc.createExtension(EXTTextureWebP).setRequired(true);
@@ -57,7 +60,7 @@ const glbIn = (dir) => path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith
     const [mn, mx] = r.info.bb;
     index[id] = { cls: clsOf(id), name: R.name || id, real: R.real || '', year: R.year, top: R.top, acc: R.acc,
       len: +(mx[2] - mn[2]).toFixed(3), wid: +(2 * Math.max(-mn[0], mx[0], wo.x + wo.w / 2)).toFixed(3), h: +(mx[1]).toFixed(3),
-      wr: wo.r, wx: wo.x, axles: wo.axles, roofY: +r.info.roofY.toFixed(3), roofZ: +(((mn[2] + mx[2]) / 2) * 0.5).toFixed(3),
+      wr: wo.r, ww: wo.w, wx: wo.x, axles: wo.axles, rear: wo.rear, duals: wo.duals, roofY: +r.info.roofY.toFixed(3), roofZ: +(((mn[2] + mx[2]) / 2) * 0.5).toFixed(3),
       glows: r.info.glows.map((g) => g.map((v, i) => (i < 3 ? +v.toFixed(3) : v))), stock: r.info.stock, livery: LIVERY.has(id) };
     console.log(id, 'tris', r.info.tris, 'far', r.info.farTris, 'kb', Math.round(fs.statSync(out).size / 1024));
   }
