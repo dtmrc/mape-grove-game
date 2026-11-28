@@ -59,6 +59,7 @@ module.exports = {
     const stp = await S.js(async () => {
       const QA = window.QA, G = window.__G, TC = window.__TC, st = TC.stops().find((s) => !s.down);
       const nx = Math.sin(st.face), nz = Math.cos(st.face), sx = st.x + nx * 8, sz = st.z + nz * 8;   // drive in from the road side
+      if (G.P.car) { const q = G.P.car; await QA.key('e', 1); QA.step(6, { render: false }); G.removeCar(q); }   // the last test car would sit where the new one spawns
       await QA.tp(sx + ',' + sz, { settle: 2 }); await QA.spawnCar('sedan', { enter: true, dist: 0 });
       const c = G.P.car; c.x = sx; c.z = sz; c.yaw = Math.atan2(-nx, -nz);
       let n = 0; for (; n < 60 && !st.down; n++) { c.vx = -nx * 12; c.vz = -nz * 12; QA.step(1, { render: false }); }
@@ -73,6 +74,7 @@ module.exports = {
       const QA = window.QA, T = window.__dev.TER, B = window.__BRK, G = window.__G, lights = window.__dev.lights;
       const g = (() => { for (let g = 1; g < T.groups.length; g++) { const o = T.colModel[T.groups[g].cols[0]].orig; if (o.brk === 'lamp' && !T.groups[g].broken) return g; } })();
       const o = T.colModel[T.groups[g].cols[0]].orig, L = lights.find((L) => L.y > 4.5 && L.y < 7 && Math.hypot(L.x - o.cx, L.z - o.cz) < 1.5);
+      if (G.P.car) { const q = G.P.car; await QA.key('e', 1); QA.step(6, { render: false }); G.removeCar(q); }   // the last test car would sit where the new one spawns
       await QA.tp((o.cx - 6) + ',' + o.cz, { settle: 2 });
       await QA.spawnCar('sedan', { enter: true, dist: 0 });
       const c = G.P.car; c.x = o.cx - 6; c.z = o.cz; c.yaw = Math.PI / 2;
