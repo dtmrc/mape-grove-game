@@ -1728,7 +1728,7 @@ const yardcats = makeYardCats({ scene, G, P, places, collide, fishing, say, toas
 const radio = makeRadio({ P, G, hit, down, isTouch }); // radio: car stations + police scanner (src/js/radio.js)
 const dash = makeDash({ P, radio }); // dash: speedometer + radio on/off, volume, station (src/js/dash.js)
 // cave: the Hollow Deep easter egg (src/js/cave.js)
-const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
+const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash, camera, down });
 // hens: The Missing Hens, part A of the Ghost of John quest (src/js/hens.js)
 const hens = makeHens({ scene, G, P, cat, places, NPC, fishing, quests, cave, say, toast, Sfx, addCash, isTouch });
 // haunted: Ghost of John parts B and C (src/js/haunted.js)

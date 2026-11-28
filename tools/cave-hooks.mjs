@@ -8,7 +8,7 @@ const f = arg.endsWith('.js') ? arg : path.join(arg, 'game.js');
 let s = fs.readFileSync(f, 'utf8'); const before = s;
 const HOOKS = [
   [["import { Sfx } from './sfx.js';"], "\nimport { makeCave } from './cave.js';", 'after', "import { makeCave } from './cave.js';"],
-  [['window.__G = {'], "// cave: the Hollow Deep easter egg (src/js/cave.js)\nconst cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });\n", 'before', 'const cave = makeCave('],
+  [['window.__G = {'], "// cave: the Hollow Deep easter egg (src/js/cave.js)\nconst cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash, camera, down });\n", 'before', 'const cave = makeCave('],
   [['    fires.update(dt);', '    events.update(dt);'], '\n    cave.update(dt);', 'after', 'cave.update(dt);'],
   [['if (fires.interact())'], 'if (cave.interact()) { /* cave: torch, sign */ } else ', 'before', 'if (cave.interact())'],
   [['const prompt = !P.car && !G.dialog && !G.paused ? ('], 'cave.prompt() || ', 'after', 'cave.prompt() ||'],
