@@ -20,7 +20,7 @@ import { makeWaterMaterial, patchCreek } from './water.js';
 import { buildDock } from './dock.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lambert, phong, basic, rnd, rndSeed } from './gfx.js';
-import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex, houseSpot } from './houses.js';
+import { HOUSES, SIGN, MODEL_IDS, houseGeo, houseTex, houseMat, houseSpot } from './houses.js';
 import { buildRoofs, roofTop, slabTop } from './rooftops.js';   // walkable roofs
 import { roundCrown, pineCrown, bushCrown } from './trees.js';   // render pass: faceted, shaded tree crowns
 import { makeRV, makeCar } from './models.js';
@@ -28,6 +28,7 @@ import { initRoads } from './roads.js';
 import { flowRoads } from './roadflow.js';
 import { initGround } from './ground.js';
 import { packGeo } from './geopack.js';
+import { freeAfterUpload } from './vfree.js';
 import { prepareWorld, makeGroundMesh, patchMaterial, floors, setFloorProvider, chunkOf, cullBounds, inTown, hillsAt, edgeRise, noise2, heightAt as terH, slopeAt as terSlope } from './terrain.js';
 export { inTown };
 
@@ -812,7 +813,7 @@ export function buildWorld(scene, T) {
     chain: lambert({ map: T.chain, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
     iron: lambert({ map: T.iron, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
   };
-  for (const id of MODEL_IDS) M['h_' + id] = lambert({ map: houseTex(id), vertexColors: true });   // Tracebench houses + the gate sign
+  for (const id of MODEL_IDS) M['h_' + id] = houseMat(id, lambert({ map: houseTex(id), vertexColors: true }));   // Tracebench houses + the gate sign
   M.window.userData.night = T.windowLit; M.window.userData.day = T.window;
   patchCreek(M.creek); // water.js: flowing creek
   nightMats.push(M.window, M.lamp);
@@ -858,6 +859,7 @@ export function buildWorld(scene, T) {
       patchMaterial(M[k]); mesh.userData.noLift = true; mesh.userData.chunk = c; // engine
       cullBounds(mesh, c === 0 ? 30 : 14);   // generous pad: editor moves and the terrain lift happen in the shader
       mesh.matrixAutoUpdate = false;
+      freeAfterUpload(mesh.geometry);   // vfree: nothing reads a chunk's arrays after upload
       scene.add(mesh); worldChunks.push(mesh);
     }
     list.length = 0;   // the merged copies are all that's needed: drop the per-piece source geometry
