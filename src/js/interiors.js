@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import * as TER from './terrain.js';
 import { setText, setStyle } from './dom.js';
 import { bakeRoom, BAKE_UNIFORMS, setDaylight } from './roombake.js';
+import { packGeo } from './geopack.js';
 const _dayTint = new THREE.Color();
 const BAKE_ON = !/[?&]bake=0/.test((typeof location !== 'undefined' && location.search) || '');   // ?bake=0: old live-lit rooms
 
@@ -137,6 +138,7 @@ export function makeInteriors(ctx) {
   const rooms = {};           // id -> { built, broken, origin:{x,z}, cols:[world], ... }
   const entries = [];        // { id, i, kind, base:{x,z,yaw}, inside, g, mesh, cur:{x,z,yaw,tx,tz,ok} }
   let slot = 0;
+  const freeOrigins = [], recent = [];   // origins of unloaded rooms; the most recently used `unload` rooms
 
   // ---------------- built-in rooms (rooms.js, loaded lazily so a broken rooms.js cannot take the game down) ----------------
   const D0 = builtinEntries(ctx.places);
@@ -211,13 +213,14 @@ export function makeInteriors(ctx) {
       const out = reg.room.build({ THREE, M: ctx.WM, T: ctx.T });
       if (!out || !out.group || !out.group.isObject3D) throw new Error('build() returned no group');
       const size = Array.isArray(out.size) && out.size.length >= 2 ? [+out.size[0] || 6, +out.size[1] || 6] : [6, 6];
-      const origin = { x: ROOM_X + slot * ROOM_GAP, z: ROOM_Z }; slot++;
+      const origin = freeOrigins.pop() || { x: ROOM_X + slot++ * ROOM_GAP, z: ROOM_Z };
       const group = out.group;
       group.position.set(origin.x, 0, origin.z); group.rotation.set(0, 0, 0);
       group.userData.noLift = true; group.visible = false;
       group.traverse((o) => { o.layers.set(1); o.userData.noLift = true; });
       if (out.halos !== false) addHalos(group, out.lights || []);
       if (BAKE_ON) { try { rec.bake = bakeRoom(THREE, group, out); } catch (e) { console.error(`[interiors] room "${id}" light bake failed`, e); rec.bake = { error: String(e) }; } }
+      if (out.pack) group.traverse((o) => { if (o.isMesh && /^room:/.test(o.name)) packGeo(o.geometry); });   // big rooms: 16-bit normals and colours
       // exit ring inside
       const exitM = marker(1); exitM.userData.arrow.visible = false; group.add(exitM);
       const ex = out.exit || { x: 0, z: size[1] / 2 - 0.4, r: 0.6 };
@@ -239,6 +242,7 @@ export function makeInteriors(ctx) {
         spawn: out.spawn || { x: 0, z: size[1] / 2 - 1.2, yaw: 0 },
         exit: { x: +ex.x || 0, z: +ex.z || 0, r: ex.r || 0.6 },
         lights: (out.lights || []).slice(0, (ctx.pool || []).length || 10),
+        allLights: (out.lights || []).length > ((ctx.pool || []).length || 10) ? out.lights.slice() : null,   // big rooms: the pool follows the cat
         cam: { maxDist: out.cam?.maxDist ?? 2.4, height: out.cam?.height ?? 2.4 },
         spots: (out.interact || []).map((h) => ({ id: h.id, x: +h.x || 0, z: +h.z || 0, r: h.r || 1.1, label: h.label || h.id, onUse: h.onUse })),
         name: out.name || reg.room.name || id,
@@ -250,6 +254,33 @@ export function makeInteriors(ctx) {
       for (const e of entries) if (e.id === id) placeEntry(e);
       return null;
     }
+  }
+
+  // Rooms that ask for it (`unload: true` from build(): the Estates houses, 17 of them) are thrown away again once
+  // two other such rooms have been used since: geometry, materials and the room's own textures (out.dispose) are
+  // freed and the room is rebuilt on the next visit.
+  const KEEP_UNLOADABLE = 2;
+  function release(id) {
+    const R = rooms[id]; if (!R || !R.built || S.room === R) return false;
+    scene.remove(R.group);
+    R.group.traverse((o) => { if (o.isMesh && /^(room|mansion):/.test(o.name)) { o.geometry.dispose(); if (!Array.isArray(o.material)) o.material.dispose(); } });
+    try { if (R.out && R.out.dispose) R.out.dispose(); } catch (e) { console.error('[interiors] dispose', e); }
+    freeOrigins.push(R.origin); delete rooms[id];
+    return true;
+  }
+  function usedRoom(R) {
+    if (!R.out || !R.out.unload) return;
+    const k = recent.indexOf(R.id); if (k >= 0) recent.splice(k, 1);
+    recent.push(R.id);
+    while (recent.length > KEEP_UNLOADABLE) { const old = recent.shift(); if (!release(old)) { recent.push(old); break; } }
+  }
+  // the pool lights of a room with more lights than the pool: the ones nearest the cat (they only light the cat;
+  // the room itself is baked). Sorted in place, a few times a second.
+  function nearestLights(R, n) {
+    const A = R.allLights, lx = P.x - R.origin.x, lz = P.z - R.origin.z;
+    for (let i = 0; i < A.length; i++) { const L = A[i], dx = (+L.x || 0) - lx, dz = (+L.z || 0) - lz; L._d = dx * dx + dz * dz; }
+    for (let i = 1; i < A.length; i++) { const L = A[i]; let j = i - 1; while (j >= 0 && A[j]._d > L._d) { A[j + 1] = A[j]; j--; } A[j + 1] = L; }
+    for (let i = 0; i < n; i++) R.lights[i] = A[i];
   }
 
   // soft additive halos round ceiling / wall fixtures (static lights above 1.5 m), one sprite each
@@ -434,15 +465,16 @@ export function makeInteriors(ctx) {
     const R = buildRoom(id);
     if (!R) { ctx.toast && ctx.toast("It's locked.", 2); return false; }
     if (S.inside) swapOut(null);   // room to room
+    usedRoom(R);
     S.outPos = { x: P.x, z: P.z, yaw: P.yaw };
     S.ret = opts.returnTo ? { x: +opts.returnTo.x, z: +opts.returnTo.z, yaw: +opts.returnTo.yaw || 0 } : null;
     if (opts.locked) locks.add(id);
     S.inside = true; S.id = id; S.room = R; R.group.visible = true;
-    setRoomFloors(R); S.plT = 0;
+    setRoomFloors(R); S.plT = 0; S.nlT = 0;
     S.entry = opts._entry || null;
     roomWindows(R, id);
     const win = S.entry && S.entry.kind === 'window' ? R.windows.find((w) => w.entry === S.entry) : null;
-    const sp = opts.spawn || win || R.spawn;
+    const sp = opts.spawn || win || (S.entry && S.entry.kind === 'door' && S.entry.inside) || R.spawn;   // a second door lands at its own spot
     P.x = R.origin.x + (+sp.x || 0); P.z = R.origin.z + (+sp.z || 0); P.y = 0; P.vy = 0; P.vx = P.vz = 0; P.jumps = 0; P.lock = 0.5;
     const q = roomCollide(P.x, P.z, 0.22); P.x = q.x; P.z = q.z;
     P.y = P.fl = roomFloorAt(P.x, P.z, 0.5);   // spawned on a platform: start on top of it
@@ -590,6 +622,7 @@ export function makeInteriors(ctx) {
   function env() {
     if (!S.inside) return;
     const R = S.room, pool = ctx.pool || [];
+    if (R.allLights && (!S.nlT || (S.nlT -= 1) <= 0)) { S.nlT = 10; nearestLights(R, pool.length); }
     for (let i = 0; i < pool.length; i++) {
       const l = pool[i], L = R.lights[i];
       l.userData.src = null;

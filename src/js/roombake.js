@@ -8,6 +8,8 @@
 //
 // A room may tune it by returning `bake` from build(): false (skip), or { amb, sky, ground, k, maxEdge, shadows }.
 // A light may carry `dyn: true` (not baked; it moves or matters only live) or `bake: false` (same).
+// A light may carry `zone: { x0, x1, z0, z1, fade }` (big multi-room interiors): it only lights vertices inside that
+// rectangle, fading out over `fade` metres past its edge, so a house of 40 lamps costs a handful of lights per vertex.
 
 export const MAX_DYN = 32;   // weights for the first 32 point lights in render order (more are always live)
 export const BAKE_UNIFORMS = {
@@ -132,7 +134,7 @@ export function bakeRoom(THREE, group, out) {
   const size = out.size || [6, 6], hw = size[0] / 2, hd = size[1] / 2;
   // perimeter walls (boxes reaching past the room rectangle) never sit between a light and a surface inside; the corner AO covers them
   const occ = cfg.shadows === false ? [] : occluders(out).filter((b) => Math.abs(b.cx) + b.ex < hw + 0.05 && Math.abs(b.cz) + b.ez < hd + 0.05);
-  const L = (out.lights || []).filter((l) => l && !l.dyn && l.bake !== false).map((l) => ({ x: +l.x || 0, y: +l.y || 2.4, z: +l.z || 0, col: new THREE.Color(l.c ?? 0xfff0d8), i: l.i ?? 1, r: l.r ?? 0.25 }));
+  const L = (out.lights || []).filter((l) => l && !l.dyn && l.bake !== false).map((l) => ({ x: +l.x || 0, y: +l.y || 2.4, z: +l.z || 0, col: new THREE.Color(l.c ?? 0xfff0d8), i: l.i ?? 1, r: l.r ?? 0.25, zone: l.zone || null }));
   group.traverse((o) => { if (o.isMesh && !Array.isArray(o.material) && /^(room|pd):(night|street|pnight)$/.test(o.name)) patchWindow(o.material); });
   group.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
@@ -198,11 +200,13 @@ export function bakeRoom(THREE, group, out) {
       r *= ao; g *= ao; b *= ao;
       // point lights
       for (const l of L) {
+        let zf = 1;
+        if (l.zone) { const q = l.zone, o2 = Math.max(q.x0 - x, x - q.x1, q.z0 - z, z - q.z1); if (o2 >= q.fade) continue; if (o2 > 0) zf = 1 - o2 / q.fade; }
         const lx = l.x - x, ly = l.y - y, lz = l.z - z, d2 = lx * lx + ly * ly + lz * lz, d = Math.sqrt(d2) || 1e-4;
         let ndl = (lx * nx + ly * ny + lz * nz) / d;
         ndl = (ndl + 0.15) / 1.15; if (ndl <= 0) continue;   // slight wrap: softer terminator
         let fall = 7.0 * l.i / (Math.pow(d, 1.8) + 1.1);    // soft near the bulb, no blown-out pools
-        fall *= sm(1 - d / 22);
+        fall *= sm(1 - d / 22) * zf;
         if (fall < 0.004) continue;
         let vis = 1;
         if (occ.length) {
