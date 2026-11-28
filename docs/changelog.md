@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-28: the HOA war, chapter 1 "Notice to Vacate", the odd jobs board, Gary Kim (on main, test page only)
+- diet: real gameplay instead of a sandbox. The HOA war is the story spine and jobs are the everyday money loop. The HOA
+  villains are Tyrone and Sharique Bellamy, a married couple: Tyrone is the President (vision boards, warm smile, fines),
+  Sharique chairs Architectural Review (deadpan, tape measure, leather planner). Gary stays as their underling and is
+  now Gary Kim, the heavyset, near-sighted Compliance Officer (thick glasses, forms in triplicate). Design: docs/hoa-war.md.
+- src/js/hoastory.js: the couple serve a Notice to Vacate at the RV. A 3 game day clock (72 real minutes) and a daily
+  8 AM violation add to the fines. Neighbors sign Goobles' petition once their job is done (Nana, the Quik Stop Kids,
+  Big Ricky, Rosie's Fish Order, Earl's Catch of the Day). With 3 signatures the Board Hearing sits at the HOA office,
+  6 to 9 PM: a menu turn battle (SIGNATURE, POINT OF ORDER, SWAT THE GAVEL, GROOM x2). Unpaid fines let Tyrone heal the
+  board, so paying at the HOA office door matters (Monte Carlo: fines paid ~97% win with 3 signatures, $300 unpaid
+  ~39%). Clock out = RV booted (interior closed) until the fines are paid. Win: MOTION DENIED, eviction suspended, $250.
+  HUD chip under the stars, quest log entry "Notice to Vacate". Save key mg-hoastory-v1. Debug window.__HOA.
+- src/js/oddjobs.js: cork board by the RV. Pizza Run (Pizza City to a house, tip for speed, dents cost), Lawn Duty (mow
+  ten tufts on an Estates lawn in 45 s, one instanced mesh), Tow Rescue (drive a ticketed car to the RV lot before the
+  HOA tow, may draw an HOA star). Work rep: +10% pay per 4 shifts (max +50%); 3 in a row = $50 bonus. Save key
+  mg-oddjobs-v1. Debug window.__G.oddjobs.
+- QA: suite 27-hoastory (scenario tools/qa/scenarios/hoastory.cjs, also takes shots).
+
 ## 2026-11-28: drivable fire engine, ambulance and tractor; ambulance dispatch after run-overs (on main, test page only)
 - diet: "make the tractor drivable with enhanced graphics? same for the fire truck and emergency medical vehicle at the
   hospital ... when we run over pedestrians, there should be some random ambulance dispatches with stretchers and emts".
