@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-28: More town: Hwy 9 East shops, roadhouse, motel, Hollow Ln homes, farmsteads (moretown.js)
+- diet: "if we have improved performance capacity, lets add more houses and commercial buildings".
+- Headroom measured first (qa perf, SwiftShader): town views 330 to 490 draws, 170k to 300k tris (Estates ~500k); the
+  east side was the lightest. All new buildings are code-built from existing materials: page +17 KB, no new textures.
+- Hwy 9 East, north side across from the fire station + hospital: Maple Grove Post Office (mail truck, collection boxes,
+  flagpole), First Farmers Bank (columns, pediment, drive-up lane, ATM), Dollar Barn (red gambrel false front, cart corral).
+  County Rd 12 x Hwy 9: The Rusty Spur roadhouse (NE, false front, neon, porch, steer-horn sign, smoker) and Juniper Motor
+  Inn (SE, L-shaped, 11 rooms, office, fenced pool, VACANCY pole sign). Dry Creek Flats plow field pulled back 16 m.
+- Hollow Ln east of Pine Hollow: six homes (farm, trailer, brick, cottage, two-storey, ranch), fenced like the town.
+  Sawyer Farm Rd: Sawyer Farm (white farmhouse, red gambrel barn, silo, bales) and Miller Farm (yellow farmhouse, grey
+  barn, two grain bins). places: postOffice, bank, dollar, roadhouse, motel, motelPool, farmEast, farmWest.
+- Cost (same spots, before -> after): views that see the new areas +10 to 12% triangles (~+20k to 30k), +16 to +40
+  draws; Quik Stop, school, Estates and Nana's unchanged within traffic noise. The countryside sectors merge per 45 degree
+  wedge, so a sector's whole mesh draws whenever any of it is in view.
+- world.js: buildMoreTown(K) runs after buildCountry with the random sequence saved (no other tree or prop moves);
+  buildFences(from) fences only the new lots. Flag MORE_TOWN in moretown.js.
 ## 2026-11-28: Best in Show, the cat show quest (on main, test page only)
 - diet: "should we add a professional cat show quest? goobles is to compete against top cat talent from across the country".
 - src/js/catshow.js: the Grand National Feline Classic sets up round the town-green gazebo (judges' table, entries desk,
