@@ -4,13 +4,13 @@
 // and gamepad.js all feed those) and the menu deletes the keys it consumes, so nothing leaks into the game.
 // Settings persist in one localStorage key; fx.js reads the weather flag from it at startup on its own.
 import { Sfx } from './sfx.js';
+import { listRows, openHotkeys } from './hotkeys.js';
 
 export const SETTINGS_KEY = 'maple-grove-offleash-settings';
 export function loadSettings() { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {}; } catch (e) { return {}; } }
 
 const TOUCH_HELP = [['Stick', 'move, or drive (push to the edge: sprint)'], ['Drag the screen', 'look around'], ['JUMP / HORN', 'jump (tap again in the air), honk'], ['PAW / BRAKE', 'paw swipe, handbrake'], ['USE', 'talk, get in or out'], ['BAG', 'fishing bag'], ['PAUSE / MAP', 'pause menu, town map']];
 const PAD_HELP = [['Left stick', 'move, or drive'], ['Right stick', 'look'], ['A / Cross', 'jump, handbrake'], ['X / Square', 'paw swipe'], ['Y / Triangle', 'talk, get in or out'], ['B / Circle', 'sprint, or handbrake in a car'], ['RB / LB', 'horn, holster'], ['Start / Back', 'pause, town map'], ['D-pad', 'menus']];
-const EXTRA_KEYS = [['Esc', 'pause menu'], ['Tab', 'town map'], ['L', 'quest log'], ['I / B', 'fishing bag'], ['Q', 'holster']];
 // district label spots (world metres); each is checked against districtAt at startup so a moved border just drops the label
 const DISTRICT_LABELS = [['Hollow Woods', -130, 40], ["Nana's Place", -98, 28], ['Chapel Hill', -85, -24], ['Maple Grove Estates', -80, -85], ['Lake Juniper', -18, 95], ['Maple Grove High', 100, -60], ['Old Mill Farm', 16, -90], ['Pine Hollow', 95, 70], ['Downtown Maple Grove', 0, 0]];
 const LEGEND = [['#fff', 'You'], ['#5fd0ff', 'RV (save)'], ['#ffd23f', 'Job'], ['#ff3b6b', 'Waypoint'], ['#c77dff', 'Your marker'], ['#7fe07f', 'Quik Stop gas'], ['#3a78c8', 'Suds N Paws'], ['#3ab0a0', "Earl's Bait & Tackle"], ['#1e2a44', 'Maple Grove PD']];
@@ -60,8 +60,8 @@ export function makeUI(o) {
     markHint(); drawBig();
   });
   document.getElementById('minimap')?.addEventListener('click', () => { if (!titled() && !M.open) setMap(!M.map); });
-  // the title card's own key table is the desktop controls list
-  const keyRows = () => [...document.querySelectorAll('#title table tr')].filter((r) => !r.classList.contains('devonly')).map((r) => [r.cells[0].textContent, r.cells[1].textContent]).concat(EXTRA_KEYS);
+  // desktop controls list: the rows of src/js/hotkeys.js that have a short text (? draws all of them)
+  const keyRows = () => listRows();
   const table = (rows) => `<table>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`;
   const SETTINGS = [
     { k: 'sound', label: 'Sound', vals: [true, false], text: (v) => (v ? 'ON' : 'OFF') },
@@ -78,7 +78,7 @@ export function makeUI(o) {
   function render() {
     let h = '<div class="card"><h1>PAUSED<span>OFF LEASH</span></h1>';
     if (M.view === 'main') h += ['RESUME', 'QUESTS', 'CONTROLS', 'SETTINGS', 'RETURN TO TITLE'].map((t) => `<div class="item" data-a="${t}">${t}</div>`).join('');
-    else if (M.view === 'controls') h += `<div class="cols"><div><h2>KEYBOARD</h2>${table(keyRows())}</div><div><h2>TOUCH</h2>${table(TOUCH_HELP)}</div><div><h2>GAMEPAD</h2>${table(PAD_HELP)}</div></div><div class="item" data-a="BACK">BACK</div>`;
+    else if (M.view === 'controls') h += `<div class="cols"><div><h2>KEYBOARD</h2>${table(keyRows())}</div><div><h2>TOUCH</h2>${table(TOUCH_HELP)}</div><div><h2>GAMEPAD</h2>${table(PAD_HELP)}</div></div>${isTouch ? '' : '<div class="item" data-a="KEYS">ALL KEYS (?)</div>'}<div class="item" data-a="BACK">BACK</div>`;
     else h += SETTINGS.map((s) => `<div class="item set" data-k="${s.k}"><span>${s.label}</span><b>&lt; ${s.text(S[s.k])} &gt;</b></div>`).join('') + '<div class="item" data-a="BACK">BACK</div>';
     h += `<div class="hint">${isTouch ? 'Tap an item' : 'W/S or arrows choose · Enter or E confirm · Esc back'}</div></div>`;
     pause.innerHTML = h; pause.classList.toggle('wide', M.view === 'controls');
@@ -106,6 +106,7 @@ export function makeUI(o) {
     if (a === 'RESUME') setPaused(false);
     else if (a === 'QUESTS') { setPaused(false); window.__G?.quests?.open(); } // quests
     else if (a === 'CONTROLS') setView('controls');
+    else if (a === 'KEYS') { setPaused(false); openHotkeys(); } // hotkeys: drawn keyboard map
     else if (a === 'SETTINGS') setView('settings');
     else if (a === 'BACK') setView('main');
     else if (a === 'RETURN TO TITLE') location.reload();
