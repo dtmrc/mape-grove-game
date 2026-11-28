@@ -35,6 +35,21 @@ html, body {
 #prompt { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); font-size: 24px; color: var(--gold); display: none; }
 #carname { position: absolute; right: 16px; bottom: 20px; font-size: 32px; font-style: italic; color: #cfe6ff; opacity: 0; transition: opacity 0.3s; }
 #carname.show { opacity: 1; }
+/* car dash (src/js/dash.js): speedometer + radio buttons. Desktop: bottom right; touch: see the touch layout block */
+#dash { position: fixed; right: 16px; bottom: 16px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-shadow: 2px 2px 0 var(--shadow); }
+#speedo { color: var(--ink); line-height: 0.9; white-space: nowrap; pointer-events: none; }
+#speedo b { font-weight: normal; font-size: 52px; display: inline-block; min-width: 2ch; text-align: right; }
+#speedo i { font-style: normal; font-size: 20px; color: #cfe6ff; margin-left: 4px; }
+#radioctl { display: flex; gap: 6px; }
+#radioctl button {
+  font: 18px VT323, monospace; color: #fff; background: rgba(0, 0, 0, 0.45); border: 2px solid #556; padding: 4px 8px; min-width: 36px;
+  pointer-events: auto; cursor: pointer; touch-action: none;
+}
+#radioctl button:active { background: rgba(255, 210, 63, 0.6); }
+#radioctl #radiopwr { color: #7fe07f; }
+#radioctl #radiopwr.off { color: #8a8a8a; }
+body:not(.touch) #carname { bottom: 104px; }
+body.titled #dash { display: none !important; }
 #toast {
   position: absolute; top: 12px; left: 16px; max-width: 340px; padding: 8px 12px; font-size: 22px; line-height: 1.05;
   background: var(--panel); border: 2px solid #44506a; opacity: 0; transition: opacity 0.2s; text-shadow: none;
@@ -183,7 +198,13 @@ body.touch #bagbtn, body.touch #pdgunbtn { right: calc(var(--btn-r) + 5px); widt
 body.touch #bagbtn { bottom: calc(var(--btn-b) + 162px); }
 body.touch #pdgunbtn { bottom: calc(var(--btn-b) + 232px); }
 body.touch #harmbtn, body.touch #boobtn { position: fixed; left: var(--pad-l); }
-body.touch #radiobtn { right: var(--btn-r); bottom: calc(var(--btn-b) + 304px); }
+/* dash: portrait = a narrow column in the right-edge band above GUN/BAG: speed on top, ON/OFF, -, +, RADIO as a 2x2 grid */
+body.touch #dash { right: var(--btn-r); bottom: calc(var(--btn-b) + 300px); width: 72px; align-items: stretch; gap: 3px; }
+body.touch #speedo { text-align: center; }
+body.touch #speedo b { font-size: 30px; min-width: 0; }
+body.touch #speedo i { font-size: 13px; margin-left: 2px; }
+body.touch #radioctl { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+body.touch #radioctl button { min-width: 0; height: 30px; padding: 0; font-size: 16px; }
 body.touch #harmbtn { bottom: calc(var(--pad-b) + 268px); }
 body.touch #boobtn { bottom: calc(var(--pad-b) + 214px); }
 body.touch #minimap { left: calc(16px + var(--sa-l)); top: calc(12px + var(--sa-t)); }
@@ -192,14 +213,14 @@ body.touch #tr { right: calc(16px + var(--sa-r)); top: calc(12px + var(--sa-t));
    the radio caption and car name go up top. While a dialog box is up (body.talking) the controls step aside. */
 body.touch #prompt { top: auto; bottom: calc(var(--pad-b) + 214px); left: calc(var(--pad-l) + 76px); right: calc(var(--btn-r) + 76px); transform: none; text-align: center; }
 body.touch #radiocap { left: calc(var(--pad-l) + 70px); right: calc(var(--btn-r) + 76px); top: calc(var(--sa-t) + 296px); margin: 0 auto; text-align: center; }
-body.touch #objective { top: calc(var(--sa-t) + 172px); left: calc(16px + var(--sa-l)); right: calc(16px + var(--sa-r)); max-width: none; transform: none; }
+body.touch #objective { top: calc(var(--sa-t) + 172px); left: calc(16px + var(--sa-l)); right: calc(var(--btn-r) + 80px); max-width: none; transform: none; }
 body.touch #toast { top: calc(var(--sa-t) + 120px); left: calc(16px + var(--sa-l)); }
-body.touch #radio { top: calc(var(--sa-t) + 236px); }
+body.touch #radio { top: calc(var(--sa-t) + 236px); left: calc(16px + var(--sa-l)); right: calc(var(--btn-r) + 80px); transform: none; white-space: normal !important; }
 body.touch #carname { top: calc(var(--sa-t) + 296px); bottom: auto; right: auto; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 body.touch #dialog { bottom: calc(16px + var(--sa-b)); width: min(620px, calc(100% - 32px - var(--sa-l) - var(--sa-r))); }
 body.touch #storyui, body.touch #hensbt { bottom: calc(14px + var(--sa-b)); }
-body.talking #touchui, body.talking #bagbtn, body.talking #pdgunbtn, body.talking #radiobtn, body.talking #harmbtn, body.talking #boobtn,
-body.menu #pdgunbtn, body.menu #radiobtn, body.menu #harmbtn, body.menu #boobtn { display: none !important; }
+body.talking #touchui, body.talking #bagbtn, body.talking #pdgunbtn, body.talking #dash, body.talking #harmbtn, body.talking #boobtn,
+body.menu #pdgunbtn, body.menu #dash, body.menu #harmbtn, body.menu #boobtn { display: none !important; }
 @media (min-width: 600px) {
   body.touch #objective { top: calc(12px + var(--sa-t)); left: calc(128px + var(--sa-l)); right: calc(264px + var(--sa-r)); }
   body.touch #carname { top: calc(var(--sa-t) + 75px); }
@@ -209,7 +230,17 @@ body.menu #pdgunbtn, body.menu #radiobtn, body.menu #harmbtn, body.menu #boobtn 
   body.touch #bagbtn, body.touch #pdgunbtn { right: calc(var(--btn-r) + 162px); }
   body.touch #bagbtn { bottom: var(--btn-b); }
   body.touch #pdgunbtn { bottom: calc(var(--btn-b) + 72px); }
-  body.touch #radiobtn { right: var(--btn-r); bottom: calc(var(--btn-b) + 118px); }
-  body.touch #harmbtn { bottom: calc(var(--pad-b) + 184px); }
+  /* dash: one row under the minimap; the ♪ (hidden in cars anyway) sits beside BOO so the row has room */
+  body.touch #dash { right: auto; left: calc(16px + var(--sa-l)); bottom: auto; top: calc(var(--sa-t) + 116px); width: auto; flex-direction: row; align-items: center; gap: 5px; }
+  body.touch #speedo { min-width: 58px; text-align: right; }
+  body.touch #speedo b { font-size: 30px; }
+  body.touch #radioctl { display: flex; gap: 5px; }
+  body.touch #radioctl button { min-width: 34px; height: 30px; padding: 0 6px; }
+  body.touch #harmbtn { bottom: calc(var(--pad-b) + 140px); left: calc(var(--pad-l) + 56px); }
   body.touch #boobtn { bottom: calc(var(--pad-b) + 140px); }
+}
+/* short portrait phones (iPhone SE 1st gen): no room above GUN under the clock panel, so the dash sits left of GUN, speed beside the 2x2 buttons */
+@media (max-width: 599px) and (max-height: 620px) {
+  body.touch #dash { width: auto; flex-direction: row; align-items: center; right: calc(var(--btn-r) + 74px); bottom: calc(var(--btn-b) + 232px); }
+  body.touch #radioctl { width: 72px; }
 }
