@@ -134,4 +134,6 @@ export function updateHouseTex(x, z) {
 }
 /** After a lost WebGL context every texture is uploaded again from its image: go back to the half atlases (always in memory). */
 export function houseTexReset() { for (const id in LOD) if (LOD[id].t) toLow(LOD[id]); }
+/** Tests: distance from (x, z) to the nearest Estates house. */
+MODE.dist = (x, z) => { let d = 1e9; for (const id in LOD) for (const [sx, sz] of LOD[id].spots) d = Math.min(d, Math.hypot(sx - x, sz - z)); return d; };
 export const houseTexState = () => Object.fromEntries(Object.entries(LOD).filter(([, L]) => L.t).map(([id, L]) => [id, L.state]));
