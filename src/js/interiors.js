@@ -20,6 +20,8 @@
 //   close(id, on) / isClosed(id)   shut a room's outdoor doors + windows (burned out); 'env' event (id, room) after indoor lights
 //   room                           the current room record (origin, size, cols, group, exit, cam) or null
 //   state                          snapshot for tests
+//   Rooms may also return `portals` [{ x0, x1, z0, z1, minY?, maxY?, to: roomId, spawn: { x, z, yaw, y? } }]: walking into
+//   the box (room-local) fades to room `to` at `spawn`; leaving that room by its door still returns outside.
 //   Rooms may also return `floors` (optional): walkable raised surfaces in room-local coords, the same shapes terrain.js
 //   floorAt takes: decks { top, x0, x1, z0, z1 }, turned boxes { top, cx, cz, hw, hd, c, s } (or `rot` instead of c/s),
 //   ramps { t0, t1, cx, cz, hw, hd, c, s } (t0 at local -z, t1 at local +z) and discs { top, cx, cz, r }. While inside,
@@ -244,7 +246,7 @@ export function makeInteriors(ctx) {
         lights: (out.lights || []).slice(0, (ctx.pool || []).length || 10),
         allLights: (out.lights || []).length > ((ctx.pool || []).length || 10) ? out.lights.slice() : null,   // big rooms: the pool follows the cat
         cam: { maxDist: out.cam?.maxDist ?? 2.4, height: out.cam?.height ?? 2.4 },
-        spots: (out.interact || []).map((h) => ({ id: h.id, x: +h.x || 0, z: +h.z || 0, r: h.r || 1.1, label: h.label || h.id, onUse: h.onUse })),
+        spots: (out.interact || []).map((h) => (h.live = { id: h.id, x: +h.x || 0, z: +h.z || 0, r: h.r || 1.1, label: h.label || h.id, onUse: h.onUse })),   // h.live: the room may move / relabel / switch off (r = 0) its own spot
         name: out.name || reg.room.name || id,
       });
       return rec;
@@ -476,8 +478,9 @@ export function makeInteriors(ctx) {
     const win = S.entry && S.entry.kind === 'window' ? R.windows.find((w) => w.entry === S.entry) : null;
     const sp = opts.spawn || win || (S.entry && S.entry.kind === 'door' && S.entry.inside) || R.spawn;   // a second door lands at its own spot
     P.x = R.origin.x + (+sp.x || 0); P.z = R.origin.z + (+sp.z || 0); P.y = 0; P.vy = 0; P.vx = P.vz = 0; P.jumps = 0; P.lock = 0.5;
-    const q = roomCollide(P.x, P.z, 0.22); P.x = q.x; P.z = q.z;
-    P.y = P.fl = roomFloorAt(P.x, P.z, 0.5);   // spawned on a platform: start on top of it
+    const sy = +sp.y || 0;             // a spawn part way up a staircase (portals)
+    const q = roomCollide(P.x, P.z, 0.22, sy); P.x = q.x; P.z = q.z;
+    P.y = P.fl = roomFloorAt(P.x, P.z, sy + 0.5);   // spawned on a platform: start on top of it
     const yaw = +sp.yaw || 0;          // rooms: yaw 0 faces -z; the cat: yaw 0 faces +z
     P.yaw = yaw + Math.PI;
     setIndoorRender(true);
@@ -617,6 +620,14 @@ export function makeInteriors(ctx) {
     S.atExit = S.exitArmed && d < R.exit.r + 0.6;
     if (!S.exitArmed) { /* just came in: walk away from the door first */ }
     else if (!S.fading && d < R.exit.r && !locks.has(S.id) && P.y < 0.3) apiExit();
+    // portals: walk-in zones that lead to another room (a staircase to the floor above). Room-local box + height band.
+    if (S.exitArmed && !S.fading && S.inside && R.out.portals) {
+      const lx = P.x - R.origin.x, lz = P.z - R.origin.z;
+      for (const q of R.out.portals) {
+        if (lx < q.x0 || lx > q.x1 || lz < q.z0 || lz > q.z1 || P.y < (q.minY ?? -1) || P.y > (q.maxY ?? 99) || !registry.has(q.to)) continue;
+        apiEnter(q.to, { spawn: q.spawn, returnTo: S.ret || doorExitPoint(S.id) || S.outPos }); break;
+      }
+    }
   }
   // per frame, after fx.update: indoor light + environment
   function env() {

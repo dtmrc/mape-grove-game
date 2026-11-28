@@ -14,6 +14,7 @@ import * as INTR from './interiors.js';
 import { KIT } from './rooms.js';
 import { HOUSES } from './houses.js';
 import { makeAtlas, plan, parts, zoneLights } from './roomparts.js';
+import { stairs, knockables, knockSpots, player, buildUpstairs } from './mansionup.js';
 
 const PI = Math.PI;
 const W = 22, D = 18, H = 3.3;
@@ -40,7 +41,7 @@ const MODEL_THEME = { ashford: 'classic', linden: 'classic', avery: 'classic', h
 const FAMILY = ['Ashworth', 'Delacroix', 'Vandermeer', 'Pruitt-Hale', 'Castellano', 'Whitlock', 'Okafor', 'Lindqvist', 'Montgomery', 'Zhao', 'Beauregard', 'Fitzwilliam', 'Hargrove', 'St. Clair', 'Abernathy', 'Kowalczyk', 'Rousseau', 'Thackeray'];
 
 let A = null;                         // { G, places, toast, addCash, Sfx }
-const S = { looted: {}, houses: [], visits: 0 };
+const S = { looted: {}, houses: [], visits: 0, koi: {}, disarmed: {}, knocked: 0 };
 const say = (lines, t = 4) => A && A.toast(Array.isArray(lines) ? lines[(Math.random() * lines.length) | 0] : lines, t);
 const blip = (f) => A && A.Sfx && A.Sfx.blip && A.Sfx.blip(f);
 
@@ -110,9 +111,11 @@ function buildMansion(spec, ctx) {
   const mw = (fn, x, y, z, ry, ...rest) => P[fn](mx * x, y, z, mx * ry, ...rest);
   const mf = (x, z, ry = 0) => P.at(mx * x, z, mx * ry);
   const art = (k) => (gary ? garyPic(atlas, k) : P.paintTex(spec.id + ':' + k, th.art[k % th.art.length], k % 2 ? 72 : 96, k % 2 ? 96 : 72));
-  const hot = [];
+  const hot = [], portals = [], knocks = [], floors = [];
   const spot = (id, x, z, r, label, onUse) => hot.push({ id, x: mx * x, z, r, label, onUse });
+  const kn = (x, y, z, c, name, s2) => knocks.push({ x: mx * x, y, z, c, name, s: s2 });
   const metal = th.metal, FAM = spec.family;
+  let group = null, pianoN = 0;
 
   // ============================================================ foyer
   {
@@ -144,6 +147,13 @@ function buildMansion(spec, ctx) {
     P.plant(mx * 2.5, 8.5, { kind: 'palm', pot: th.name === 'modern' ? 0x2a2a2e : 0xe8e4dc }); P.plant(mx * -2.5, 4.6, { kind: 'fig' });
     for (const e of [-1, 1]) P.column(e * 2.72, 4.0, H, { col: th.trim });
     for (const z of [5.0, 8.0]) P.can(0, z, H, 0.35);
+    { const F = mf(-2.55, D / 2 - 0.01, PI); F.box('plain', 0xe8e8ec, 0.16, 0.22, 0.03, 0, 1.25, 0.015); F.box('glow', 0xe03030, 0.03, 0.03, 0.01, 0.04, 1.32, 0.035, 0, { tint: false }); for (let k = 0; k < 9; k++) F.box('plain', 0x8a8a90, 0.025, 0.025, 0.01, -0.04 + (k % 3) * 0.04, 1.26 - ((k / 3) | 0) * 0.04, 0.033); }
+    spot('alarm', -2.5, 8.3, 0.75, 'Paw at the alarm keypad', () => {
+      if (S.disarmed[spec.id]) { say('The keypad says DISARMED. You did that. With your face.', 3); return; }
+      S.disarmed[spec.id] = true; [880, 880, 880, 1320].forEach((f, i) => setTimeout(() => blip(f), i * 120));
+      say(gary ? 'The code is on a sticky note on the keypad: "1234 (DO NOT TELL DOUG)". Beep. DISARMED.' : 'You walk across the keypad. 4, 4, 7, 7, enter. Beep. DISARMED. That was the code?', 4.5);
+    });
+    kn(2.7, 0.82, 4.95, 0xe8e4dc, 'little vase');
   }
 
   // ============================================================ great room
@@ -163,16 +173,19 @@ function buildMansion(spec, ctx) {
     for (const e of [-1, 1]) { m('table', e * 1.95, -3.5, 0, { w: 0.5, d: 0.5, h: 0.55, wood: th.wood }); }
     if (spec.seed % 2 === 0 || gary) {
       m('piano', -2.6, 1.3, 0.5);
-      spot('piano', -2.2, 2.3, 1.0, 'Walk on the piano', () => { [523, 440, 659, 392].forEach((f, i) => setTimeout(() => blip(f + ((Math.random() * 60) | 0)), i * 130)); say(['Plink. Plonk. PLONK. A masterpiece, performed on a ninety-thousand-dollar instrument.', 'You walk down the keys from low to high. Somewhere a music teacher feels a chill.']); });
+      spot('piano', -2.2, 2.3, 1.0, 'Play the piano', () => { const tune = [262, 262, 392, 392, 440, 440, 392, 349, 349, 330, 330, 294, 294, 262]; blip(tune[pianoN % tune.length] * 2); pianoN++; if (pianoN === 1) say('Plink. Each press is the next note. You know exactly one song.', 3); else if (pianoN % tune.length === 0) say(['A masterpiece, performed on a ninety-thousand-dollar instrument. You bow to nobody.', 'The whole tune, start to finish. Somewhere a music teacher feels a chill.'], 4); });
     } else {
       m('poolTable', -2.3, 1.4, 0);
       spot('pool', -2.3, 2.6, 1.0, 'Bat a pool ball', () => { blip(700); say(['You bat the eight ball into the corner pocket. Then the cue ball. Then you just keep going.', 'Clack. The balls scatter. You watch them all the way to a stop.']); });
     }
-    mw('picture', -4.89, 1.85, -2.2, PI / 2, 1.5, 1.1, art(1), gary ? 0xe0b840 : th.wood);
+    mw('picture', -4.89, 1.85, -4.15, PI / 2, 1.1, 0.9, art(1), gary ? 0xe0b840 : th.wood);
+    { const st = stairs(B, P, cols, mx, th, H, spec.id + '-up'); portals.push(st.portal); floors.push(st.ramp); }
+    spot('cupboard', -3.3, -1.6, 0.7, 'Open the cupboard under the stairs', () => say(gary ? ['Forty-one identical clipboards and a laminator. The laminator is still warm.', 'A filing cabinet labelled "NEIGHBORS, A to M". There is a second one.'] : ['Skis, a vacuum nobody uses any more and a box marked "XMAS". No wizard.', 'Golf clubs, a croquet set and one single rollerblade. You sit in the box of wrapping paper.']));
     mw('picture', 4.89, 1.85, -1.3, -PI / 2, 1.1, 1.4, art(2), gary ? 0xe0b840 : th.wood);
     P.plant(mx * 4.4, 3.3, { kind: 'fig', s: 1.15 }); P.plant(mx * -4.4, -8.3, { kind: 'palm' }); P.floorLamp(mx * 4.3, -8.2, { metal });
     P.chandelier(0, -5.3, H, 2.55, { r: 0.75, metal, n: 10, i: 1.2 });
     for (const [x, z] of [[-3, -1], [3, -1], [-2.5, 2.2], [2.5, 2.2]]) P.can(mx * x, z, H, 0.4);
+    kn(0.35, 0.82, -2.9, 0x3a6a9a, 'vase'); kn(0.45, 0.44, -5.35, 0xe8e0d0, 'coffee mug', 0.6);
     spot('couch', 0, -4.4, 0.9, 'Knead the sofa', () => say(['You knead the sectional. It costs more than your RV. You knead harder.', 'You leave a perfect layer of white fur on the ' + (gary ? 'burgundy velvet. Gary will find it. Gary will KNOW.' : 'cushions. Signed, Goobles.')]));
     spot('fire', 0, -7.5, 0.9, 'Warm up by the fire', () => { if (A) A.G.hp = Math.min(100, (A.G.hp || 0) + 10); say('You loaf in front of the gas fireplace until your belly is hot. +10 health.'); });
   }
@@ -202,6 +215,7 @@ function buildMansion(spec, ctx) {
       say(gary ? ['Labelled leftovers. "GARY\'S. DO NOT TOUCH. THIS MEANS YOU, DOUG." You eat Gary\'s salmon. +35 health.', 'A shelf of sparkling water and one sad kale salad. You find the smoked salmon behind it. +35 health.']
         : ['Smoked salmon, a wheel of brie and something called "burrata". You eat all of it standing in the fridge. +35 health.', 'Leftover lobster in a takeout box with a swan folded out of foil. You eat the lobster. You keep the swan. +35 health.']);
     });
+    kn(7.45, 0.96, -4.45, 0xe8d040, 'pepper mill'); kn(9.3, 0.76, -2.6, 0xd8ecf4, 'glass of juice', 0.7);
     spot('stove', 8.0, -7.6, 0.7, 'Sniff the stove', () => say(['A six-burner range that has clearly never cooked anything but boxed mac and cheese.', 'The copper pot is decorative. You check. Yes. Decorative.']));
     spot('island', 6.3, -5.6, 0.8, 'Jump on the island', () => say(['You sit in the exact middle of the marble island. This is where a cat goes. Everybody knows that.', 'You push a lemon off the counter. Then another. The fruit bowl is now a to-do list.']));
   }
@@ -218,6 +232,7 @@ function buildMansion(spec, ctx) {
     mw('picture', 8.6, 2.0, 3.89, PI, 1.5, 0.9, art(3), gary ? 0xe0b840 : th.wood);
     m('bookcase', 9.9, -0.72, 0, { w: 1.5, h: 2.2, wood: th.wood, n: 4 });
     for (const z of [0.3, 2.9]) mw('window', 10.999, 1.7, z, -PI / 2, 1.3, 1.9, { curtain: th.curtain, floor: true, trim: th.trim, rod: metal });
+    kn(8.2, 0.92, 3.62, 0xc8ccd4, 'silver cup', 0.8);
     spot('dinner', 8.3, 0.4, 0.9, 'Sit at the head of the table', () => say(['Seating for ten. Place settings for ten. Nobody has eaten in here since 2019.', 'You sit at the head of the table and wait to be served. Any minute now.']));
   }
 
@@ -340,18 +355,30 @@ function buildMansion(spec, ctx) {
   const vac = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.07, 6), new THREE.MeshBasicMaterial({ color: gary ? 0xb89830 : 0x2a2a30 }));
   vac.userData.noBake = true; vac.position.set(0, 0.04, 0.5); vac.name = 'mansion:vac';
   zoneLights(lights, rooms, 3);
-  const group = B.finish(new THREE.Group()); group.add(vac);
+  const K = knockables(knocks, () => { if (A) A.addCash(20); say('Everything that could be knocked off a table has been. You find $20 under the sideboard.', 4); });
+  knockSpots(K, (id, x, z, r, label, fn) => hot.push({ id, x, z, r, label, onUse: fn }), 1, () => group, hot, spec.id);
+  let ride = 0, last = performance.now() / 1000;
+  hot.push({ id: 'vac', x: 0, z: 0.5, r: 0.8, label: 'Ride the robot vacuum', onUse: () => { if (ride > 0) return; ride = 8; blip(600); say(gary ? 'You sit on Gary\'s gold robot vacuum. It beeps "OBSTACLE" and carries on. You are the obstacle.' : 'You sit on the robot vacuum. It does not care. Off you go.', 3.5); } });
+  group = B.finish(new THREE.Group()); group.add(vac); group.add(K.mesh);
   const front = D / 2;
   return {
-    group, size: [W, D], cols, floors: [], lights, unload: true,
+    group, size: [W, D], cols, floors, lights, unload: true, portals,
     name: gary ? "Gary's House" : `The ${FAM} Residence`,
     spawn: { x: 0, z: front - 1.1, yaw: 0 }, exit: { x: 0, z: front - 0.05, r: 0.7 },
     cam: { maxDist: 3.6, height: 2.9 },
     bake: { amb: 0.3, maxEdge: 1.2 }, pack: true,
     interact: hot,
-    dispose() { atlas.tex.dispose(); },
+    dispose() { atlas.tex.dispose(); K.mesh.geometry.dispose(); K.mesh.material.dispose(); K.mesh.dispose(); },
     update(t) {   // the vacuum drives a slow figure of eight through the great room
-      const a = t * 0.35; vac.position.x = Math.sin(a) * 3.4; vac.position.z = 1.0 + Math.sin(a * 2) * 1.6; vac.rotation.y = a * 3;
+      const a = t * 0.35; vac.position.x = mx * (1.0 + Math.sin(a) * 2.3); vac.position.z = 1.0 + Math.sin(a * 2) * 1.6; vac.rotation.y = a * 3;
+      const n = performance.now() / 1000, dt = Math.min(0.1, Math.max(0, n - last)); last = n;
+      K.update(dt);
+      const vh = hot[hot.length - 1].live; if (vh) { vh.x = vac.position.x; vh.z = vac.position.z; vh.r = ride > 0 ? 0 : 0.8; }
+      if (ride > 0) {   // the cat sits on it and goes where it goes
+        const p = player(); ride -= dt;
+        if (p) { p.x = group.position.x + vac.position.x; p.z = group.position.z + vac.position.z; p.y = 0.09; p.vx = p.vz = p.vy = 0; p.lock = Math.max(p.lock || 0, 0.15); p.yaw = vac.rotation.y; }
+        if (ride <= 0) say(['The vacuum docks itself. Ride over. Five stars.', 'It bumps a chair leg and you step off like you meant to.'], 3);
+      }
     },
     stats: () => ({ atlas: atlas.used(), lights: lights.length, cols: cols.length }),
   };
@@ -384,7 +411,7 @@ function loot(spec, what) {
   S.looted[key] = true;
   const cash = what === 'safe' ? (spec.gary ? 250 : 90 + ((spec.seed * 37) % 80)) : 30 + ((spec.seed * 53) % 40);
   A.addCash(cash); A.Sfx.jingle ? A.Sfx.jingle() : (A.Sfx.pickup && A.Sfx.pickup());
-  const alarm = Math.random() < (what === 'safe' ? 0.5 : 0.25);
+  const alarm = !S.disarmed[spec.id] && Math.random() < (what === 'safe' ? 0.5 : 0.25);   // the keypad by the front door switches it off
   if (what === 'safe') say(spec.gary ? `Behind the painting of Gary: a safe. The code is 1-2-3-4. Inside: an envelope marked "HOA DUES (MISC)". +$${cash}` : `The painting swings out. A wall safe, left open a crack. You hook out a stack of bills with one claw. +$${cash}`, 5);
   else say(`Pearls, a watch, a tennis bracelet. You take the shiniest thing and carry it off in your mouth. +$${cash}`, 5);
   if (alarm && A.G) { A.G.heat = Math.min(5, Math.max(A.G.heat || 0, 1)); A.G.seenT = 0; setTimeout(() => say('A tiny red light blinks on the wall. Silent alarm. Time to go.', 3.5), 2600); }
@@ -404,6 +431,7 @@ export function init(a) {
     const spec = { id: isGary ? 'gary' : 'estate' + (n + 1), model: y.id, mirror: y.mx < 0, seed: n + 1, family: FAMILY[n % FAMILY.length], gary: isGary };
     n++;
     INTR.registerRoom(spec.id, { name: isGary ? "Gary's House" : `The ${spec.family} Residence`, build: (ctx) => buildMansion(spec, ctx) }, door);
+    INTR.registerRoom(spec.id + '-up', { name: (isGary ? "Gary's House" : `The ${spec.family} Residence`) + ', upstairs', build: (ctx) => buildUpstairs(spec, ctx) });
     S.houses.push({ ...spec, door });
   }
   if (!n) console.warn('[mansions] no Estates houses found (places.yards)');
@@ -416,3 +444,6 @@ export function init(a) {
   if (typeof window !== 'undefined' && window.__G) window.__G.mansions = { S, THEMES, enter: (k = 0) => INTR.enter(typeof k === 'string' ? k : S.houses[k].id, { instant: true }) };
   return n;
 }
+
+/** shared with mansionup.js (the upper floors) */
+export const MS = { get A() { return A; }, S, say, blip, THEMES, MODEL_THEME, garyPic, tvTex, loot };

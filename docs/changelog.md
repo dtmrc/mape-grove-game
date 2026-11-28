@@ -16,6 +16,25 @@
   wedge, so a sector's whole mesh draws whenever any of it is in view.
 - world.js: buildMoreTown(K) runs after buildCountry with the random sequence saved (no other tree or prop moves);
   buildFences(from) fences only the new lots. Flag MORE_TOWN in moretown.js.
+## 2026-11-28: mansion second storeys, more to do inside (mansionup.js)
+- diet: "add second stories to the mansions" and "more interactivity with the interior of the mansions".
+- Every Estates house has a staircase in the great room. Walking up it past half height fades to the floor above,
+  the top step upstairs leads back down part way up the stairs. The upper floor is its own room (`<id>-up`), so only
+  one floor is in memory: 45k triangles, 5.6 MB, 28 to 30 draw calls, bake 0.4 s.
+- Upstairs: gallery hall around the stairwell, guest suite, home gym, spa (hot tub, sauna, massage table), laundry,
+  game room (arcade machine, foosball, big TV), a teenager's room, a child's room, two baths. Gary's has Doug's room
+  and Mother's room instead.
+- New things to do: push small objects off tables (they fall and clatter, one instanced mesh per floor, a few
+  dollars for a clean sweep), ride the robot vacuum, play the piano one note at a time, disarm the alarm at the
+  keypad by the front door (looting then never trips it), wake the sleeper upstairs (carried out, one star), jump
+  down the laundry chute to the kitchen, win quarters from the arcade machine, sauna and dryer heal, treadmill and
+  hot tub launch the cat, and one hidden golden koi per house ($50 each, $500 for all 13).
+- interiors.js: rooms may return `portals` (walk-in boxes that lead to another room at a spawn, with a height band),
+  a spawn may carry `y` (arrive part way up a staircase), and each `interact` entry gets `.live`, the spot the engine
+  uses, so a room can move or switch off its own hotspot.
+- Not saved yet: koi, looted safes and the disarmed alarm reset when the page reloads.
+- tools/qa/suites/29-mansionup.cjs.
+
 ## 2026-11-28: Best in Show, the cat show quest (on main, test page only)
 - diet: "should we add a professional cat show quest? goobles is to compete against top cat talent from across the country".
 - src/js/catshow.js: the Grand National Feline Classic sets up round the town-green gazebo (judges' table, entries desk,
