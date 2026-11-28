@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-28: Ghost of John in denim, a real periscope view, findable poems (johnghost.js, periscope.js)
+- diet: "i can't find the 6th poem in the cave dwelling", "enhance the graphics details of john ... rather than the
+  white robe ... a more actual garment that he wore in prominent photos" (reference photo: denim jacket, flared jeans,
+  round tinted glasses, tan harness boots), "implement the periscope view as an actual view and not a dialogue".
+- src/js/johnghost.js: the ghost remodelled to the Legends rulebook. Denim trucker jacket open over a printed tee,
+  flared jeans, tan harness boots, wavy centre-parted hair, sideburns, amber wire glasses, a painted face. One 256 px
+  atlas with seams, stitching, pockets and buttons. 9 draw calls (was 27), 4 materials. Still see-through, self-lit and
+  floating; the legs fade toward the boots. cave.js re-exports makeGhost / animGhost / ghostAlpha, so hens.js and
+  haunted.js get the new model too. The portraits in the dwelling match (jacket, no beard).
+- src/js/periscope.js: E on the periscope looks out of its top end, a small brass head in the grass north of the RV lot
+  (it is really there, you can walk up to it). The cat leaves the room for the duration, so the view is the live world
+  at the cost of standing at the RV, nothing is rendered twice. Round eyepiece overlay, look with the move keys, mouse
+  or a drag, zoom with the wheel / + and - / the buttons, E or BACK returns him to where he stood, John carries on.
+- Poems: all six existed, but the bronze one sat on the bust's pedestal where the bust's own prompt usually won, and the
+  carved stone did not say it was a poem. Now every poem is a bigger sheet with a gold glint over it until it is read
+  (one Points draw call), the bronze one has its own post beside the bust, the stone shows its lines, and each read
+  names where an unread one is. Reading all six pays $60 once.
+- QA: suite 15-cave reads all six poems and goes through the periscope and back; views in
+  tools/qa/scenarios/john-look.cjs (--only poems|john|scope).
+
 ## 2026-11-28: mansion, fire station and hospital interiors (roomparts.js, mansions.js, civic.js)
 - diet: interiors for the Estates mansions ("what typical high end households usually have"), the fire station and
   the hospital, with a lot of detail at low cost.
