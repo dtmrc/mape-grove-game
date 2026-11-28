@@ -28,6 +28,7 @@ import { initRoads } from './roads.js';
 import { flowRoads } from './roadflow.js';
 import { initGround } from './ground.js';
 import { packGeo } from './geopack.js';
+import { buildMoreTown } from './moretown.js';   // 2026-11-28: Hwy 9 East shops, roadhouse, motel, Hollow Ln homes, farmsteads
 import { freeAfterUpload } from './vfree.js';
 import { prepareWorld, makeGroundMesh, patchMaterial, floors, setFloorProvider, chunkOf, cullBounds, inTown, hillsAt, edgeRise, noise2, heightAt as terH, slopeAt as terSlope } from './terrain.js';
 export { inTown };
@@ -837,6 +838,9 @@ export function buildWorld(scene, T) {
   buildHospital();
   buildFences();   // lot fences round every home() yard (the Estates' Tracebench houses get their own fence plan later)
   buildCountry();   // after every town builder: it uses its own random sequence so the town's layout never shifts
+  { const s0 = rndSeed.get(), nl = lots.length;   // more town (moretown.js): last, so no other builder's random sequence or tree moves
+    buildMoreTown({ frame, home, gable, gableEnds, plane, addS, shadow, hay, picnic, barrel, bench, trashCan, hydrant, fenceRun, shopWin, roofUnit, coping, sgn, via, NODES, colliders, places });
+    buildFences(nl); rndSeed.set(s0); }
 
   // merge buckets
   // engine: terrain anchors + movable groups, then the terrain ground mesh
@@ -2097,9 +2101,10 @@ function lotStyle(L, i) {
   const k = ['chain', 'rail', 'picket', 'chain', 'rail', 'picket'][i % 6];
   return { front: k, side: k, back: k, col: k === 'picket' ? 0xe8e0cc : undefined };
 }
-function buildFences() {
+function buildFences(from = 0) {
   const B = lots.map(lotBox);
   lots.forEach((L, i) => {
+    if (i < from) return;   // moretown.js fences only its own lots, after the countryside
     const S = lotStyle(L, i), bx = B[i], F = frame(L.x, L.z, L.ry);
     if (L.extras.includes('pickets') || L.extras.includes('hedges')) S.front = null;
     const gaps = [[L.driveX - 1.9, L.driveX + 1.9], [L.doorX - 0.85, L.doorX + 0.85]];
@@ -2394,7 +2399,7 @@ const FIELDS = [
   { x: 0, z: -200, w: 88, d: 38, ry: 0, kind: 'plow' },          // Sawyer Fields, between Hwy 9 and the farm road
   { x: 128, z: -190, w: 70, d: 48, ry: 0.04, kind: 'wheat' },
   { x: -166, z: -202, w: 52, d: 36, ry: -0.05, kind: 'wheat' },
-  { x: 196, z: -62, w: 48, d: 72, ry: 0, kind: 'plow' },          // Dry Creek Flats
+  { x: 196, z: -70, w: 48, d: 56, ry: 0, kind: 'plow' },          // Dry Creek Flats (south edge pulled back 16 m for the Hwy 9 East shops, moretown.js)
   { x: 200, z: 150, w: 60, d: 36, ry: 0.03, kind: 'wheat' },
   { x: 120, z: 270, w: 60, d: 30, ry: 0, kind: 'meadow' },
 ];
