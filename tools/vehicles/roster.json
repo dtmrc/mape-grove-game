@@ -383,5 +383,16 @@
   "top": 8,
   "acc": "7.0 s",
   "mass": 450
+ },
+ "tractor": {
+  "file": "Greenacre5045_09",
+  "name": "Greenacre 5045",
+  "year": 2009,
+  "era": "old",
+  "cls": "Tractor",
+  "real": "late-2000s 45 hp utility tractor (John Deere 5045D class)",
+  "top": 25,
+  "acc": "14 s",
+  "mass": 2300
  }
 }
