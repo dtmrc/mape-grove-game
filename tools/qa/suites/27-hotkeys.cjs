@@ -20,6 +20,7 @@ function usedKeys() {
     for (const m of src.matchAll(/e\.key === '(F\d+)'/g)) add(m[1]);
   }
   for (const k of ['`', '~', '_', '+']) used.delete(k); // alternate characters of keys already covered (Backquote, Minus, Plus)
+  for (const k of ['f5', 'f12']) used.delete(k); // browser keys a listener lets through on purpose (reload, devtools)
   return used;
 }
 module.exports = {

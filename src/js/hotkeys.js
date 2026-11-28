@@ -7,7 +7,7 @@
 // ADD A KEY = one line in BINDINGS: { g: 'group', k: 'keys', does: 'what it does' }
 //   k     alternatives split by ' / ', combos by '+'. Tokens: A-Z 0-9, WASD, Arrows, Up Down Left Right,
 //         Space Enter Esc Tab Shift Ctrl Alt Mod (⌘ on macOS, Ctrl elsewhere) Backspace Delete F1-F12
-//         Minus Plus Backquote LBracket RBracket 1-9 ? Click (left mouse button) Mouse (move the mouse).
+//         Minus Plus Backquote LBracket RBracket 1-9 ? Click (left mouse button) Mouse (move the mouse) Wheel.
 //         Suffix @mac or @!mac shows that alternative on one platform only (e.g. 'Delete@!mac').
 //   t     short text: the row also goes in pause > CONTROLS; title: 1 puts it on the title card too.
 //   hold  drawn as "hold".     when  () => bool, the row is hidden while it returns false.
@@ -20,6 +20,7 @@ export const GROUPS = [
   { id: 'radio', name: 'Car radio', c: '#ff8ab0', note: 'in any car' },
   { id: 'menu', name: 'Menus & map', c: '#7fe07f' },
   { id: 'fish', name: 'Fishing', c: '#3ad0b8', note: 'at the lake' },
+  { id: 'scope', name: 'Periscope', c: '#d8b860', note: 'looking through it' },
   { id: 'game', name: 'Game', c: '#e8dcb8' },
   { id: 'dev', name: 'Dev tools', c: '#ff9a3c', when: devOn },
   { id: 'edit', name: 'World editor', c: '#c77dff', note: 'while editing (F3)', when: devOn },
@@ -53,6 +54,9 @@ export const BINDINGS = [
   { g: 'menu', k: 'Esc / Q', does: 'back, close' },
   { g: 'fish', k: 'E / F / Enter / Click', hold: 1, does: 'cast · strike on a bite · hold to reel' },
   { g: 'fish', k: 'I / B', does: 'fishing bag', t: 'fishing bag' },
+  { g: 'scope', k: 'WASD / Arrows / Mouse', does: 'look around' },
+  { g: 'scope', k: 'Wheel', does: 'zoom' },
+  { g: 'scope', k: 'E / Esc / Backspace', does: 'step back' },
   { g: 'game', k: '?', does: 'this keyboard map', t: 'every key, drawn', title: 1 },
   { g: 'game', k: 'M', does: 'sound on / off', t: 'sound on / off' },
   { g: 'game', k: 'P', does: 'render resolution', t: 'render resolution' },
@@ -113,6 +117,7 @@ const TOK = {
   '1-9': { cap: '1 … 9', codes: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => 'Digit' + d), keys: '123456789'.split('') },
   Click: { mouse: 'click', codes: ['MouseL'], keys: ['punch'], text: 'Click' },
   Mouse: { mouse: 'move', codes: ['MouseMove'], keys: [], text: 'Mouse' },
+  Wheel: { mouse: 'wheel', codes: ['MouseWheel'], keys: [], text: 'Wheel' },
   fn: { cap: 'fn', codes: ['Fn'], keys: [] },
 };
 export function token(t) {
@@ -236,6 +241,7 @@ function ctxGroup() {
   const A = window.__G; if (!A) return null;
   try {
     if (A.dev && A.dev.editing) return 'edit';
+    if (document.getElementById('scope') && getComputedStyle(document.getElementById('scope')).display !== 'none') return 'scope';
     if (A.fishing && A.fishing.menuOpen && A.fishing.menuOpen()) return 'fish';
     if (A.P && A.P.car) return 'car';
     if (A.G && A.G.paused) return 'menu';
@@ -245,7 +251,7 @@ function ctxGroup() {
 function capsHtml(b) {
   const alts = parse(b.k).map((combo) => combo.map((tk) => {
     if (tk.cluster) return `<span class="hk-cl">${tk.cluster.map((c) => `<kbd>${esc(c)}</kbd>`).join('')}</span>`;
-    if (tk.mouse) return `<span class="hk-mi" style="${tk.mouse === 'click' ? '--mc:var(--gc)' : ''}"><i></i>${tk.mouse === 'click' ? 'click' : 'move'}</span>`;
+    if (tk.mouse) return `<span class="hk-mi" style="${tk.mouse === 'click' ? '--mc:var(--gc)' : ''}"><i></i>${tk.mouse}</span>`;
     return `<kbd>${esc(capOf(tk))}</kbd>`;
   }).join('<em>+</em>'));
   return (b.hold ? '<em>hold</em>' : '') + alts.join('<em>or</em>');
