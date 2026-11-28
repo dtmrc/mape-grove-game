@@ -56,6 +56,7 @@ import { makeSpawnView } from './spawnview.js'; // cars spawn / despawn out of s
 import { makeOfficer } from './officer.js';
 import { waterPolys } from './ground.js';
 import { makeUI } from './ui.js'; // ui: pause menu, settings, full map
+import './hotkeys.js'; // hotkeys: ? opens the drawn keyboard map (BINDINGS table)
 import { makeClimb } from './climb.js'; // climb: trees, wall scrambles, ledge pull-ups
 import { colliders as W_COLS } from './world.js'; // climb: test handle
 import { makeGamepad } from './gamepad.js'; // ui: gamepad
