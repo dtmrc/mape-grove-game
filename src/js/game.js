@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { makeTextures, basic, lambert, mat, rnd, makeSky, makePost } from './gfx.js';
 import { makeGoobles } from './goobles.js';
-import { setTextures, makeCat, makeHuman, makeRaccoon, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
+import { setTextures, makeCat, makeHuman, makeRaccoon, makeGary, makeCar, animBiped, makeTrashBag, CAR_TYPES, addShadow } from './models.js';
 import { buildWorld, inTown, NODES, ADJ, LIMIT, MAP_HALF, drawMap, districtAt, places, animated, nightMats, lamps, lights, halos, signMats, flames, collide, blocked, inZone } from './world.js';
 import { Sfx } from './sfx.js';
 import { makeOtters } from './otters.js';
@@ -11,6 +11,7 @@ import { makeHens } from './hens.js';
 import { makeHaunted } from './haunted.js';
 import { makeMeows } from './meows.js';
 import { makeYardCats, KEY as YARDCATS_KEY } from './yardcats.js';
+import { makeCatShow, KEY as CATSHOW_KEY } from './catshow.js'; // cat show on the town green
 import { makeRadio } from './radio.js'; // radio
 import { makeDash } from './dash.js'; // dash: speedometer + radio buttons
 import { makeFirestarter } from './firestarter.js';
@@ -30,6 +31,8 @@ import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patron
 import './robbery.js'; // robbery: hold up the Donut Hole + Rosie's Diner
 import { makeShops } from './shops.js'; // content: shops + belly food
 import { makeJobs } from './jobs.js'; // content: replayable missions, side jobs, post-game
+import { makeHoaStory, HOA_KEY } from './hoastory.js'; // HOA war chapter 1: Tyrone + Sharique, eviction clock, board hearing
+import { makeOddJobs, ODDJOBS_KEY } from './oddjobs.js'; // odd jobs board: paid shifts
 import * as MSAVE from './missionsave.js'; // missionsave: missions survive a page reload
 import { quests } from './questlog.js'; // quests: quest log + tracked quest (L)
 import * as RD from './roads.js';
@@ -102,7 +105,7 @@ TER.initWorld(scene, { lights, halos, flames }); // engine: link loose world obj
 // ---------------- state ----------------
 const SAVE_KEY = 'maple-grove-offleash-v1';
 // every key NEW GAME wipes: this save, fishing, weather, the sky's day counter, the dev view (not the world editor's maple-grove-world-v1, that is the map)
-const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1', YARDCATS_KEY, MSAVE.MISSION_KEY];
+const SAVE_KEYS = [SAVE_KEY, 'maple-grove-offleash-fishing-v1', 'maple-grove-offleash-jobs-v1', 'maple-grove-offleash-fx', 'maple-grove-offleash-sky', 'mg-dev-view', 'maple-grove-offleash-mark', 'maple-grove-offleash-quests-v1', YARDCATS_KEY, CATSHOW_KEY, MSAVE.MISSION_KEY, HOA_KEY, ODDJOBS_KEY];
 const G = {
   cash: 0, hp: 100, heat: 0, seenT: 0, bustT: 0, clock: 21.5, done: {}, yarn: [],
   mission: null, dialog: null, paused: true, banner: null, over: false, time: 0,
@@ -433,7 +436,7 @@ const NPC = {};
 // a spot `d` metres in front of a place that faces `yaw`
 const ahead = (pl, d, side = 0) => ({ x: pl.x + Math.sin(pl.yaw) * d + Math.cos(pl.yaw) * side, z: pl.z + Math.cos(pl.yaw) * d - Math.sin(pl.yaw) * side });
 NPC.nana = spawnPed({ look: { skin: 0xf1d0b5, shirt: 0xe8e0f0, pants: 0x6a4a8a, hair: 0xeeeeee, cardigan: 0x8a5ab0, bun: true, glasses: true }, state: 'idle', at: ahead(places.nana, -0.5, 1.2), yaw: places.nana.yaw, npc: 'nana' });
-NPC.gary = spawnPed({ look: { skin: 0xf0c0a0, shirt: 0xf6f6f6, pants: 0xc8b48a, hair: 0x8a6a40, visor: 0x1e2a44, clipboard: true }, state: 'idle', at: ahead(places.gary, -0.6, 1.4), yaw: places.gary.yaw, npc: 'gary' });
+NPC.gary = spawnPed({ mesh: makeGary(), state: 'idle', at: ahead(places.gary, -0.6, 1.4), yaw: places.gary.yaw, npc: 'gary' });
 {
   const m = makeRaccoon(); m.scale.setScalar(1.35);
   m.userData.head.add(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.03, 6), mat(0x8a2020)));
@@ -698,20 +701,20 @@ const INTROS = {
   nana: [['Nana', "There's my favorite little soldier! Are you eating? You look thin under all that armor."], ['Nana', "I made casseroles for the neighbors but my hip won't do stairs today."], ['Nana', "Take my wagon. Three houses. And don't you dare scratch it, sweetie."]],
   kids: [['Quik Stop Kid', 'Yo, NOD cat. You think that helmet makes you fast?'], ['Quik Stop Kid', "Race us around town. Loser buys Slurpees for a month."], ['Quik Stop Kid', "We left you a car. It's my mom's. Don't tell her."]],
   ricky: [['Big Ricky', 'Psst. Cat. The HOA put locks on every bin in Maple Grove.'], ['Big Ricky', 'My family is starving for the good stuff. Leftover lasagna. Pizza crusts.'], ['Big Ricky', 'Six bags. Curbside. Bring them here. Nobody needs to know.']],
-  gary: [['Gary', 'Well, well. The cat with the RV. Do you know what bylaw 14-C says?'], ['Gary', 'No recreational vehicles. No unlicensed felines. No fun after 9 PM.'], ['Gary', "I'm filing the eviction myself. Patrol! Seize that animal!"]],
+  gary: [['Gary Kim', "Gary Kim. Compliance Officer. *holds a form two inches from his glasses* You're the cat with the RV? You're blurrier than your file photo."], ['Gary Kim', 'Tyrone and Sharique are at a gala, so the eviction falls to me. Bylaw 14-C. Form 9. Form 9-A. Form 9-A Part Two: The Reckoning.'], ['Gary Kim', "I'm filing it myself, in person, at the county. Patrol! Seize that animal! ...Is that the animal? That's a bush. Seize BOTH!"]],
 };
 const DONE_LINES = {
   nana: [['Nana', 'You were wonderful, sweetie. Take a tuna can for the road.']],
   kids: [['Quik Stop Kid', "Okay okay, you're fast. Rematch never."]],
   ricky: [['Big Ricky', 'The family eats well tonight. You are one of us now, cat.']],
-  gary: [['Gary', '...I have nothing further.']],
+  gary: [['Gary Kim', '...I have nothing further.']],
 };
 function talkTo(id) {
   cat.userData.emote?.('Wave'); // goobles: wave hello
   if (jobs.talk(id)) return; // content: replays + side jobs (src/js/jobs.js)
   if (G.done[id]) return say(DONE_LINES[id]);
   if (id === 'gary' && !(G.done.nana && G.done.kids && G.done.ricky)) {
-    return say([['Gary', "I've got my eye on you. Help the neighborhood and maybe, MAYBE, I won't tow that RV."], ['Gary', '(Finish the jobs for Nana, Big Ricky and the Quik Stop Kids first.)']]);
+    return say([['Gary Kim', "I've got my eye on you. Both eyes. They're not great eyes, but they're on you. Help the neighborhood and maybe, MAYBE, I won't tow that RV."], ['Gary Kim', '(Finish the jobs for Nana, Big Ricky and the Quik Stop Kids first.)']]);
   }
   say(INTROS[id], () => startMission(MISSIONS[id]()));
 }
@@ -993,7 +996,9 @@ function busted() {
   respawn('CITED!', `The HOA fined you $${fine}.`, places.rv);
 }
 function respawn(title, sub, at) {
+  const lost = mission && mission.title; // say which job the respawn ended, so it doesn't look like it reset on its own
   if (mission) endMission(false, '');
+  if (lost) sub += ` ${lost} failed.`;
   if (P.car) exitCar();
   fishing.abort(); jail.end({ quiet: true }); police.dropGun(); // no cast, cell or pistol survives a respawn
   banner(title, sub, 4, 'fail');
@@ -1099,7 +1104,7 @@ function updatePlayer(dt) {
   // interact
   if (hit('e', 'f', 'enter') && !(P.lock > 0)) {
     const npc = nearNpc();
-    if (haunted.interact()) { /* haunted: note, fetch items, site, bulldozer */ } else if (hens.interact()) { /* hens: clues, coop, bucket */ } else if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
+    if (catshow.interact()) { /* catshow: entries desk */ } else if (hoa.interact() || oddjobs.interact()) { /* hoastory + oddjobs */ } else if (haunted.interact()) { /* haunted: note, fetch items, site, bulldozer */ } else if (hens.interact()) { /* hens: clues, coop, bucket */ } else if (cave.interact()) { /* cave: torch, sign */ } else if (fires.interact()) { /* firestarter: pick up kit, condemned door */ } else if (yardcats.interact()) { /* yardcats: flirt */ } else if (fishing.interact()) { /* shop, cast, cook, skin */ } else if (npc && !mission) talkTo(npc);
     else if (near) enterCar(near);
   }
   if (hit('e', 'f', 'enter') === false && false) {/* noop */}
@@ -1500,7 +1505,7 @@ function updateHeat(dt) {
     // car wash scrubs you clean
     if (P.car && inZone('wash', P.car.x, P.car.z) && !(mission && mission.id === 'gary')) {
       G.heat = 0; toast('Suds N Paws: squeaky clean. Heat cleared!');
-      P.car.hp = Math.min(100, P.car.hp + 40); P.car.washed = true; // on the house this visit
+      P.car.hp = Math.max(P.car.hp, Math.min(P.car.maxHp || 100, P.car.hp + 40)); P.car.washed = true; // on the house this visit
     }
     // getting cited (HOA carts only; the PD cuffs instead)
     let close = false;
@@ -1553,7 +1558,7 @@ function updateCars(dt) {
   }
   // keep traffic topped up, clear wrecks far away
   let ai = 0, walkers = 0;
-  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90 && SV_.hidden(c.x, c.z, 90)) || (c.driver === 'ai' && !c.role && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
+  for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i], d = Math.hypot(c.x - px(), c.z - pz()); if ((c.dead && d > 90 && SV_.hidden(c.x, c.z, 90)) || (c.driver === 'ai' && !c.role && !c.keep && d > 230 && c !== P.car)) removeCar(c); else if (c.driver === 'ai') ai++; }
   if (!cars.some((c) => c.role === 'goob' && !c.dead) && Math.hypot(places.goobTruck.x - px(), places.goobTruck.z - pz()) > 80 && !cars.some((c) => Math.hypot(c.x - places.goobTruck.x, c.z - places.goobTruck.z) < 4)) goobTruck();
   if (ai < 12 && Math.random() < dt) spawnTraffic(['sedan', 'hatch', 'pickup', 'wagon'][(Math.random() * 4) | 0]);
   for (let i = 0; i < peds.length; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human') walkers++; }
@@ -1561,7 +1566,7 @@ function updateCars(dt) {
   // cap the crowd (carjack victims pile up): drop far-off walkers over the cap, and cars the player left far behind
   let over = walkers - 22;
   if (over > 0) for (let i = 0; i < peds.length && over > 0; i++) { const p = peds[i]; if (!p.npc && p.kind === 'human' && Math.hypot(p.x - px(), p.z - pz()) > 90 && SV_.hidden(p.x, p.z, 90)) { removePed(p); over--; i--; } }
-  if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110 && SV_.hidden(c.x, c.z, 110)) { removeCar(c); i--; } }
+  if (cars.length > 26) for (let i = 0; i < cars.length && cars.length > 26; i++) { const c = cars[i]; if (c.driver === null && !c.role && !c.keep && c !== P.car && Math.hypot(c.x - px(), c.z - pz()) > 110 && SV_.hidden(c.x, c.z, 110)) { removeCar(c); i--; } }
 }
 
 let districtT = 0, district = '';
@@ -1647,12 +1652,14 @@ function frame(now) {
     otters.update(dt);
     meows.update(dt);
     yardcats.update(dt); // yardcats
+    catshow.update(dt); // catshow
     fires.update(dt);
     cave.update(dt);
     hens.update(dt);
     haunted.update(dt);
     fishing.update(dt);
     jobs.update(dt); // content
+    hoa.update(dt); // hoastory
     MSAVE.tick(dt); // missionsave: resume after a reload + snapshots
     police.update(dt); // police
     const cru = police.cruisers(); // police
@@ -1679,10 +1686,10 @@ function frame(now) {
   setText(hud.cash, '$' + String(G.cash).padStart(8, '0'));
   setStyle(hud.hp, 'width', Math.max(0, G.hp) + '%');
   setStyle(hud.carhp, 'display', P.car ? 'block' : 'none');
-  if (P.car) setStyle(hud.carhpfill, 'width', P.car.hp + '%');
+  if (P.car) setStyle(hud.carhpfill, 'width', Math.min(100, P.car.hp / (P.car.maxHp || 100) * 100) + '%');
   setStyle(hud.fuel, 'display', P.car ? 'flex' : 'none');
   if (P.car) { const f = P.car.fuel ?? 100, el = hud.fuelfill; setStyle(el, 'width', f + '%'); setStyle(el, 'background', f < 20 ? '#ff4040' : f < 45 ? '#ffd23f' : '#7fe07f'); setClass(hud.fuel, 'low', f < 20); setClass(hud.fuel, 'pump', !!P.car.filling); }
-  const prompt = !P.car && !G.dialog && !G.paused ? (haunted.prompt() || hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
+  const prompt = !P.car && !G.dialog && !G.paused ? (catshow.prompt() || hoa.prompt() || oddjobs.prompt() || haunted.prompt() || hens.prompt() || cave.prompt() || fires.prompt() || yardcats.prompt() || fishing.prompt() || (nearNpc() && !mission ? 'E: Talk' : nearestCar() ? 'E: Get in' : '')) : '';
   setText(hud.prompt, prompt); setStyle(hud.prompt, 'display', prompt ? 'block' : 'none');
   if (jail.active() && !G.dialog && !G.paused) { const jp = jail.prompt(); setText(hud.prompt, jp); setStyle(hud.prompt, 'display', jp ? 'block' : 'none'); } // jailbreak
   setText(hud.usebtn, P.car ? 'EXIT' : prompt ? (prompt.includes('Talk') ? 'TALK' : prompt.includes('Get in') ? 'GET IN' : prompt.replace(/^E[:!]? ?/, '').split(' ')[0].toUpperCase().slice(0, 6)) : 'USE');
@@ -1740,6 +1747,8 @@ window.__G = { G, P, otters, haunted, hens, cave, fires, fishing, jail, enterCar
 const police = makePolice({ carsNear: (x, z, r) => CARG.near(x, z, r, _bCop), scene, G, P, cat, cars, peds, places, T, spawnCar, removeCar, damageCar, hurt, addHeat, addCash, toast, banner, respawn, puff, shake, Sfx, collide, blocked, roadOpts, navTarget, chaseAI, drive, exitCar, knock, attachPed, carCircles, hit, down, isTouch, camYaw: () => camYaw, px, pz, time: () => G.time, hidden: SV_.hidden });
 svc = makeServices({ scene, G, P, cars, peds, places, CAR_TYPES, NODES, ADJ, spawnCar, removeCar, spawnPed, removePed, nearestNode, roadOpts, chaseAI, drive, collide, addHeat, toast, Sfx, px, pz, hidden: SV_.hidden }); // ems
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
+// catshow: the Grand National Feline Classic at the gazebo (src/js/catshow.js)
+const catshow = makeCatShow({ scene, G, P, cat, places, quests, fishing, yardcats, say, toast, banner, Sfx, addCash, isTouch, mission: () => mission, inside: () => INT.inside }); window.__G.catshow = catshow;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block
 Object.assign(window.__G, { banner, toast, addCash });
@@ -1757,6 +1766,9 @@ WARD.init({ cat, fishing, Sfx, toast }); // wardrobe
 SCHOOL.init({ G, places, fishing, toast, addCash, Sfx }); // Maple Grove High interior
 PDST.init({ G, P, places, toast, Sfx, scene, save }); // police station interior
 window.__G.shops = shops; window.__G.jobs = jobs;
+const hoa = makeHoaStory({ scene, G, P, places, NPC, fishing, quests, say, toast, banner, Sfx, addCash, isTouch, T, haunted, mission: () => mission }); // hoastory
+const oddjobs = makeOddJobs({ scene, G, P, places, cars, MISSIONS, spawnCar, setCheck, objective, toast, addCash, addHeat, startMission, endMission, fishing, quests, Sfx, T, isTouch, px, pz, mission: () => mission, blocked, checkOff: () => { checkMark.visible = false; } }); // oddjobs
+Object.assign(window.__G, { hoa, oddjobs });
 window.__G.msave = MSAVE.init({ G, P, MISSIONS, jobs, places, cars, scene, addPickup, setCheck, objective, makeMarker, enterCar, startMission, toast, save, mission: () => mission }); // missionsave
 // ui: pause menu, settings, controls help, full map (src/js/ui.js) + gamepad (src/js/gamepad.js)
 window.__G.setRes = (i) => { resIdx = Math.max(0, Math.min(RES.length - 1, i)); resize(); return RES[resIdx]; }; // qa: render height for comparison shots

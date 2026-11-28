@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-28: Best in Show, the cat show quest (on main, test page only)
+- diet: "should we add a professional cat show quest? goobles is to compete against top cat talent from across the country".
+- src/js/catshow.js: the Grand National Feline Classic sets up round the town-green gazebo (judges' table, entries desk,
+  banner, bunting: 2 draw calls). $50 entry, 9 a.m. to 6 p.m., one show a day (own day counter). Rivals Sir Reginald
+  (Persian, CT), Valentina (Sphynx, Vegas), Tex (Maine Coon, Amarillo), Mochi (Scottish Fold, Seattle) are dressed
+  copies of the yard-cat model (yardcats.js `makeCatFigures`), built when a show starts and disposed after. Judges
+  Pemberton, Coach Brenda, Margo Vance (makeHuman, within 60 m in show hours).
+- Four menu rounds in the story panel: grooming (worn garments move each judge), agility (sprint / careful / show off),
+  talent (cup off the table, sing, fish trick, fix the table, the loaf + finale), interview (3 questions). Poise works
+  like HP; heckles, Tex cheers, a yard-cat girlfriend or wife cheers. Prizes $500 / $200 / $100 via addCash, trophy at
+  the RV, quest "Best in Show". Optional HOA gag via window.__HOA.fine. Save key mg-catshow-v1. QA suite 27-catshow.
+## 2026-11-28: Repo Man (gnome towing job) stops resetting itself
+- diet: "the gnome towing quest keeps resetting itself". The golf cart had 100 hp, so a few bumps into fences, lamps
+  or traffic scrapped it and the job went back to "take the cart from the lot". The car cleanup could also delete the
+  job's cart once you were far from it (more than 26 cars), leaving the job pointing at nothing, and the job could
+  pick a retired HOA patrol cart driving through the lot.
+- jobs.js: the job's cart gets 260 hp, a full tank and `keep` (game.js cleanup skips kept cars) while the job runs;
+  only parked carts at the lot are taken; a cart that vanished anyway is replaced. HUD car bar and the car wash use
+  `maxHp`. Any respawn (cited, knocked out) now says which job it failed.
+- diet picked the real symptom: a finished Repo Man was offered again straight away. Now it counts as done for the
+  day: the quest log shows DONE ("Done for today"), Nana's marker stays off and her gnome stands on the lawn by her
+  porch. From 6 AM the next game day Gary has towed it again and the job is back (Nana has a second intro for repeats).
+  Saved in the jobs key (`cool`). Fish Order and Sign Language are unchanged.
+- qa suite missions: nine new Repo Man checks.
 ## 2026-11-28: Ghost of John in denim, a real periscope view, findable poems (johnghost.js, periscope.js)
 - diet: "i can't find the 6th poem in the cave dwelling", "enhance the graphics details of john ... rather than the
   white robe ... a more actual garment that he wore in prominent photos" (reference photo: denim jacket, flared jeans,
@@ -19,6 +43,24 @@
   names where an unread one is. Reading all six pays $60 once.
 - QA: suite 15-cave reads all six poems and goes through the periscope and back; views in
   tools/qa/scenarios/john-look.cjs (--only poems|john|scope).
+
+## 2026-11-28: the HOA war, chapter 1 "Notice to Vacate", the odd jobs board, Gary Kim (on main, test page only)
+- diet: real gameplay instead of a sandbox. The HOA war is the story spine and jobs are the everyday money loop. The HOA
+  villains are Tyrone and Sharique Bellamy, a married couple: Tyrone is the President (vision boards, warm smile, fines),
+  Sharique chairs Architectural Review (deadpan, tape measure, leather planner). Gary stays as their underling and is
+  now Gary Kim, the heavyset, near-sighted Compliance Officer (thick glasses, forms in triplicate). Design: docs/hoa-war.md.
+- src/js/hoastory.js: the couple serve a Notice to Vacate at the RV. A 3 game day clock (72 real minutes) and a daily
+  8 AM violation add to the fines. Neighbors sign Goobles' petition once their job is done (Nana, the Quik Stop Kids,
+  Big Ricky, Rosie's Fish Order, Earl's Catch of the Day). With 3 signatures the Board Hearing sits at the HOA office,
+  6 to 9 PM: a menu turn battle (SIGNATURE, POINT OF ORDER, SWAT THE GAVEL, GROOM x2). Unpaid fines let Tyrone heal the
+  board, so paying at the HOA office door matters (Monte Carlo: fines paid ~97% win with 3 signatures, $300 unpaid
+  ~39%). Clock out = RV booted (interior closed) until the fines are paid. Win: MOTION DENIED, eviction suspended, $250.
+  HUD chip under the stars, quest log entry "Notice to Vacate". Save key mg-hoastory-v1. Debug window.__HOA.
+- src/js/oddjobs.js: cork board by the RV. Pizza Run (Pizza City to a house, tip for speed, dents cost), Lawn Duty (mow
+  ten tufts on an Estates lawn in 45 s, one instanced mesh), Tow Rescue (drive a ticketed car to the RV lot before the
+  HOA tow, may draw an HOA star). Work rep: +10% pay per 4 shifts (max +50%); 3 in a row = $50 bonus. Save key
+  mg-oddjobs-v1. Debug window.__G.oddjobs.
+- QA: suite 28-hoastory (scenario tools/qa/scenarios/hoastory.cjs, also takes shots).
 
 ## 2026-11-28: drivable fire engine, ambulance and tractor; ambulance dispatch after run-overs (on main, test page only)
 - diet: "make the tractor drivable with enhanced graphics? same for the fire truck and emergency medical vehicle at the

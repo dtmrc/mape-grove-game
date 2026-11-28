@@ -748,9 +748,9 @@ function castFace(f = {}) {
       g.fillStyle = f.brow || '#3a2a1e'; const bt = f.browTilt || 0;
       g.beginPath(); g.moveTo(x - 5, y - 7 + s * bt); g.lineTo(x + 5, y - 7 - s * bt); g.lineTo(x + 5, y - 5.6 - s * bt); g.lineTo(x - 5, y - 5.6 + s * bt); g.fill();
       if (f.wrinkles) { g.strokeStyle = 'rgba(80,50,40,0.45)'; g.lineWidth = 0.7; g.beginPath(); g.moveTo(x + s * 5.4, y - 1); g.lineTo(x + s * 7.2, y - 2); g.moveTo(x + s * 5.4, y + 1); g.lineTo(x + s * 7.2, y + 2); g.stroke(); }
-      if (f.glasses) { g.strokeStyle = f.glasses; g.lineWidth = 1.1; g.beginPath(); g.ellipse(x, y, 6.4, 5.4, 0, 0, 7); g.stroke(); }
+      if (f.glasses) { g.strokeStyle = f.glasses; g.lineWidth = f.glassesW || 1.1; g.beginPath(); g.ellipse(x, y, 6.4, 5.4, 0, 0, 7); g.stroke(); if (f.glassesW) { g.fillStyle = 'rgba(200,230,255,0.28)'; g.fill(); } }
     }
-    if (f.glasses) { g.strokeStyle = f.glasses; g.lineWidth = 1.1; g.beginPath(); g.moveTo(29, 30); g.quadraticCurveTo(32, 28.5, 35, 30); g.stroke(); }
+    if (f.glasses) { g.strokeStyle = f.glasses; g.lineWidth = f.glassesW || 1.1; g.beginPath(); g.moveTo(29, 30); g.quadraticCurveTo(32, 28.5, 35, 30); g.stroke(); }
     g.strokeStyle = 'rgba(120,70,60,0.55)'; g.lineWidth = 1; g.beginPath(); g.moveTo(32, 35); g.lineTo(31, 40.5); g.lineTo(33.2, 41); g.stroke(); // nose
     const sm = f.smile ?? 0.4;
     g.strokeStyle = f.lip || '#7a3a34'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(27, 45.5 - sm); g.quadraticCurveTo(32, 45.5 + sm * 4, 37, 45.5 - sm); g.stroke();
@@ -931,14 +931,19 @@ export function makeNana() {
     },
   });
 }
+// Gary Kim (diet 2026-11-28): the HOA's Compliance Officer under Tyrone and Sharique. Heavyset, very near-sighted (thick
+// glasses), a paper pusher: short-sleeve shirt and tie, lanyard, clipboard and a stack of forms.
 export function makeGary() {
   return makeCastHuman({
-    h: 1.78, build: 1.15, skin: 0xe9bfa0, hair: 0x6a4a2a, hairStyle: 'combover',
-    top: 0xf2f0ea, topStyle: 'polo', trim: '#2a4a7a', logo: '#2a4a7a', bottom: 0xb8a070, bottomStyle: 'pants', belt: '#4a2e18', shoes: 0x5a3a22,
-    face: { eye: '#5a4a30', eye2: '#8a7a50', smile: -0.6, browTilt: 1.6, lids: 0.25, brow: '#5a3a20' },
-    extras: ({ arms, m, box, pmat }) => {                                                       // clipboard and lanyard badge
+    h: 1.7, build: 1.34, skin: 0xe8c39a, hair: 0x141210, hairStyle: 'short',
+    top: 0xf2f0ea, topStyle: 'polo', trim: '#2a4a7a', bottom: 0x6a6a72, bottomStyle: 'pants', belt: '#2a1e18', shoes: 0x2a2220,
+    face: { eye: '#2a1e14', eye2: '#5a4430', smile: -0.4, browTilt: 1.2, lids: 0.3, brow: '#141210', glasses: '#1a1a1a', glassesW: 2.6, skinHex: '#e8c39a' },
+    extras: ({ arms, torso, m, box, pmat }) => {                                                // clipboard, forms, tie and lanyard badge
       const c = m(box(0.2, 0.27, 0.015), pmat(0x9a7b4f), 0, -0.5, 0.12, arms[0]); c.rotation.x = -0.4;
       m(box(0.17, 0.22, 0.004), pmat(0xf4f4f4), 0, -0.49, 0.13, arms[0]).rotation.x = -0.4;
+      const f = m(box(0.22, 0.12, 0.3), pmat(0xf0ece0), 0, -0.62, 0.08, arms[1]); f.rotation.x = 0.2;   // a stack of forms under the other arm
+      m(box(0.05, 0.36, 0.012), pmat(0x2a4a7a), 0, 1.22, 0.2, torso);                           // tie
+      m(box(0.07, 0.09, 0.01), pmat(0xf8f8f8), 0.09, 1.08, 0.215, torso);                       // badge
     },
   });
 }
