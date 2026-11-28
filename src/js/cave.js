@@ -15,6 +15,8 @@ import { heightAt } from './terrain.js';
 import * as INTM from './interiors.js';
 import { buildCave } from './cavegen.js';
 import { dressLair, dressMouth } from './cavedress.js';
+import { makePeriscope } from './periscope.js';
+import { makeGhost, animGhost, ghostAlpha } from './johnghost.js';
 
 const KEY = 'mg-cave-v1';
 const TUNNEL_DEPTH = 340, LAIR_DEPTH = 1940;
@@ -74,16 +76,6 @@ function textures() {
       const grd = g.createRadialGradient(w / 2, h * 0.9, 1, w / 2, h * 0.75, w * 0.62); grd.addColorStop(0, 'rgba(0,0,0,1)'); grd.addColorStop(0.75, 'rgba(6,5,4,1)'); grd.addColorStop(1, 'rgba(30,26,22,1)');
       g.fillStyle = grd; g.fillRect(0, 0, w, h);
     }, false),
-    face: ctex(32, 32, (g) => {   // the ghost's face plane: pale, small eyes behind the specs, long nose, moustache and beard
-      g.fillStyle = '#dde6f8'; g.fillRect(0, 0, 32, 32);
-      g.fillStyle = '#c6d0e8'; g.fillRect(0, 0, 32, 3); g.fillRect(0, 0, 3, 32); g.fillRect(29, 0, 3, 32);
-      g.fillStyle = '#3a4660'; g.fillRect(9, 12, 3, 2); g.fillRect(20, 12, 3, 2);                 // eyes
-      g.fillStyle = '#aab6d4'; g.fillRect(8, 10, 5, 1); g.fillRect(19, 10, 5, 1);                 // brows
-      g.fillStyle = '#b4c0dc'; g.fillRect(15, 13, 2, 7); g.fillRect(14, 19, 4, 1);                // long nose
-      g.fillStyle = '#8f8a86'; g.fillRect(10, 21, 12, 2); g.fillRect(9, 22, 2, 3); g.fillRect(21, 22, 2, 3); // moustache
-      g.fillStyle = '#a19a94'; g.fillRect(9, 25, 14, 7); g.fillRect(7, 23, 2, 9); g.fillRect(23, 23, 2, 9); // beard
-      g.fillStyle = '#5a5a6a'; g.fillRect(14, 24, 4, 1);                                          // mouth
-    }),
     parchment: ctex(32, 40, (g) => {
       g.fillStyle = '#e8dcb4'; g.fillRect(0, 0, 32, 40); speck(g, 32, 40, 60, ['#d8c89c', '#cdbd90', '#efe4c4']);
       g.fillStyle = '#4a3a2a'; g.fillRect(5, 4, 22, 2);
@@ -116,20 +108,26 @@ function portraitTex(kind) {
     const photo = kind !== 'paint' && kind !== 'chicken';
     g.fillStyle = photo ? '#b8a27a' : kind === 'chicken' ? '#3a5a4a' : '#2a3a5a'; g.fillRect(0, 0, 48, 60);
     if (!photo) { for (let i = 0; i < 80; i++) { g.fillStyle = `rgba(255,255,255,${rr() * 0.08})`; g.fillRect(rr() * 48 | 0, rr() * 60 | 0, 3, 2); } }
-    const skin = photo ? '#e0d0b0' : '#dfe8fa', hair = photo ? '#5a4632' : '#8a7a6a', beard = photo ? '#6a5640' : '#9a928a';
+    const skin = photo ? '#e0d0b0' : '#dfe8fa', hair = photo ? '#5a4632' : '#8a5a34', denim = photo ? '#7a6a50' : '#3f6fae', denimL = photo ? '#9a8a6a' : '#5c8cc6';
     const cx = kind === 'haunt' ? 20 : 24;
-    // shoulders / robe
-    g.fillStyle = photo ? '#d8c8a8' : '#e8eefc'; g.beginPath(); g.moveTo(cx - 16, 60); g.lineTo(cx - 12, 44); g.lineTo(cx + 12, 44); g.lineTo(cx + 16, 60); g.fill();
+    // shoulders: the denim jacket, open over a dark tee, collar points
+    g.fillStyle = denim; g.beginPath(); g.moveTo(cx - 18, 60); g.lineTo(cx - 14, 45); g.lineTo(cx - 5, 42); g.lineTo(cx + 5, 42); g.lineTo(cx + 14, 45); g.lineTo(cx + 18, 60); g.fill();
+    g.fillStyle = photo ? '#3a3020' : '#1d1d24'; g.beginPath(); g.moveTo(cx - 4, 43); g.lineTo(cx + 4, 43); g.lineTo(cx + 6, 60); g.lineTo(cx - 6, 60); g.fill();
+    g.fillStyle = denimL; g.beginPath(); g.moveTo(cx - 5, 42); g.lineTo(cx - 11, 44); g.lineTo(cx - 6, 51); g.fill(); g.beginPath(); g.moveTo(cx + 5, 42); g.lineTo(cx + 11, 44); g.lineTo(cx + 6, 51); g.fill();
+    g.fillStyle = photo ? '#c8b080' : '#d8a060'; g.fillRect(cx - 12, 52, 2, 2); g.fillRect(cx + 10, 52, 2, 2);
     if (kind === 'haunt') { g.globalAlpha = 0.6; g.fillRect(cx + 12, 30, 14, 4); g.fillRect(cx + 24, 26, 4, 8); g.globalAlpha = 1; }   // a wave, "boo"
     // long centre-parted hair
-    g.fillStyle = hair; g.fillRect(cx - 11, 12, 22, 30); g.fillRect(cx - 12, 18, 3, 26); g.fillRect(cx + 9, 18, 3, 26);
+    g.fillStyle = hair; g.fillRect(cx - 11, 12, 22, 30); g.fillRect(cx - 13, 18, 4, 24); g.fillRect(cx + 9, 18, 4, 24); g.fillRect(cx - 14, 36, 3, 6); g.fillRect(cx + 11, 36, 3, 6);
     // face
     g.fillStyle = skin; g.fillRect(cx - 7, 16, 14, 22);
     g.fillStyle = hair; g.fillRect(cx - 7, 13, 6, 5); g.fillRect(cx + 1, 13, 6, 5); g.fillStyle = skin; g.fillRect(cx - 1, 13, 2, 3);   // centre part
     // round glasses
-    g.strokeStyle = photo ? '#2a2418' : '#e8e8f0'; g.lineWidth = 1.2; g.beginPath(); g.arc(cx - 3.5, 24, 3, 0, 7); g.stroke(); g.beginPath(); g.arc(cx + 3.5, 24, 3, 0, 7); g.stroke();
+    g.fillStyle = photo ? 'rgba(90,60,20,0.55)' : 'rgba(200,116,42,0.6)'; g.beginPath(); g.arc(cx - 3.5, 24, 3, 0, 7); g.fill(); g.beginPath(); g.arc(cx + 3.5, 24, 3, 0, 7); g.fill();
+    g.strokeStyle = photo ? '#2a2418' : '#e8d8a0'; g.lineWidth = 1.2; g.beginPath(); g.arc(cx - 3.5, 24, 3, 0, 7); g.stroke(); g.beginPath(); g.arc(cx + 3.5, 24, 3, 0, 7); g.stroke();
     g.fillStyle = photo ? '#2a2418' : '#3a4660'; g.fillRect(cx - 4, 24, 1, 1); g.fillRect(cx + 3, 24, 1, 1);
-    g.fillStyle = beard; g.fillRect(cx - 5, 30, 10, 2); g.fillRect(cx - 6, 32, 12, 7); g.fillStyle = '#4a3a2a'; g.fillRect(cx - 2, 33, 4, 1);
+    g.fillStyle = hair; g.fillRect(cx - 7, 22, 1, 9); g.fillRect(cx + 6, 22, 1, 9);                       // sideburns
+    g.fillStyle = photo ? '#b8a080' : '#b4c0dc'; g.fillRect(cx - 1, 25, 2, 6);                            // the nose
+    g.fillStyle = photo ? '#6a4a3a' : '#8a5a5a'; g.fillRect(cx - 3, 34, 6, 1); g.fillRect(cx - 4, 33, 1, 1); g.fillRect(cx + 3, 33, 1, 1);
     if (kind === 'chicken') {   // "Self-portrait with chicken": a brown hen tucked under one arm
       g.fillStyle = '#8a5a2a'; g.fillRect(cx + 6, 44, 12, 8); g.fillRect(cx + 15, 39, 5, 6); g.fillStyle = '#d02020'; g.fillRect(cx + 16, 37, 3, 2); g.fillStyle = '#e8b020'; g.fillRect(cx + 20, 41, 2, 1);
     }
@@ -223,70 +221,8 @@ function makeTorch() {
   return g;
 }
 
-// ------------------------------------------------------------------ the ghost (Legends-style: one robe tube, prism sleeves, flat face) ------------------------------------------------------------------
-export function makeGhost() {
-  const T = textures();
-  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const mats = [];
-  const gm = (o, op) => { const m = lambert({ transparent: true, opacity: op, side: THREE.DoubleSide, ...o }); m.userData.op = op; mats.push(m); return m; };
-  // mostly self-lit pale blue (a ghost glows; torch and fire light only tint him a little)
-  const robe = gm({ color: 0x3a4258, emissive: 0xaebee6 }, 0.8), hairM = gm({ color: 0x3a3630, emissive: 0x7a7268 }, 0.86), skinM = gm({ color: 0x3a4258, emissive: 0xb4c2e4 }, 0.9);
-  const faceM = gm({ map: T.face, color: 0x444c60, emissive: 0x9aa8cc, emissiveMap: T.face }, 0.92), beardM = gm({ color: 0x38363a, emissive: 0x8a8486 }, 0.86);
-  const specM = phong({ color: 0xe0e2ea, shininess: 90, specular: 0xffffff, transparent: true }); specM.userData.op = 1; mats.push(specM);
-  const lensM = basic({ color: 0x9fc4e8, transparent: true, opacity: 0.35, side: THREE.DoubleSide }); lensM.userData.op = 0.35; mats.push(lensM);
-  // robe: neck, shoulders, chest, waist, a flared ragged hem
-  const R = [[1.5, 0.07, 0.06], [1.44, 0.2, 0.13], [1.24, 0.215, 0.145], [1.0, 0.19, 0.135], [0.8, 0.225, 0.16], [0.58, 0.27, 0.19]];
-  M(loft(R, 8, (r, i, k) => (k === R.length - 1 ? r[0] + (i % 2 ? 0.07 : -0.05) : r[0])), robe, 0, 0, 0, body);
-  // wispy tail: two segments so it can sway
-  const tail1 = new THREE.Group(); tail1.position.y = 0.62; body.add(tail1);
-  M(loft([[0, 0.2, 0.14], [-0.2, 0.15, 0.11], [-0.32, 0.1, 0.08]], 7), robe, 0, 0, 0, tail1);
-  const tail2 = new THREE.Group(); tail2.position.y = -0.32; tail1.add(tail2);
-  M(loft([[0, 0.1, 0.08], [-0.16, 0.05, 0.045], [-0.3, 0.005, 0.005]], 6), robe, 0, 0, 0, tail2);
-  // head: faceted 7-sided block, flat face plane, centre-parted long hair slabs, beard wedge, round wire specs
-  const head = new THREE.Group(); head.position.y = 1.6; body.add(head);
-  const hg = cyl(0.095, 0.085, 0.24, 7); hg.rotateY(Math.PI / 14); M(hg, skinM, 0, 0.1, 0, head);
-  const face = M(new THREE.PlaneGeometry(0.15, 0.2), faceM, 0, 0.09, 0.093, head);
-  M(cyl(0.104, 0.1, 0.06, 7), hairM, 0, 0.235, -0.004, head);                                   // hair cap
-  for (const s of [-1, 1]) { const sl = M(box(0.045, 0.32, 0.17), hairM, s * 0.098, 0.05, -0.012, head); sl.rotation.z = s * 0.1; }   // side curtains to the shoulders
-  M(box(0.2, 0.34, 0.05), hairM, 0, 0.04, -0.085, head);                                       // back
-  for (const s of [-1, 1]) { const p = M(box(0.07, 0.03, 0.06), hairM, s * 0.045, 0.255, 0.05, head); p.rotation.z = -s * 0.25; }   // the centre part
-  const bg = new THREE.ConeGeometry(0.07, 0.13, 5); bg.rotateX(Math.PI); M(bg, beardM, 0, -0.04, 0.07, head);
-  for (const s of [-1, 1]) {
-    const ring = M(new THREE.TorusGeometry(0.032, 0.0055, 4, 10), specM, s * 0.04, 0.115, 0.108, head);
-    M(new THREE.CircleGeometry(0.03, 10), lensM, s * 0.04, 0.115, 0.107, head);
-    const arm = M(box(0.004, 0.004, 0.1), specM, s * 0.075, 0.115, 0.058, head); arm.rotation.y = s * 0.15;
-    ring.userData.lens = true;
-  }
-  M(box(0.018, 0.004, 0.004), specM, 0, 0.118, 0.11, head);
-  // sleeves (tapered prisms) from the shoulders, mitten hands
-  const arms = [];
-  for (const s of [-1, 1]) {
-    const sh = new THREE.Group(); sh.position.set(s * 0.2, 1.42, 0); body.add(sh);
-    const sg = cyl(0.05, 0.085, 0.44, 6); sg.translate(0, -0.22, 0); M(sg, robe, 0, 0, 0, sh);
-    M(box(0.06, 0.08, 0.05), skinM, 0, -0.48, 0, sh);
-    sh.rotation.z = s * 0.25; arms.push(sh);
-  }
-  const glow = new THREE.Sprite(glowMat(0x9fb8ff, 0.4)); glow.position.y = 1.0; glow.scale.set(2.4, 2.8, 1); root.add(glow);
-  root.userData = { body, head, arms, tail1, tail2, mats, glow, face, alpha: 1 };
-  root.traverse((o) => { o.userData.noLift = true; });
-  return root;
-}
-export function animGhost(g, t, mood = 'float') {
-  const u = g.userData;
-  u.body.position.y = 0.32 + Math.sin(t * 1.7) * 0.07;
-  u.tail1.rotation.z = Math.sin(t * 2.1) * 0.25; u.tail1.rotation.x = Math.sin(t * 1.3) * 0.18 + 0.12;
-  u.tail2.rotation.z = Math.sin(t * 2.1 - 0.8) * 0.4; u.tail2.rotation.x = Math.sin(t * 1.3 - 0.6) * 0.25 + 0.2;
-  const boo = mood === 'boo' ? 1 : 0, wave = mood === 'wave';
-  u.arms[0].rotation.x = -0.15 + Math.sin(t * 1.9) * 0.1 - boo * 1.3; u.arms[1].rotation.x = -0.15 + Math.sin(t * 1.9 + 1) * 0.1 - boo * 1.3;
-  u.arms[0].rotation.z = -0.25 - boo * 0.2; u.arms[1].rotation.z = 0.25 + boo * 0.2 + (wave ? 1.9 + Math.sin(t * 8) * 0.35 : 0);
-  u.head.rotation.z = Math.sin(t * 0.9) * 0.08; u.head.rotation.x = mood === 'sad' ? 0.3 : 0;
-  u.glow.material.opacity = (0.32 + Math.sin(t * 2.3) * 0.08) * u.alpha;
-}
-export function ghostAlpha(g, k) {
-  const u = g.userData; u.alpha = k;
-  for (const m of u.mats) m.opacity = m.userData.op * k;
-  g.visible = k > 0.01;
-}
+// the ghost himself lives in johnghost.js (2026-11-28 remodel: denim jacket, flared jeans, harness boots); re-exported for hens.js / haunted.js
+export { makeGhost, animGhost, ghostAlpha };
 
 // ------------------------------------------------------------------ bronze cats ------------------------------------------------------------------
 let BRONZE = null, STONE = null;
@@ -408,6 +344,8 @@ const POEMS = {
     'HE IS A WATCHER, WHICH IS DIFFERENT.',
     '(IT IS MOSTLY THE SAME.)'] },
 };
+// where each poem is, in landmarks (the dwelling has no compass)
+const POEM_WHERE = { poem1: 'pinned to the back wall above the bedroll', poem2: 'pinned to the side wall past the white piano', poem3: 'on a post by Tuesday\'s crate', poem4: 'on a post beside the big bronze bust', poem5: 'pinned to the far side wall, behind the statue that faces away', poem6: 'carved into the standing stone near the fire' };
 const INTRO = [
   ['', 'The fire pops. Every photo on the wall seems to turn and look at you.'],
   [GHOST, 'Oh. Oh no. Oh no, no, no. It\'s HIM.'],
@@ -423,6 +361,7 @@ const TALK = [
   [[GHOST, 'I watch you sleep sometimes. Through the periscope. You twitch your back foot. It\'s not weird. It\'s a bit weird.']],
   [[GHOST, 'Your chickens taste of RV. Diesel, dust and loneliness. Five stars.'], ['', 'Goobles\' tail flicks once.'], [GHOST, 'Sorry. Sorry! I\'ll pay you back. In poems.']],
   [[GHOST, 'Every ghost needs a hobby. Some rattle chains. Some moan in attics. I do bronze.']],
+  [[GHOST, 'You\'re looking at the denim. I tried a white robe for a few years. Draughty. Kept snagging on stalagmites.'], [GHOST, 'This is what I wore on my favourite rooftop. The boots still click. Listen.'], ['', 'He floats. Nothing clicks. He looks delighted anyway.']],
   [[GHOST, 'I used to have a band, you know. Four of us. Now it\'s just me, a fire and a hen called Tuesday. Smaller crowds. Better listeners.']],
   [[GHOST, 'Imagine, little cat, a world with no fences. No HOA. No Gary.'], [GHOST, 'Just you, asleep in a sunbeam, and me, a respectful forty feet away.'], [GHOST, '...Thirty feet.']],
   [[GHOST, 'If you ever need anything. Anything at all. Just sit very still in the RV and think of me.'], [GHOST, 'I\'ll know. I always know.']],
@@ -599,18 +538,30 @@ function buildLair(api) {
       interact.push({ id: 'chest:' + c.id, x: c.x + fx * 0.75, z: c.z + fz * 0.75, r: 0.95, label: c.label, onUse: () => api.openChest(c) });
     }
     // poems
-    const POEM_AT = [['poem1', 8.4, -D / 2 + 0.42, 0, 1.4], ['poem2', -W / 2 + 0.42, -7.6, Math.PI / 2, 1.3], ['poem3', -6.4, 7.4, 0.3, 0], ['poem4', 4.6, -7.95, 0.2, 0.62], ['poem5', W / 2 - 0.42, 7.2, -Math.PI / 2, 1.3]];
+    // 2026-11-28 (diet could not find the sixth): every poem is a bigger, self-lit sheet with a gold glint over it until
+    // it has been read; the bronze one left the bust's pedestal (where the bust's own prompt won) for a post beside it;
+    // the carved one says it is a poem. api.poemAt = where each one is, for the glints and QA.
+    const POEM_AT = [['poem1', 8.4, -D / 2 + 0.42, 0, 1.4], ['poem2', -W / 2 + 0.42, -7.6, Math.PI / 2, 1.3], ['poem3', -6.4, 7.4, 0.3, 0], ['poem4', 6.5, -6.6, 0.5, 0], ['poem5', W / 2 - 0.42, 7.2, -Math.PI / 2, 1.3]];
+    const sheetM = lambert({ map: textures().parchment, emissive: 0x3a362c, emissiveMap: textures().parchment }), postM = lambert({ map: T.wood, color: 0x8a6a48 });
+    api.poemAt = {};
     for (const [id, x, z, ry, y] of POEM_AT) {
-      let px = x, pz = z;
-      if (y === 0) { M(box(0.05, 0.9, 0.05), lambert({ map: T.wood, color: 0x8a6a48 }), x, 0.45, z, root, ry); }
-      const p = M(new THREE.PlaneGeometry(0.34, 0.42), lambert({ map: textures().parchment }), x + Math.sin(ry) * 0.04, y || 0.95, z + Math.cos(ry) * 0.04, root, ry);
-      if (id === 'poem4') p.position.y = 0.6;
-      px += Math.sin(ry) * 0.9; pz += Math.cos(ry) * 0.9;
-      interact.push({ id, x: px, z: pz, r: 1.0, label: 'Read the poem', onUse: () => api.poem(id) });
+      if (y === 0) { M(box(0.06, 1.05, 0.06), postM, x, 0.52, z, root, ry); M(box(0.56, 0.68, 0.03), postM, x + Math.sin(ry) * 0.03, 1.0, z + Math.cos(ry) * 0.03, root, ry); solid(x, z, 0.3, 0.3, 1.3); }
+      M(new THREE.PlaneGeometry(0.48, 0.6), sheetM, x + Math.sin(ry) * 0.055, y ? y + 0.05 : 1.0, z + Math.cos(ry) * 0.055, root, ry);
+      api.poemAt[id] = { x, z, y: (y ? y + 0.05 : 1.0) + 0.5, fx: Math.sin(ry), fz: Math.cos(ry) };
+      interact.push({ id, x: x + Math.sin(ry) * 0.9, z: z + Math.cos(ry) * 0.9, r: 1.1, label: 'Read the poem', onUse: () => api.poem(id) });
     }
     { const slab = M(box(1.1, 0.8, 0.22), stone(), -3.2, 0.4, 2.8, root, 0.4); slab.rotation.x = -0.08;
-      M(new THREE.PlaneGeometry(0.95, 0.6), basic({ map: fitSign('HERE HAUNTS JOHN', null, '#2a2622', 512, 64), transparent: true }), -3.2 + Math.sin(0.4) * 0.12, 0.45, 2.8 + Math.cos(0.4) * 0.12, root, 0.4);
-      solid(-3.2, 2.8, 1.1, 0.3, 0.8, 0.4); interact.push({ id: 'poem6', x: -3.2 + Math.sin(0.4) * 0.9, z: 2.8 + Math.cos(0.4) * 0.9, r: 1.0, label: 'Read the stone', onUse: () => api.poem('poem6') }); }
+      const carved = ctex(256, 160, (g) => { g.clearRect(0, 0, 256, 160); g.textAlign = 'center'; g.fillStyle = '#1c1916'; g.font = 'bold 30px Impact, "Arial Black", sans-serif'; g.fillText('HERE HAUNTS JOHN', 128, 40);
+        g.font = 'bold 15px Impact, "Arial Black", sans-serif'; ['HE IS NOT A STALKER', 'HE IS A WATCHER', 'WHICH IS DIFFERENT'].forEach((l, k) => g.fillText(l, 128, 72 + k * 24)); g.font = 'bold 11px monospace'; g.fillText('(a poem)', 128, 150); }, false);
+      M(new THREE.PlaneGeometry(0.98, 0.62), basic({ map: carved, transparent: true }), -3.2 + Math.sin(0.4) * 0.12, 0.45, 2.8 + Math.cos(0.4) * 0.12, root, 0.4);
+      api.poemAt.poem6 = { x: -3.2, z: 2.8, y: 1.15, fx: Math.sin(0.4), fz: Math.cos(0.4) };
+      solid(-3.2, 2.8, 1.1, 0.3, 0.8, 0.4); interact.push({ id: 'poem6', x: -3.2 + Math.sin(0.4) * 0.9, z: 2.8 + Math.cos(0.4) * 0.9, r: 1.1, label: 'Read the poem carved in the stone', onUse: () => api.poem('poem6') }); }
+    // one Points object for all six glints (one draw call); a read poem's glint drops out of sight
+    const POEM_IDS = Object.keys(POEMS), glintPos = new Float32Array(POEM_IDS.length * 3);
+    const glints = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(glintPos, 3)), new THREE.PointsMaterial({ map: textures().glow, color: 0xffe08a, size: 0.62, sizeAttenuation: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    glints.frustumCulled = false; root.add(glints);
+    api.poemMarks = () => { POEM_IDS.forEach((id, k) => { const a = api.poemAt[id], read = !!api.SV.read[id]; glintPos[k * 3] = a.x + a.fx * 0.1; glintPos[k * 3 + 1] = read ? -60 : a.y; glintPos[k * 3 + 2] = a.z + a.fz * 0.1; }); glints.geometry.attributes.position.needsUpdate = true; };
+    api.poemMarks();
     // periscope up to the RV
     { const br = phong({ color: 0xb08a3a, specular: 0xffe0a0, shininess: 70 });
       M(cyl(0.07, 0.07, HT - 0.6, 7), br, 9.6, (HT + 0.6) / 2, -0.4, root); M(box(0.18, 0.16, 0.3), br, 9.6, 0.62, -0.25, root); M(cyl(0.05, 0.05, 0.08, 6).rotateX(Math.PI / 2), basic({ color: 0x101010 }), 9.6, 0.62, -0.06, root);
@@ -668,7 +619,7 @@ function buildLair(api) {
       update: (t) => {
         for (const f of flames) { const b = f.userData.b; f.scale.set(b * (0.55 + Math.random() * 0.25), b * (1.0 + Math.random() * 0.5), 1); }
         fireGlow.material.opacity = 0.5 + Math.random() * 0.15;
-        roast.rotation.x = t * 0.6;
+        roast.rotation.x = t * 0.6; glints.material.opacity = 0.6 + 0.3 * Math.sin(t * 3.2); glints.material.size = 0.56 + 0.1 * Math.sin(t * 2.1);
         const hh = hen.userData.head; hh.position.y = 0.3 - (Math.sin(t * 3.1) > 0.85 ? 0.12 : 0); hen.rotation.y = Math.sin(t * 0.7) * 0.6;
         dressCat.moving += ((Math.hypot(torchL.x - dressCat.x, torchL.z - dressCat.z) > 0.004 ? 1 : 0) - dressCat.moving) * 0.2; dressCat.x = torchL.x; dressCat.z = torchL.z;
         dress.update(t, torchL, dressCol.set(torchL.c).multiplyScalar(0.9 + Math.random() * 0.2), dressCat);
@@ -771,16 +722,38 @@ export function makeCave(ctx) {
     S.inspected = (S.inspected | 0) + 1;
   };
   api.poem = (id) => {
-    const p = POEMS[id]; SV.read[id] = 1; store();
-    const n = Object.keys(SV.read).length;
-    say([['', `"${p.title}"`], ...p.lines.map((l) => [GHOST + ' (WRITTEN)', l]), ['', `(Poems found: ${n} of 6)`]]);
+    const p = POEMS[id];
+    const first = !SV.read[id]; SV.read[id] = 1; store(); if (api.poemMarks) api.poemMarks();
+    const n = Object.keys(POEMS).filter((k) => SV.read[k]).length, next = Object.keys(POEMS).find((k) => !SV.read[k]);
+    const all = n === 6 && first && !SV.poet;
+    if (all) { SV.poet = 1; store(); }
+    say([['', `"${p.title}"`], ...p.lines.map((l) => [GHOST + ' (WRITTEN)', l]), ['', next ? `(Poems found: ${n} of 6. One you have not read: ${POEM_WHERE[next]}.)` : '(Poems found: 6 of 6)'],
+      ...(all ? [['', 'That is all six. Somewhere behind you, someone clears his throat, extremely pleased.'], [GHOST, 'You read them ALL? Nobody reads them all. Here. Royalties. It\'s what\'s in the jar.'], ['', 'Got $60 in very old coins.']] : [])],
+    all ? () => { if (ctx.addCash) ctx.addCash(60); Sfx.pickup(); } : undefined);
     S.inspected = (S.inspected | 0) + 1;
   };
-  api.periscope = () => {
-    const late = (G.clock ?? 12) > 20 || (G.clock ?? 12) < 6;
-    say([['', 'A brass periscope, going straight up through 1,940 metres of rock. Somehow.'], ['', 'It\'s aimed at your RV. At the bedroom window. At your pillow, specifically.'], ['', late ? 'The pillow is empty. Because you are down here. With him.' : 'There\'s a sticky note on the eyepiece: "BEST VIEW IN THE COUNTY".']]);
-    S.inspected = (S.inspected | 0) + 1;
-  };
+  // the periscope is a real view (periscope.js): the cat leaves the room for the surface end and comes back to the same spot
+  const scopeRet = { x: 9.6, z: 0.5, yaw: Math.PI, gh: null, insp: 0 };
+  const scope = makePeriscope({
+    scene, G, P, cat, Sfx, isTouch, camera: ctx.camera, down: ctx.down,
+    captions: () => {
+      const late = (G.clock ?? 12) > 20 || (G.clock ?? 12) < 6;
+      return ['A brass periscope, going straight up through 1,940 metres of rock. Somehow.', 'It\'s aimed at your RV. At the bedroom end. At your pillow, specifically.', late ? 'The pillow is empty. Because you are down here. With him.' : 'This is what he does all day. You are, apparently, appointment viewing.'];
+    },
+    leave: (spot) => {
+      const R = window.__INT && window.__INT.room; if (!R || S.room !== 'cavelair') return false;
+      Object.assign(scopeRet, { x: P.x - R.origin.x, z: P.z - R.origin.z, yaw: P.yaw - Math.PI, gh: { ...S.gh }, insp: S.inspected | 0 });
+      S.transit = true; try { INTM.exit({ instant: true, to: { x: spot.x, z: spot.z, yaw: spot.yaw } }); } finally { S.transit = false; }
+      gauge.style.display = 'none';
+      return true;
+    },
+    back: () => {
+      S.transit = true; try { INTM.enter('cavelair', { instant: true, spawn: { x: scopeRet.x, z: scopeRet.z, yaw: scopeRet.yaw }, returnTo: outside() }); } finally { S.transit = false; }
+      if (scopeRet.gh) Object.assign(S.gh, scopeRet.gh, { talking: false }); S.inspected = scopeRet.insp;   // John carries on where he was
+    },
+  });
+  api.scope = scope;
+  api.periscope = () => { if (scope.open()) S.inspected = (S.inspected | 0) + 1; };
   api.piano = () => {
     [262, 330, 392, 330, 294, 262].forEach((f, i) => setTimeout(() => Sfx.blip(f), i * 220));
     const lines = S.gh.state === 'haunt' ? [['', 'Plink. Plonk. Plink.'], [GHOST, '(humming along, off-key, very moved)'], [GHOST, 'You PLAY? Of course you play. You walk on keyboards. It\'s the same thing.']] : [['', 'Plink. Plonk. Somewhere in the dark, someone hums along. Off-key.']];
@@ -829,7 +802,7 @@ export function makeCave(ctx) {
   function enterLair() {
     const g = S.gh;
     if (SV.met) { g.state = 'hidden'; g.t = 0; } else { g.state = 'hidden'; g.t = 0; }
-    g.a = 0; ghostAlpha(api.ghost, 0); S.inspected = 0; g.creep = 0;
+    g.a = 0; ghostAlpha(api.ghost, 0); S.inspected = 0; g.creep = 0; if (api.poemMarks) api.poemMarks();
     gauge.style.display = 'block'; gauge.textContent = fmt(LAIR_DEPTH);
   }
   function setHeld(on) {
@@ -873,6 +846,7 @@ export function makeCave(ctx) {
   function update(dt) {
     if (!S.built) { firstT += dt; if (firstT > 0.05) { try { buildMouth(); } catch (e) { console.error('[cave] mouth failed', e); S.built = true; } } }
     const t = G.time || 0;
+    scope.update(dt);
     mouth.visible = Math.abs(P.x - C.x) < 150 && Math.abs(P.z - C.z) < 150;   // deep in the woods: no draw calls from town
     if (postTorch.visible && mouth.visible) postTorch.userData.flick(t);
     if (api.mouthFx && mouth.visible && !INTM.current()) {
@@ -884,7 +858,7 @@ export function makeCave(ctx) {
     }
     if (handTorch.visible) handTorch.userData.flick(t);
     // the torch light rides with the cat
-    if (S.held && !INTM.current()) {
+    if (S.held && !INTM.current() && !scope.active()) {
       if (P.car || P.swim || Math.hypot(P.x - C.x, P.z - C.z) > 90) { setHeld(false); toast(P.swim ? 'Fssst. The torch is out. Back on its post it goes, somehow.' : 'You leave the torch at the cave.', 3); }
       else { postL.x = P.x + Math.sin(P.yaw) * 0.25; postL.z = P.z + Math.cos(P.yaw) * 0.25; postL.y = 1.0; if (ctx.pool) for (const l of ctx.pool) if (l.userData.src === postL) l.position.set(postL.x, l.position.y, postL.z); }
     }
@@ -1006,7 +980,7 @@ export function makeCave(ctx) {
     torch() { setHeld(true); },
     goLair() { setHeld(true); S.transit = true; try { INTM.enter('cavelair', { instant: true, returnTo: outside() }); } finally { S.transit = false; } },   // (api.lair is the dwelling's data once it is built)
     tunnel() { setHeld(true); INTM.enter('cave', { instant: true, returnTo: outside() }); },
-    reset() { SV = api.SV = { opened: {}, read: {} }; store(); },
+    reset() { SV = api.SV = { opened: {}, read: {} }; store(); if (api.poemMarks) api.poemMarks(); },
     state: () => ({ held: S.held, room: S.room, depth: Math.round(S.depth), ghost: S.gh.state, met: !!SV.met, opened: Object.keys(SV.opened), read: Object.keys(SV.read) }),
     spot: C, mouth,
   });
