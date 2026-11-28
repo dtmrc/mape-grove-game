@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-28: Best in Show, the cat show quest (on main, test page only)
+- diet: "should we add a professional cat show quest? goobles is to compete against top cat talent from across the country".
+- src/js/catshow.js: the Grand National Feline Classic sets up round the town-green gazebo (judges' table, entries desk,
+  banner, bunting: 2 draw calls). $50 entry, 9 a.m. to 6 p.m., one show a day (own day counter). Rivals Sir Reginald
+  (Persian, CT), Valentina (Sphynx, Vegas), Tex (Maine Coon, Amarillo), Mochi (Scottish Fold, Seattle) are dressed
+  copies of the yard-cat model (yardcats.js `makeCatFigures`), built when a show starts and disposed after. Judges
+  Pemberton, Coach Brenda, Margo Vance (makeHuman, within 60 m in show hours).
+- Four menu rounds in the story panel: grooming (worn garments move each judge), agility (sprint / careful / show off),
+  talent (cup off the table, sing, fish trick, fix the table, the loaf + finale), interview (3 questions). Poise works
+  like HP; heckles, Tex cheers, a yard-cat girlfriend or wife cheers. Prizes $500 / $200 / $100 via addCash, trophy at
+  the RV, quest "Best in Show". Optional HOA gag via window.__HOA.fine. Save key mg-catshow-v1. QA suite 27-catshow.
+
 ## 2026-11-28: drivable fire engine, ambulance and tractor; ambulance dispatch after run-overs (on main, test page only)
 - diet: "make the tractor drivable with enhanced graphics? same for the fire truck and emergency medical vehicle at the
   hospital ... when we run over pedestrians, there should be some random ambulance dispatches with stretchers and emts".
