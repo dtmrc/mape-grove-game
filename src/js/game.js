@@ -12,6 +12,7 @@ import { makeHaunted } from './haunted.js';
 import { makeMeows } from './meows.js';
 import { makeYardCats, KEY as YARDCATS_KEY } from './yardcats.js';
 import { makeRadio } from './radio.js'; // radio
+import { makeDash } from './dash.js'; // dash: speedometer + radio buttons
 import { makeFirestarter } from './firestarter.js';
 import { setText, setHTML, setStyle, setClass, setData } from './dom.js'; // P10: write-on-change HUD
 import { makeFishing } from './fishing.js';
@@ -1662,6 +1663,7 @@ function frame(now) {
   SV_.ready();
   sky.mesh.position.copy(camera.position);
   radio.update(dt); // radio
+  dash.update(); // dash
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
   BRK.update(dt); // breakables: before the terrain lift (moving debris would be reset by afterRender otherwise)
   TER.indoors(INT.inside);   // indoors nothing outside is drawn (camera layer 1), so nothing needs lifting onto the terrain
@@ -1720,7 +1722,8 @@ const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff,
 const meows = makeMeows({ P, G });
 // yardcats: lady cats in the Estates front yards to flirt with (src/js/yardcats.js)
 const yardcats = makeYardCats({ scene, G, P, places, collide, fishing, say, toast, banner, Sfx, addCash, addHeat, hurt, puff, light: catLight, mission: () => mission, inside: () => INT.inside, px, pz });
-const radio = makeRadio({ P, G, hit, isTouch }); // radio: car stations + police scanner (src/js/radio.js)
+const radio = makeRadio({ P, G, hit, down, isTouch }); // radio: car stations + police scanner (src/js/radio.js)
+const dash = makeDash({ P, radio }); // dash: speedometer + radio on/off, volume, station (src/js/dash.js)
 // cave: the Hollow Deep easter egg (src/js/cave.js)
 const cave = makeCave({ scene, G, P, cat, T, toast, say, Sfx, isTouch, pool, hemi, post, addCash });
 // hens: The Missing Hens, part A of the Ghost of John quest (src/js/hens.js)

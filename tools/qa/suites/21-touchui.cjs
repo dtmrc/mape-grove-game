@@ -15,7 +15,7 @@ const SIZES = [
   ['android-landscape', 640, 360, [0, 0, 0, 0]],
   ['ipad-portrait', 768, 1024, [24, 0, 20, 0]],
 ];
-const CONTROLS = ['pad', 'jumpbtn', 'actbtn', 'usebtn', 'pausebtn', 'mapbtn', 'questbtn', 'bagbtn', 'pdgunbtn', 'radiobtn', 'harmbtn', 'boobtn'];
+const CONTROLS = ['pad', 'jumpbtn', 'actbtn', 'usebtn', 'pausebtn', 'mapbtn', 'questbtn', 'bagbtn', 'pdgunbtn', 'dash', 'harmbtn', 'boobtn'];
 module.exports = {
   name: 'touchui', desc: 'touch buttons never overlap each other, the stick or the HUD, portrait and landscape, with safe areas',
   async run({ S, check }) {
@@ -27,9 +27,8 @@ module.exports = {
         b.classList.add('touch'); b.classList.remove('titled', 'menu');
         ['--sa-t', '--sa-r', '--sa-b', '--sa-l'].forEach((k, i) => root.setProperty(k, ins[i] + 'px'));
         const forced = [], fake2 = [];
-        let fake = null; // the RADIO tag is only added on touch devices: stand in a copy styled the same way
-        if (!document.getElementById('radiobtn')) { fake = document.createElement('button'); fake.id = 'radiobtn'; fake.textContent = 'RADIO'; fake.style.cssText = 'position:fixed;font:18px VT323,monospace;border:2px solid #556;padding:4px 8px;'; document.body.append(fake); }
-        for (const id of CONTROLS) { const e = document.getElementById(id); if (e && getComputedStyle(e).display === 'none') { e.style.setProperty('display', 'block', 'important'); forced.push(id); } }
+        const fake = null, disp = (id) => (id === 'dash' ? 'flex' : 'block'); // #dash (speedometer + radio buttons, src/js/dash.js) is a flex box
+        for (const id of CONTROLS) { const e = document.getElementById(id); if (e && getComputedStyle(e).display === 'none') { e.style.setProperty('display', disp(id), 'important'); forced.push(id); } }
         const box = (e) => { const q = e.getBoundingClientRect(); return { l: q.left, t: q.top, r: q.right, b: q.bottom }; };
         const got = {}; for (const id of CONTROLS) { const e = document.getElementById(id); if (e) got[id] = box(e); }
         // text boxes with long-ish sample text (shown on top of the forced controls)
@@ -50,7 +49,7 @@ module.exports = {
         const bag = document.getElementById('bagbtn'), bagHas = bag.classList.contains('has'); bag.classList.add('has');
         b.classList.add('talking');
         const dialog = box(dl), shownWhileTalking = CONTROLS.filter((id) => { const e = document.getElementById(id); return e && getComputedStyle(e).display !== 'none' && getComputedStyle(e.closest('#touchui') || e).display !== 'none'; });
-        b.classList.remove('talking'); bag.classList.toggle('has', bagHas); for (const id of forced) document.getElementById(id).style.setProperty('display', 'block', 'important'); dl.innerHTML = dl0[0]; dl.style.cssText = dl0[1];
+        b.classList.remove('talking'); bag.classList.toggle('has', bagHas); for (const id of forced) document.getElementById(id).style.setProperty('display', disp(id), 'important'); dl.innerHTML = dl0[0]; dl.style.cssText = dl0[1];
         const undoTr = () => trk.forEach(([e, d, h]) => { e.style.display = d; e.innerHTML = h; });
         const undoText = () => { for (const id in saved) { const e = document.getElementById(id); if (!e) continue; [e.innerHTML, e.style.cssText, e.className] = saved[id]; } fake2.forEach((e) => e.remove()); };
         // worst-case clock panel: in a car (car health + fuel) with five wanted stars
@@ -75,7 +74,7 @@ module.exports = {
       const tclash = [];
       for (const t in r.texts) { for (const id of ids) if (hit(r.texts[t], r.got[id])) tclash.push(t + '/' + id); for (const k in r.hud) if (hit(r.texts[t], r.hud[k])) tclash.push(t + '/' + k); }
       const inSafe = (q) => q.l >= lt - 0.5 && q.t >= t - 0.5 && q.r <= w - rt + 0.5 && q.b <= h - bt + 0.5;
-      // 320 px wide (iPhone 5 / first SE) is too narrow for the in-car text stack beside the RADIO/GUN column: controls and dialog only
+      // 320 px wide (iPhone 5 / first SE) is too narrow for the in-car text stack beside the dash/GUN column: controls and dialog only
       if (w >= 360) check(`${label} ${w}x${h}: objective, prompt, radio name and caption, car name stay clear of the controls and HUD`, !tclash.length, tclash);
       check(`${label} ${w}x${h}: a dialog box hides the controls and fits the safe area`, !r.shownWhileTalking.length && inSafe(r.dialog), { shown: r.shownWhileTalking, dialog: r.dialog });
       check(`${label} ${w}x${h}: every touch control exists`, !r.missing.length, r.missing);

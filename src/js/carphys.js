@@ -25,12 +25,14 @@ export const TUNE = {
   mu: 1.0,          // tarmac grip
   B: 8, C: 1.3, E: -0.2, // tyre curve (peak slip ~0.17 rad, keeps ~90% grip past the peak, so turns don't let go)
   slide: 0.82,      // locked / sliding tyre friction (fraction of mu)
-  peak: 0.17,       // front slip angle the steering assist holds at full lock
-  frontGrip: 1.12,  // front bonus so full lock bites (diet: "tight turns")
+  peak: 0.24,        // front slip angle the steering assist holds at full lock (diet 2026-11-28: "turn more")
+  frontGrip: 1.25,  // front bonus so full lock bites (diet: "tight turns", 2026-11-28 "turn more")
   rearGrip: 1.2,    // rear axle grip bonus off the handbrake: stable, mild understeer (diet 2026-11-11: "too slippery")
   tc: 0.85,         // traction control: drive force capped at this share of the driven axle's grip (no power spins)
-  steerMax: 0.8,    // front wheel lock at a standstill (rad)
-  steerFall: 650,   // lock shrinks with speed: steerMax / (1 + u^2 / steerFall)
+  steerMax: 0.9,    // front wheel lock at a standstill (rad) (diet 2026-11-28: "turn more")
+  steerFall: 1100,  // lock shrinks with speed: steerMax / (1 + u^2 / steerFall)
+  slipLo: 12, slipHi: 28, // speed band (m/s) over which lateral grip fades (diet 2026-11-28: "less tire friction when turning at high speed")
+  latLossF: 0.22, latLossR: 0.34, // lateral grip lost at slipHi: rear lets go a bit more, so fast turns slide instead of sticking
   steerRate: 5.0,   // input slew (/s) - weighty, not twitchy
   steerBack: 5.0,   // self-centring slew (/s)
   brake: 8.5,       // brake decel at full pedal (m/s^2, before grip limits)
@@ -141,6 +143,9 @@ export function makeCarPhys(api) {
       const Wf = Math.max(K.m * G * 0.15, K.m * G * K.b / K.L - tr), Wr = Math.max(K.m * G * 0.15, K.m * G * K.a / K.L + tr);
       const Ff = mu * Wf * TUNE.frontGrip, Fr = mu * Wr * (s.lock ? 1 : TUNE.rearGrip);
       const cd = Math.cos(d), sd = Math.sin(d);
+      // high speed: tyres hold less sideways, so fast turns slide/drift instead of sticking
+      const hs = Math.max(0, Math.min(1, (Math.abs(u) - TUNE.slipLo) / (TUNE.slipHi - TUNE.slipLo))), hk = hs * hs * (3 - 2 * hs);
+      const kyf = 1 - TUNE.latLossF * hk, kyr = 1 - TUNE.latLossR * hk;
       // contact patch velocities in each tyre's frame
       const fvx = u, fvy = v + K.a * r;
       const flo = fvx * cd + fvy * sd, fla = -fvx * sd + fvy * cd;
@@ -148,7 +153,7 @@ export function makeCarPhys(api) {
       const sgn = (x) => (x >= 0 ? 1 : -1);
       // front
       let Fxf = Math.sign(drv) * Math.min(Math.abs(drv * K.fdrive), Ff * TUNE.tc) - (brk ? sgn(flo) * Math.min(TUNE.brake * K.m * 0.62 * brk, Ff * 0.97) : 0);
-      let Fyf = -Ff * tyre(Math.atan2(fla, Math.max(Math.abs(flo), 2.2)));
+      let Fyf = -Ff * kyf * tyre(Math.atan2(fla, Math.max(Math.abs(flo), 2.2)));
       // rear
       let Fxr, Fyr;
       const rearDrive = Math.sign(drv) * Math.min(Math.abs(drv * (1 - K.fdrive)), Fr * TUNE.tc);
@@ -159,7 +164,7 @@ export function makeCarPhys(api) {
         latR = Math.max(latR, Math.abs(rla));
       } else {
         Fxr = rearDrive - (brk ? sgn(rlo) * Math.min(TUNE.brake * K.m * 0.38 * brk, Fr * 0.97) : 0);
-        Fyr = -Fr * tyre(Math.atan2(rla, Math.max(Math.abs(rlo), 2.2)));
+        Fyr = -Fr * kyr * tyre(Math.atan2(rla, Math.max(Math.abs(rlo), 2.2)));
       }
       // friction circles: wheelspin / braking eats cornering grip
       let q = Math.hypot(Fxf, Fyf); if (q > Ff) { if (Math.abs(drv * K.fdrive) > Ff * 0.9) s.spin = Math.max(s.spin, Math.abs(drv * K.fdrive) / Ff - 0.9); Fxf *= Ff / q; Fyf *= Ff / q; }

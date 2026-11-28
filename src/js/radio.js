@@ -340,8 +340,8 @@ export function makeRadioEngine(ctx, out, opts = {}) {
 }
 
 // ---------------- in-game radio (UI, input, car hook) ----------------
-export function makeRadio({ P, G, hit, isTouch }) {
-  let eng = null, list = null, idx = 0, last = 0, inCar = null, nameT = 0, shownSong = null, capShown = null, muted = false;
+export function makeRadio({ P, G, hit, down, isTouch }) {
+  let eng = null, list = null, idx = 0, last = 0, inCar = null, nameT = 0, shownSong = null, capShown = null;
   let pick0 = Math.floor(Math.random() * 4);   // first civilian car starts on a random music station
   const el = document.createElement('div'); el.id = 'radio';
   el.style.cssText = `position:absolute;left:50%;${isTouch ? '' : 'top:58px;'}transform:translateX(-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity .3s;font-size:30px;line-height:1;white-space:nowrap;`;
@@ -350,18 +350,32 @@ export function makeRadio({ P, G, hit, isTouch }) {
   cap.id = 'radiocap'; // on touch the layout block in style.css places it
   cap.style.cssText = `position:fixed;${isTouch ? '' : 'left:50%;bottom:70px;transform:translateX(-50%);'}max-width:min(620px,86vw);white-space:normal;font-size:21px;color:#f4f4dc;background:rgba(0,0,0,.45);padding:3px 10px;display:none;`;
   el.append(nm, sub); (document.getElementById('hud') || document.body).append(el, cap);
-  // touch: tapping the station name switches; a small RADIO tag stays while driving
-  const btn = document.createElement('button'); btn.id = 'radiobtn'; btn.textContent = 'RADIO'; // placed by the touch layout in style.css
-  btn.style.cssText = 'position:fixed;z-index:5;font:18px VT323,monospace;color:#fff;background:rgba(0,0,0,.45);border:2px solid #556;padding:4px 8px;display:none;pointer-events:auto;';
-  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); Sfx.unlock(); want = true; });
-  if (isTouch) document.body.append(btn);
-  let want = false;
+  // on/off, volume and station buttons live on the car dash (src/js/dash.js); keys: R station, Shift+R on/off, - / + volume
+  let want = false, on = true, level = 7, target = -1;
+  try { const sv = JSON.parse(localStorage.getItem('mg-radio') || 'null'); if (sv) { on = sv.on !== false; level = Math.max(0, Math.min(10, sv.level ?? 7)); } } catch (err) { /* no storage */ }
+  const saveCfg = () => { try { localStorage.setItem('mg-radio', JSON.stringify({ on, level })); } catch (err) { /* no storage */ } };
+  const gainOf = () => 0.13 * level; // level 7 = the old fixed 0.9
 
   const isCruiser = (c) => !!(c && (c.pd || c.role === 'police' || c.role === 'pdParked'));
   function ensure() {
     if (eng) return eng;
     const a = Sfx.audio && Sfx.audio(); if (!a) return null;
     eng = makeRadioEngine(a.ctx, a.master); api.engine = eng; return eng;
+  }
+  function flash(a, b, col = '#e8e8e8') { nm.textContent = a; nm.style.color = col; sub.textContent = b; nameT = 1.8; el.style.opacity = 1; }
+  const bars = () => '|'.repeat(level) + '.'.repeat(10 - level);
+  function power(v) {
+    on = v === undefined ? !on : !!v; saveCfg();
+    if (!inCar || !eng) return on;
+    const t = eng.vol.context.currentTime;
+    if (on) tune(idx); else { eng.set(-1, t); api.station = 'off'; cap.style.display = 'none'; capShown = null; flash('RADIO OFF', '', '#8a8a8a'); }
+    return on;
+  }
+  function volume(d) {
+    level = Math.max(0, Math.min(10, level + d)); saveCfg();
+    if (inCar && !on && d > 0) power(true);
+    if (inCar) flash('VOL ' + level, bars());
+    return level;
   }
   function show(now) {
     const st = list[idx], S = st === 'scanner' ? SCANNER : STATIONS[st];
@@ -374,6 +388,7 @@ export function makeRadio({ P, G, hit, isTouch }) {
     const e = ensure(); if (!e) return;
     idx = (i + list.length) % list.length; const st = list[idx];
     if (st !== 'scanner') last = st;
+    if (!on) { on = true; saveCfg(); }
     e.set(st, e.vol.context.currentTime); show(e.vol.context.currentTime);
     api.station = st === 'scanner' ? 'scanner' : STATIONS[st].id;
   }
@@ -383,11 +398,11 @@ export function makeRadio({ P, G, hit, isTouch }) {
     let start = isCruiser(c) ? 0 : list.indexOf(pick0 >= 0 ? pick0 : last);
     if (pick0 >= 0) { last = pick0; pick0 = -1; }
     if (start < 0) start = 0;
-    tune(start);
-    const t = e.vol.context.currentTime; e.vol.gain.cancelScheduledValues(t); e.vol.gain.setTargetAtTime(0.9, t + 0.25, 0.2);
+    if (on) tune(start); else { idx = start; api.station = 'off'; }
+    const t = e.vol.context.currentTime; e.vol.gain.cancelScheduledValues(t); target = on ? gainOf() : 0; e.vol.gain.setTargetAtTime(target, t + 0.25, 0.2);
   }
   function leave() {
-    inCar = null; el.style.opacity = 0; cap.style.display = 'none'; btn.style.display = 'none'; api.station = null;
+    inCar = null; el.style.opacity = 0; cap.style.display = 'none'; api.station = null; target = -1;
     if (!eng) return;
     const t = eng.vol.context.currentTime; eng.vol.gain.cancelScheduledValues(t); eng.vol.gain.setTargetAtTime(0, t, 0.08);
     eng.set(-1, t);
@@ -395,16 +410,23 @@ export function makeRadio({ P, G, hit, isTouch }) {
   const api = {
     station: null, engine: null, stations: STATIONS, unlock: () => Sfx.unlock(),
     next() { if (inCar && list) tune(idx + 1); }, set(i) { if (inCar && list) tune(i); },
+    tap() { Sfx.unlock(); want = true; },      // dash RADIO button: next station (turns it back on when off)
+    power, volume, get on() { return on; }, get level() { return level; }, get inCar() { return !!inCar; },
     update(dt) {
       if (!RADIO_ENABLED) return;
       const c = P.car && !P.car.dead ? P.car : null;
       if (c !== inCar) { if (inCar) leave(); if (c) { inCar = c; enter(c); if (!eng) inCar = null; } }
       if (!inCar || !eng) { want = false; return; }
-      btn.style.display = isTouch ? 'block' : 'none';
-      if (hit('r') || want) { want = false; tune(idx + 1); }
+      if (hit('r') && down && down('shift')) power();
+      else if (hit('r') || want) { want = false; if (on) tune(idx + 1); else power(true); }
+      if (hit('-', '_')) volume(-1);
+      if (hit('=', '+')) volume(1);
+      want = false;
       const ctx = eng.vol.context, now = ctx.currentTime;
       const quiet = G.paused || G.dialog || !Sfx.isOn() || ctx.state !== 'running';
-      if (quiet !== muted) { muted = quiet; eng.vol.gain.setTargetAtTime(quiet ? 0 : 0.9, now, 0.08); }
+      const tg = quiet || !on ? 0 : gainOf();
+      if (tg !== target) { target = tg; eng.vol.gain.setTargetAtTime(tg, now, 0.08); }
+      if (!on) { if (nameT > 0 && (nameT -= dt || 0.016) <= 0) el.style.opacity = 0; return; }
       if (!quiet) eng.pump(now, { heat: (G.heat || 0) > 0, stolen: !!(inCar.pd && inCar.pd.stolen) });
       if (nameT > 0 && (nameT -= dt || 0.016) <= 0) el.style.opacity = 0;
       if (eng.kind === 'music') { const so = eng.song(list[idx], now); if (so !== shownSong) show(now); }

@@ -19,6 +19,18 @@
   removed out of sight. The casualty stays down until then. EMTs and the stretcher are built once and reused.
 - House-fire call-outs (firestarter.js) use the same baked engine.
 - Suite `ems` (26-ems.cjs). `window.__EMS.dispatch()` calls an ambulance for the nearest walker.
+## 2026-11-28: looser fast cornering, more steering, car dash (speedometer + radio buttons)
+- diet: "less tire friction when turning at high speed", "turn more", a radio on/off and volume button, a speedometer.
+- carphys.js (player car): sideways tyre grip fades between 12 and 28 m/s (front loses up to 22%, rear 34%), so fast
+  turns slide and the tail steps out instead of sticking; low-speed handling is unchanged. More steering: lock 0.8 ->
+  0.9 rad, lock shrinks less with speed (steerFall 650 -> 1100), front grip 1.12 -> 1.25, steering assist holds 0.24 rad
+  of front slip (was 0.17). Sedan full lock for 1.5 s: heading change 92 -> 103 deg at 8 m/s, 51 -> 60 at 20 m/s; at
+  26 m/s the car slides 23 deg and still recovers from a 28 m/s lane change.
+- src/js/dash.js: while driving, a speedometer (MPH) and radio buttons ON/OFF, -, +, RADIO (next station). Desktop:
+  bottom right, clickable; keys R station, Shift+R on/off, - / + volume (0-10, saved in localStorage `mg-radio`).
+  Touch: in the touch layout block of style.css (portrait: right-edge column above GUN; landscape: a row under the
+  minimap, the harmonica button moved beside BOO). Suite touchui checks `#dash` instead of the old RADIO tag.
+
 ## 2026-11-28: stutter log on the device, interiors warm up behind the door fade
 - diet: stutter on the phone, also inside Hank's shop; "optimise all building interiors".
 - src/js/hitchlog.js: Settings > Show FPS now also lists each long frame: its length, the game's own JS time in it,
