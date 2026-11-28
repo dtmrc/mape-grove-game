@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-28: Best in Show, the cat show quest (on main, test page only)
+- diet: "should we add a professional cat show quest? goobles is to compete against top cat talent from across the country".
+- src/js/catshow.js: the Grand National Feline Classic sets up round the town-green gazebo (judges' table, entries desk,
+  banner, bunting: 2 draw calls). $50 entry, 9 a.m. to 6 p.m., one show a day (own day counter). Rivals Sir Reginald
+  (Persian, CT), Valentina (Sphynx, Vegas), Tex (Maine Coon, Amarillo), Mochi (Scottish Fold, Seattle) are dressed
+  copies of the yard-cat model (yardcats.js `makeCatFigures`), built when a show starts and disposed after. Judges
+  Pemberton, Coach Brenda, Margo Vance (makeHuman, within 60 m in show hours).
+- Four menu rounds in the story panel: grooming (worn garments move each judge), agility (sprint / careful / show off),
+  talent (cup off the table, sing, fish trick, fix the table, the loaf + finale), interview (3 questions). Poise works
+  like HP; heckles, Tex cheers, a yard-cat girlfriend or wife cheers. Prizes $500 / $200 / $100 via addCash, trophy at
+  the RV, quest "Best in Show". Optional HOA gag via window.__HOA.fine. Save key mg-catshow-v1. QA suite 27-catshow.
+## 2026-11-28: Repo Man (gnome towing job) stops resetting itself
+- diet: "the gnome towing quest keeps resetting itself". The golf cart had 100 hp, so a few bumps into fences, lamps
+  or traffic scrapped it and the job went back to "take the cart from the lot". The car cleanup could also delete the
+  job's cart once you were far from it (more than 26 cars), leaving the job pointing at nothing, and the job could
+  pick a retired HOA patrol cart driving through the lot.
+- jobs.js: the job's cart gets 260 hp, a full tank and `keep` (game.js cleanup skips kept cars) while the job runs;
+  only parked carts at the lot are taken; a cart that vanished anyway is replaced. HUD car bar and the car wash use
+  `maxHp`. Any respawn (cited, knocked out) now says which job it failed.
+- diet picked the real symptom: a finished Repo Man was offered again straight away. Now it counts as done for the
+  day: the quest log shows DONE ("Done for today"), Nana's marker stays off and her gnome stands on the lawn by her
+  porch. From 6 AM the next game day Gary has towed it again and the job is back (Nana has a second intro for repeats).
+  Saved in the jobs key (`cool`). Fish Order and Sign Language are unchanged.
+- qa suite missions: nine new Repo Man checks.
 ## 2026-11-28: Ghost of John in denim, a real periscope view, findable poems (johnghost.js, periscope.js)
 - diet: "i can't find the 6th poem in the cave dwelling", "enhance the graphics details of john ... rather than the
   white robe ... a more actual garment that he wore in prominent photos" (reference photo: denim jacket, flared jeans,
