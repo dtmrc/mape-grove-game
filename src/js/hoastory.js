@@ -377,7 +377,7 @@ export function makeHoaStory(ctx) {
     if (tbl || table) { buildTable().visible = !!tbl && dist(HEAR.x, HEAR.z) < 80; }
     if (boot) boot.visible = SV.booted && !room; else if (SV.booted) buildBoot();
     // the notice: served once the player walks up to the RV (after a short warm-up so it doesn't land on the intro)
-    if (SV.st === 'none' && !room && !P.car && !G.dialog && !G.paused && S.t > 20 && !(ctx.mission && ctx.mission()) && dist(RV.x - 1.7, RV.z + 6.4) < 6) serve();
+    if (SV.st === 'none' && !api.hold && !(G.heat > 0) && !room && !P.car && !G.dialog && !G.paused && S.t > 20 && !(ctx.mission && ctx.mission()) && dist(RV.x - 1.7, RV.z + 6.4) < 6) serve();
     if (active()) {
       // the clock runs on game time (one game hour per real minute)
       const c = G.clock || 0;
@@ -400,6 +400,7 @@ export function makeHoaStory(ctx) {
   if (SV.booted) { INTM.close('rv', true); buildBoot(); }
 
   const api = {
+    hold: false,   // true = don't serve the notice yet (QA: other suites that teleport to the RV)
     get SV() { return SV; }, S, ui, update, prompt, interact, makeTyrone, makeSharique, pair,
     state: () => ({ st: SV.st, left: Math.round(SV.left), fines: SV.fines, sigs: nSigs(), booted: SV.booted, day: SV.day, battle: S.battle ? { r: S.battle.r, n: S.battle.n, mode: S.battle.mode, left: S.battle.left.length } : null }),
     serve, startHearing, payFines,

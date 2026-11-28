@@ -9,7 +9,7 @@ module.exports = async ({ S, check, shot }) => {
     C.goLair(); await QA.until(() => window.__INT.current() === 'cavelair' && !window.__INT.state.fading, 200); await QA.frames(5);
     const L = window.__INT.room; P.x = L.origin.x + 1.6; P.z = L.origin.z + 1.6; await QA.frames(70);
   });
-  await S.js(() => { const H = window.__HENS; window.QA.time(12, { freeze: true }); H.reset(); window.__CAVE.reset(); window.__HAUNT.reset(); H.SV.stage = 'deal'; H.SV.hens = 6; H.SV.wand = 1; H.SV.seen = 1; H.SV.doneDay = 0; H.SV.day = 0; window.__CAVE.SV.met = 1; });
+  await S.js(() => { const H = window.__HENS; window.QA.time(12, { freeze: true }); H.reset(); window.__CAVE.reset(); window.__HAUNT.reset(); if (window.__HOA) window.__HOA.hold = true; H.SV.stage = 'deal'; H.SV.hens = 6; H.SV.wand = 1; H.SV.seen = 1; H.SV.doneDay = 0; H.SV.day = 0; window.__CAVE.SV.met = 1; });
   // ---- B
   const a = await S.js(async () => {
     const QA = window.QA, H = window.__HENS, U = window.__HAUNT, G = window.__G, P = G.P; await QA.exit();
@@ -187,5 +187,5 @@ module.exports = async ({ S, check, shot }) => {
   check('party ends the quest: $500', q.st.c === 'done' && q.paid === 500, q);
   check('G summons John and clears the heat', q.heat === 0 && q.boo, q);
   await shot('haunt-plaque-deep', { hud: true });
-  await S.js(async () => { window.__G.G.heat = 0; window.__HENS.reset(); window.__CAVE.reset(); window.__HAUNT.reset(); await window.QA.exit(); window.QA.time(12); });
+  await S.js(async () => { window.__G.G.heat = 0; window.__HENS.reset(); window.__CAVE.reset(); window.__HAUNT.reset(); if (window.__HOA) window.__HOA.hold = false; await window.QA.exit(); window.QA.time(12); });
 };
