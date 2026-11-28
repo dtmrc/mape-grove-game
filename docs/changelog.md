@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-28: stutter log on the device, interiors warm up behind the door fade
+- diet: stutter on the phone, also inside Hank's shop; "optimise all building interiors".
+- src/js/hitchlog.js: Settings > Show FPS now also lists each long frame: its length, the game's own JS time in it,
+  and what was uploaded or created (texture megapixels, vertex kB, shaders, people / cars spawned, house atlas swaps,
+  room entries, render height changes). Headless software GL cannot show phone stutter, this can.
+- Interiors are built on first entry and were uploaded piece by piece as the camera first turned to each thing (150
+  to 350 vertex buffers and 20 to 30 textures per room). prewarm.js `warm(group)`, called from the interiors `enter`
+  event, switches frustum culling off for two frames so the whole room goes up in the frame behind the door fade.
+  Looking around a room afterwards uploads nothing (measured in all 13 rooms).
+- The indoor floor plan (minimap canvas) was redrawn every frame, the second largest indoor cost after three's
+  render; it now redraws only when the cat moves or turns. The terrain lift is skipped indoors (`TER.indoors`).
+- Rooms were already one mesh per material (32 to 108 draw calls) with baked light, so nothing was merged further.
+
 ## 2026-11-27: house atlas swap fixed, world chunk vertex arrays freed
 - Bug in the performance pass (it was live for a few hours): the full house atlas was swapped in by changing
   `texture.source`. three.js keeps one fixed-size GPU texture per Texture, so the 2048 upload into the 1024 texture
