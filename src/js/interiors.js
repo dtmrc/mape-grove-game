@@ -485,7 +485,7 @@ export function makeInteriors(ctx) {
     clampCam(ctx.camPos);
     S.exitArmed = false; S.spawnPt = { x: P.x, z: P.z };   // walk a little way in before the exit circle / prompt wakes up
     S.swaps++;
-    emit('enter', id);
+    emit('enter', id, R.group);
     return true;
   }
   function swapOut(to) {
@@ -725,7 +725,9 @@ export function makeInteriors(ctx) {
     if (useBtn && btn) setText(useBtn, btn);
     else if (useBtn && S.inside) setText(useBtn, 'USE');
     // minimap: a little floor plan
-    if (S.inside && ctx.mg && ctx.mm) drawPlan(ctx.mg, ctx.mm.width);
+    // (redrawn only when the cat moved a plan pixel or turned: a canvas redraw every frame costs more than the rest of this function)
+    if (S.inside && ctx.mg && ctx.mm) { const k = `${S.id}|${Math.round(P.x * 8)}|${Math.round(P.z * 8)}|${Math.round(P.yaw * 16)}|${ctx.mm.width}`; if (k !== S.planKey) { S.planKey = k; drawPlan(ctx.mg, ctx.mm.width); } }
+    else S.planKey = null;
   }
   function roomName(id) {
     const r = rooms[id]; if (r && r.name) return r.name;
