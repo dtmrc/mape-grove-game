@@ -40,6 +40,7 @@ import { EDGES as CP_EDGES } from './world.js'; // driving
 import { makeDynGrid } from './dyngrid.js'; // broad phase for cars + peds
 import { makePrewarm } from './prewarm.js'; // shaders + textures ready behind the title screen
 import { vfreeGuard } from './vfree.js';
+import { hitchEnable, hitchFrame, hitchNote } from './hitchlog.js'; // Show FPS also lists what happened in each long frame
 import { updateHouseTex, houseTexReset, houseTexState, MODE as HOUSE_TEX } from './houses.js'; // full-size house atlases only near the player
 import { makeSceneCull } from './scenecull.js'; // skip hidden / far objects in the per-frame scene walk
 import { makeTraffic } from './traffic.js'; // driving: stop signs + traffic lights
@@ -297,6 +298,7 @@ const SV_ = makeSpawnView({ camera, scene, px: () => (P.car ? P.car.x : P.x), pz
 const CAR_NAMES = { sedan: 'Meridian', hatch: 'Pipsqueak', wagon: 'Homestead', pickup: 'Haulmark', suv: 'HOA Enforcer', golfcart: 'Fairway', goobtruck: 'F-15 Prairie' };
 const PAINT = [0xc0392b, 0x2e6fbf, 0xe8e8e8, 0x2a2a2e, 0x3a8f5a, 0xe0b030, 0x8e5bb0, 0xa04020, 0x6a8090, 0xd86a9a];
 function spawnCar(type, x, z, yaw, o = {}) {
+  hitchNote('car');
   const color = o.color ?? PAINT[(Math.random() * PAINT.length) | 0];
   const model = pickModel(type, o); // vehicles.js: a remodeled car of this class (c.type stays the class)
   const mesh = model ? makeModelCar(model, color, o, CAR_TYPES) : makeCar(type, color, o);
@@ -366,7 +368,7 @@ function dynSync() { CARG.fill(cars); PEDG.fill(peds); }
 const SCULL = makeSceneCull({ scene, camera });
 const PW = makePrewarm({ renderer, scene, camera });
 canvas.addEventListener('webglcontextrestored', houseTexReset);
-vfreeGuard({ canvas, renderer, save });   // vfree: world chunk arrays are freed after upload, so a lost context saves and reloads
+HOUSE_TEX.note = hitchNote; vfreeGuard({ canvas, renderer, save });   // vfree: world chunk arrays are freed after upload, so a lost context saves and reloads
 let houseTexT = 0;
 TC.api.carsNear = (x, z, r) => CARG.near(x, z, r, _bTC);
 function attachPed(p) {
@@ -377,6 +379,7 @@ function attachPed(p) {
 }
 function removePed(p) { p._asleep = false; scene.remove(p.mesh); if (p.bar) scene.remove(p.bar.sp); peds.splice(peds.indexOf(p), 1); }
 function spawnPed(o = {}) {
+  hitchNote('ped');
   let at = o.at, lane = null;
   if (!at) { // a walker on a town street, somewhere Goobles can't see it pop in (spawnview.js)
     for (let tries = 0; tries < 12 && !lane; tries++) {
@@ -1564,7 +1567,7 @@ function setFpsHud(on) {
   FPS.on = !!on;
   if (on && !FPS.el) { FPS.el = document.createElement('div'); FPS.el.style.cssText = 'position:fixed;left:50%;top:2px;transform:translateX(-50%);z-index:70;font:16px VT323,monospace;color:#9f9;background:rgba(0,0,0,.55);padding:0 6px;pointer-events:none'; document.body.appendChild(FPS.el); }
   if (FPS.el) FPS.el.style.display = on ? 'block' : 'none';
-  FPS.t0 = 0;
+  FPS.t0 = 0; hitchEnable(on);
 }
 function fpsHud() {
   if (!FPS.on) return;
@@ -1585,12 +1588,13 @@ function autoRes() {
   if (t - AR.t0 < 2000) return;
   const ms = (t - AR.t0) / AR.n; AR.t0 = t; AR.n = 0;
   AR.slow = ms > 25 && ms < 250 ? AR.slow + 1 : 0;   // (a huge gap is a stall or a hidden tab, not a slow GPU)
-  if (AR.slow >= 3) { AR.slow = 0; resIdx--; resize(); toast(`Render height lowered to ${RES[resIdx]}p to keep it smooth`, 3); }
+  if (AR.slow >= 3) { AR.slow = 0; resIdx--; resize(); hitchNote('res'); toast(`Render height lowered to ${RES[resIdx]}p to keep it smooth`, 3); }
 }
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  hitchFrame(document.hidden || G.paused);
   if (document.hidden) return;
   if (hit('p')) { resIdx = (resIdx + 1) % RES.length; resManual = true; resize(); toast(`Render height ${RES[resIdx]}p`); }
   PW.tick(dt); // prewarm: a few ms of uploads per frame until everything is on the GPU
@@ -1721,7 +1725,8 @@ const police = makePolice({ carsNear: (x, z, r) => CARG.near(x, z, r, _bCop), sc
 window.__G.police = police; window.__G.cat = cat; window.__G.yardcats = yardcats;
 Object.assign(window.__G, { climb, colliders: W_COLS, floorAt: TER.floorAt }); // climb: test handles
 window.__G.heightAt = TER.heightAt; // jailbreak suite: ground must stay flat under the cell block
-Object.assign(window.__G, { banner, toast, addCash }); // robbery: banner/toast/addCash for robbery.js
+Object.assign(window.__G, { banner, toast, addCash });
+Object.assign(window.__G, { setFpsHud }); // hitchlog: test handle // robbery: banner/toast/addCash for robbery.js
 if (SV && SV.gun && SV.gun.has) { police.gun.has = true; police.gun.ammo = SV.gun.ammo | 0; } // the pistol survives a reload (holstered)
 // content: shops (src/js/shops.js) + replayable missions, side jobs and the post-game beat (src/js/jobs.js)
 const shops = makeShops({ G, P, cars, places, INT, toast, addCash, save, Sfx, pressed, hit, collide, mission: () => mission, fishing });

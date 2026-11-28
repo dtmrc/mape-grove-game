@@ -121,7 +121,7 @@ export function updateHouseTex(x, z) {
         if (L.state !== 'loading' || !data) { if (L.state === 'loading') L.state = 'lo'; if (data && data.close) data.close(); return; }
         const h = new THREE.Texture(data); h.colorSpace = L.t.colorSpace; h.anisotropy = L.t.anisotropy; h.flipY = data === img;   // a bitmap is flipped when it is made
         h.onUpdate = () => { h.onUpdate = null; if (data.close) data.close(); else data.src = ''; };   // uploaded: the decoded copy (16 MB) can go, the GPU has it
-        h.needsUpdate = true; L.hi = h; L.state = 'hi'; setMap(L, h);
+        h.needsUpdate = true; L.hi = h; L.state = 'hi'; setMap(L, h); if (MODE.note) MODE.note('house');
       };
       // Decode off the main thread, then make an ImageBitmap: its upload is a plain copy, while uploading an <img>
       // can decode or convert again inside the frame (a visible hitch for 2048 x 2048).
