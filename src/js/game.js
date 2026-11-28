@@ -22,6 +22,7 @@ import * as STORES from './storerooms.js'; // Bev's Threads + Hank's Hardware in
 import * as SCHOOL from './school.js'; // Maple Grove High interior
 import { makeJail } from './jailbreak.js';
 import { makeInteriors } from './interiors.js';
+import { on as intOn } from './interiors.js'; // prewarm: room warm-up on entry
 import './townsfolk.js'; // townsfolk: church parishioners, diner staff + patrons
 import './robbery.js'; // robbery: hold up the Donut Hole + Rosie's Diner
 import { makeShops } from './shops.js'; // content: shops + belly food
@@ -1656,6 +1657,7 @@ function frame(now) {
   radio.update(dt); // radio
   post.comp.uniforms.hurt.value = Math.max(0, post.comp.uniforms.hurt.value - dt * 1.5);
   BRK.update(dt); // breakables: before the terrain lift (moving debris would be reset by afterRender otherwise)
+  TER.indoors(INT.inside);   // indoors nothing outside is drawn (camera layer 1), so nothing needs lifting onto the terrain
   dev.frame(dt); TER.beforeRender(scene, camera, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z); // engine: lift onto terrain
   sunShadow.update(dt, P.car ? P.car.x : P.x, P.car ? P.car.z : P.z);
   quests.swapIn(); post.render(scene, camera, G.time); quests.swapOut(); // quests: HUD + beacon follow the tracked quest
@@ -1703,6 +1705,7 @@ sky.mesh.userData.noLift = true; TER.track(haloGroup.children); TER.link(flameSp
 const dev = makeDev({ scene, camera, canvas, renderer, G, P, cars, peds, pickups, WM, lights, haloSprites: haloGroup.children, pools, toast, marks: () => [...Object.values(giverMarks), saveMark, checkMark], setClock: (h) => { G.clock = h; updateSky(0); fx.update(0, nightK, G.time); } });
 // interiors: enterable buildings (src/js/interiors.js)
 const INT = makeInteriors({ scene, camera, camPos, G, P, cat, pool, hemi, sun, moon, post, WM, T, places, NPC, giverMarks, nearNpc, mission: () => mission, collide, exitCar, toast, save, Sfx, isTouch, mm, mg, getDev: () => dev, setCam: (y, p) => { camYaw = y; if (p !== undefined) camPitch = p; camIdle = 0; } });
+intOn('enter', (id, group) => { PW.warm(group); hitchNote('room'); }); // prewarm: a room's textures, shaders and buffers go up in one frame behind the door fade
 BRK.init({ scene, Sfx, toast, camera, T, lights, pools, lightfx, TC, damageCar, shake }); // engine: breakables
 // firestarter: house fires (src/js/firestarter.js)
 const fires = makeFirestarter({ scene, G, P, cat, toast, banner, say, Sfx, puff, hurt, addCash, peds, places, isTouch, pool, lights, hemi, $, fishing: () => fishing });

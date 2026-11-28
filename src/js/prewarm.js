@@ -41,5 +41,19 @@ export function makePrewarm({ renderer, scene, camera, budgetMs = 6, scans = 10,
     }
     S.pending = queue.length;
   }
-  return { tick, scan, stats: S, done: () => S.scansLeft <= 0 && !queue.length && !S.compiling };
+  // ---- rooms and other things built late: draw all of it once, now ----
+  // Interiors are built the first time they are entered, long after the scans above. Their textures, shaders and
+  // vertex buffers used to arrive one by one as the camera first turned towards each thing (a hitch per shelf).
+  // warm(root) switches frustum culling off under `root` for the next two frames, so the first frame drawn (still
+  // behind the door fade) uploads everything at once. Once per root.
+  const warmed = new WeakSet(); let warming = null;
+  function warm(root) {
+    if (!root || warmed.has(root)) return false; warmed.add(root);
+    const list = []; root.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o.frustumCulled) { o.frustumCulled = false; list.push(o); } });
+    if (warming) for (const o of warming.list) o.frustumCulled = true;
+    warming = { list, frames: 2 }; S.warmed = (S.warmed || 0) + 1;
+    return true;
+  }
+  function warmTick() { if (warming && --warming.frames < 0) { for (const o of warming.list) o.frustumCulled = true; warming = null; } }
+  return { tick: (dt) => { warmTick(); tick(dt); }, warm, scan, stats: S, done: () => S.scansLeft <= 0 && !queue.length && !S.compiling };
 }
